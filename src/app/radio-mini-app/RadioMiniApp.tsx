@@ -16,6 +16,9 @@ const COLORS = {
   text: '#c4c4c4',
   dark: '#0d0026',
   glow: 'rgba(0, 199, 48, 0.5)',
+  bass: '#ff0066',      // Pink/Red for bass
+  mid: '#00c730',       // Green for mids
+  high: '#00ffcc',      // Cyan for highs
 }
 
 declare global {
@@ -44,6 +47,9 @@ declare global {
   }
 }
 
+// Number of visualizer bars
+const BAR_COUNT = 24
+
 export default function RadioMiniApp() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -51,7 +57,7 @@ export default function RadioMiniApp() {
   const [isMuted, setIsMuted] = useState(false)
   const [currentTrack] = useState('Нажмите ▶')
   const [listeners, setListeners] = useState(0)
-  const [audioData, setAudioData] = useState<number[]>(new Array(32).fill(0))
+  const [audioData, setAudioData] = useState<number[]>(new Array(BAR_COUNT).fill(0))
   const [isTgReady, setIsTgReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [buffering, setBuffering] = useState(false)
@@ -114,7 +120,7 @@ export default function RadioMiniApp() {
     }
   }, [])
 
-  // Handle app close - use multiple methods for reliability
+  // Handle app close
   useEffect(() => {
     const sendClose = () => {
       const tg = window.Telegram?.WebApp
@@ -130,11 +136,9 @@ export default function RadioMiniApp() {
         action: 'close',
       })
       
-      // Method 1: sendBeacon
       const blob = new Blob([data], { type: 'application/json' })
       navigator.sendBeacon(LISTENERS_API, blob)
       
-      // Method 2: fetch with keepalive (fallback)
       try {
         fetch(LISTENERS_API, {
           method: 'POST',
@@ -142,18 +146,13 @@ export default function RadioMiniApp() {
           body: data,
           keepalive: true,
         })
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
     }
 
-    // Listen for multiple close events
     window.addEventListener('beforeunload', sendClose)
     window.addEventListener('pagehide', sendClose)
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') {
-        sendClose()
-      }
+      if (document.visibilityState === 'hidden') sendClose()
     })
     
     return () => {
@@ -192,14 +191,10 @@ export default function RadioMiniApp() {
     return () => clearInterval(interval)
   }, [fetchListenersCount])
 
-  // Register 'open' when ready
   useEffect(() => {
-    if (isTgReady) {
-      registerListener('open')
-    }
+    if (isTgReady) registerListener('open')
   }, [isTgReady, registerListener])
 
-  // Periodic update
   useEffect(() => {
     const interval = setInterval(fetchListenersCount, 10000)
     return () => clearInterval(interval)
@@ -224,20 +219,17 @@ export default function RadioMiniApp() {
       setIsPlaying(false)
       stopAudioAnalyser()
     })
-    
     audio.addEventListener('waiting', () => {
       setBuffering(true)
+      setIsLoading(true)
     })
-    
     audio.addEventListener('canplay', () => {
       setBuffering(false)
       setIsLoading(false)
     })
-    
     audio.addEventListener('playing', () => {
       setBuffering(false)
     })
-    
     audio.addEventListener('error', (e) => {
       console.error('Audio error:', e)
       setIsLoading(false)
@@ -257,7 +249,6 @@ export default function RadioMiniApp() {
     if (!audioRef.current || isAnalyserReady.current) return
     
     try {
-      // Use webkitAudioContext for Safari
       const AudioCtx = window.AudioContext || window.webkitAudioContext
       
       if (!audioContextRef.current) {
@@ -266,11 +257,8 @@ export default function RadioMiniApp() {
       
       const ctx = audioContextRef.current
       
-      // Resume if suspended (required by Safari)
       if (ctx.state === 'suspended') {
-        ctx.resume().then(() => {
-          console.log('AudioContext resumed')
-        })
+        ctx.resume()
       }
       
       if (!analyserRef.current) {
@@ -289,7 +277,6 @@ export default function RadioMiniApp() {
       startVisualization()
     } catch (e) {
       console.error('Audio analyser error:', e)
-      // Continue without visualization
     }
   }
 
@@ -302,7 +289,13 @@ export default function RadioMiniApp() {
     const update = () => {
       if (analyser && audioContextRef.current?.state === 'running') {
         analyser.getByteFrequencyData(dataArray)
-        setAudioData(Array.from(dataArray).map(v => v / 255))
+        // Map 32 bins to 24 bars with some averaging
+        const mapped = []
+        for (let i = 0; i < BAR_COUNT; i++) {
+          const idx = Math.floor(i * (dataArray.length / BAR_COUNT))
+          mapped.push(dataArray[idx] / 255)
+        }
+        setAudioData(mapped)
       }
       animationRef.current = requestAnimationFrame(update)
     }
@@ -315,10 +308,9 @@ export default function RadioMiniApp() {
       cancelAnimationFrame(animationRef.current)
       animationRef.current = null
     }
-    setAudioData(new Array(32).fill(0))
+    setAudioData(new Array(BAR_COUNT).fill(0))
   }
 
-  // Volume control
   useEffect(() => {
     if (audioRef.current && !isIOS) {
       audioRef.current.volume = isMuted ? 0 : volume / 100
@@ -337,34 +329,29 @@ export default function RadioMiniApp() {
     }
 
     setIsLoading(true)
-    setBuffering(true)
     
     try {
-      // Resume AudioContext if suspended (Safari fix)
-      if (audioContextRef.current?.state === 'suspended') {
-        await audioContextRef.current.resume()
-      }
-      
-      // Set volume before playing
       if (!isIOS) {
         audio.volume = isMuted ? 0 : volume / 100
       }
       
       audio.src = STREAM_URL
       audio.load()
+      const playPromise = audio.play()
       
-      await audio.play()
+      if (playPromise !== undefined) {
+        await playPromise
+      }
     } catch (err: any) {
       console.error('Play error:', err)
       setIsLoading(false)
-      setBuffering(false)
       
       if (err.name === 'NotAllowedError') {
         setError('Нажмите ещё раз для воспроизведения')
       } else if (err.name === 'NotSupportedError') {
-        setError('Формат не поддерживается')
+        setError('Формат не поддерживается браузером')
       } else {
-        setError('Ошибка: ' + (err.message || 'неизвестная'))
+        setError('Ошибка воспроизведения')
       }
     }
   }
@@ -382,195 +369,45 @@ export default function RadioMiniApp() {
 
   const displayVolume = isMuted ? 0 : volume
 
+  // Get bar color based on position (bass/mid/high)
+  const getBarColor = (index: number, value: number) => {
+    const third = BAR_COUNT / 3
+    if (index < third) {
+      // Bass - Pink/Red with neon glow
+      return {
+        gradient: `linear-gradient(to top, ${COLORS.bass}, #ff3399)`,
+        glow: `0 0 ${8 + value * 12}px rgba(255, 0, 102, ${0.5 + value * 0.5})`,
+        shadow: `0 0 ${4 + value * 8}px rgba(255, 0, 102, ${0.3 + value * 0.4})`
+      }
+    } else if (index < third * 2) {
+      // Mids - Green with neon glow
+      return {
+        gradient: `linear-gradient(to top, ${COLORS.mid}, ${COLORS.accent})`,
+        glow: `0 0 ${8 + value * 12}px rgba(0, 199, 48, ${0.5 + value * 0.5})`,
+        shadow: `0 0 ${4 + value * 8}px rgba(0, 199, 48, ${0.3 + value * 0.4})`
+      }
+    } else {
+      // Highs - Cyan with neon glow
+      return {
+        gradient: `linear-gradient(to top, ${COLORS.high}, #66ffee)`,
+        glow: `0 0 ${8 + value * 12}px rgba(0, 255, 204, ${0.5 + value * 0.5})`,
+        shadow: `0 0 ${4 + value * 8}px rgba(0, 255, 204, ${0.3 + value * 0.4})`
+      }
+    }
+  }
+
   return (
-    <div 
-      className="min-h-screen flex flex-col items-center justify-center p-4"
-      style={{ background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.dark} 100%)` }}
-    >
-      <div 
-        className="fixed inset-0 pointer-events-none"
-        style={{ background: `radial-gradient(circle at 50% 30%, ${COLORS.glow.replace('0.5', '0.15')} 0%, transparent 50%)` }}
-      />
-
-      <div className="relative z-10 w-full max-w-xs">
-        {/* Logo */}
-        <div className="relative mb-3">
-          <motion.div 
-            className="w-28 h-28 mx-auto rounded-full overflow-hidden"
-            animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
-            transition={{ duration: 1.5, repeat: Infinity }}
-            style={{
-              boxShadow: isPlaying 
-                ? `0 0 40px ${COLORS.glow}`
-                : `0 4px 16px rgba(0,0,0,0.5)`,
-              border: `2px solid ${COLORS.secondary}`
-            }}
-          >
-            <img src={STATION_LOGO} alt={STATION_NAME} className="w-full h-full object-cover" />
-          </motion.div>
-          
-          <AnimatePresence>
-            {isPlaying && (
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0 }}
-                className="absolute top-0 right-6 px-2 py-0.5 rounded-full text-xs font-bold"
-                style={{ background: COLORS.secondary, color: COLORS.dark }}
-              >
-                LIVE
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Visualizer */}
-        <div className="flex justify-center items-end gap-0.5 h-8 mb-3">
-          {audioData.slice(0, 16).map((value, i) => (
-            <div
-              key={i}
-              className="w-1.5 rounded-full"
-              style={{
-                background: `linear-gradient(to top, ${COLORS.secondary}, ${COLORS.accent})`,
-                height: `${Math.max(2, value * 32)}px`,
-                boxShadow: value > 0.1 ? `0 0 4px ${COLORS.glow}` : 'none',
-                transition: 'height 0.05s ease-out'
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Info */}
-        <div className="text-center mb-3">
-          <div className="flex items-center justify-center gap-1.5 mb-0.5">
-            <Radio className="w-3 h-3" style={{ color: COLORS.secondary }} />
-            <span className="text-xs uppercase tracking-wider" style={{ color: COLORS.secondary }}>
-              Онлайн-радио
-            </span>
-          </div>
-          <h1 className="text-base font-bold text-white">{STATION_NAME}</h1>
-          <p style={{ color: COLORS.text }} className="text-xs">{currentTrack}</p>
-          <p className="text-xs mt-0.5" style={{ color: COLORS.accent }}>
-            👥 {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
-          </p>
-        </div>
-
-        {/* Buffering status */}
-        {buffering && (
-          <div className="flex items-center justify-center gap-2 mb-2 p-2 rounded-lg" 
-               style={{ background: 'rgba(0,199,48,0.1)' }}>
-            <Wifi className="w-4 h-4 animate-pulse" style={{ color: COLORS.secondary }} />
-            <span className="text-xs" style={{ color: COLORS.secondary }}>Буферизация...</span>
-          </div>
-        )}
-
-        {/* Error message */}
-        {error && (
-          <div className="flex items-center justify-center gap-2 mb-2 p-2 rounded-lg" 
-               style={{ background: 'rgba(255,0,0,0.1)' }}>
-            <AlertCircle className="w-4 h-4 text-red-400" />
-            <span className="text-xs text-red-300">{error}</span>
-          </div>
-        )}
-
-        {/* Play Button */}
-        <div className="flex justify-center mb-3">
-          <motion.button
-            onClick={handlePlay}
-            disabled={isLoading}
-            whileTap={{ scale: 0.95 }}
-            className="w-14 h-14 rounded-full flex items-center justify-center"
-            style={{
-              background: `linear-gradient(135deg, ${COLORS.secondary} 0%, ${COLORS.accent} 100%)`,
-              boxShadow: `0 3px 15px ${COLORS.glow}`
-            }}
-          >
-            {isLoading || buffering ? (
-              <Loader2 className="w-5 h-5 animate-spin" style={{ color: COLORS.dark }} />
-            ) : isPlaying ? (
-              <Pause className="w-5 h-5" style={{ color: COLORS.dark }} />
-            ) : (
-              <Play className="w-5 h-5 ml-0.5" style={{ color: COLORS.dark }} />
-            )}
-          </motion.button>
-        </div>
-
-        {/* Volume */}
-        {!isIOS ? (
-          <div className="flex items-center gap-2 mb-3 px-1">
-            <button 
-              onClick={() => setIsMuted(!isMuted)}
-              className="flex-shrink-0 p-1.5 rounded-lg"
-              style={{ background: 'rgba(255,255,255,0.05)' }}
-            >
-              {isMuted ? (
-                <VolumeX className="w-4 h-4" style={{ color: '#666' }} />
-              ) : (
-                <Volume2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
-              )}
-            </button>
-            
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={displayVolume}
-              onChange={(e) => {
-                const v = parseInt(e.target.value, 10)
-                setVolume(v)
-                if (v > 0) setIsMuted(false)
-              }}
-              className="volume-slider flex-1 cursor-pointer"
-            />
-            
-            <span 
-              className="text-xs w-8 text-right"
-              style={{ color: COLORS.secondary }}
-            >
-              {displayVolume}%
-            </span>
-          </div>
-        ) : (
-          <div className="text-center mb-3 px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
-            <p className="text-xs" style={{ color: COLORS.text }}>
-              💡 Громкость — кнопки устройства
-            </p>
-          </div>
-        )}
-
-        {/* Buttons */}
-        <div className="flex justify-center gap-2">
-          <motion.button
-            onClick={share}
-            whileTap={{ scale: 0.95 }}
-            className="p-2 rounded-xl"
-            style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${COLORS.secondary}40` }}
-          >
-            <Share2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            className="p-2 rounded-xl"
-            style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${COLORS.secondary}40` }}
-          >
-            <Heart className="w-4 h-4" style={{ color: COLORS.secondary }} />
-          </motion.button>
-        </div>
-
-        <p className="text-center text-xs mt-3" style={{ color: '#555' }}>
-          Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
-        </p>
-      </div>
-
-      {/* Volume Slider Styles */}
+    <>
       <style jsx global>{`
+        /* Volume Slider Styles */
         .volume-slider {
           -webkit-appearance: none;
           appearance: none;
           height: 8px;
           border-radius: 10px;
-          background: rgba(255,255,255,0.1);
+          background: linear-gradient(90deg, rgba(255,0,102,0.3) 0%, rgba(0,199,48,0.3) 50%, rgba(0,255,204,0.3) 100%);
           outline: none;
+          box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
         }
         
         .volume-slider::-webkit-slider-runnable-track {
@@ -581,38 +418,331 @@ export default function RadioMiniApp() {
         .volume-slider::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
-          width: 20px;
-          height: 20px;
+          width: 22px;
+          height: 22px;
           border-radius: 50%;
-          background: white;
+          background: linear-gradient(145deg, #ffffff, #e6e6e6);
           border: 3px solid #00c730;
           cursor: pointer;
-          margin-top: -6px;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          margin-top: -7px;
+          box-shadow: 
+            0 2px 8px rgba(0,0,0,0.3),
+            inset 0 1px 2px rgba(255,255,255,0.8),
+            0 0 10px rgba(0,199,48,0.5);
         }
         
         .volume-slider::-moz-range-track {
           height: 8px;
           border-radius: 10px;
-          background: rgba(255,255,255,0.1);
+          background: linear-gradient(90deg, rgba(255,0,102,0.3) 0%, rgba(0,199,48,0.3) 50%, rgba(0,255,204,0.3) 100%);
         }
         
         .volume-slider::-moz-range-thumb {
-          width: 20px;
-          height: 20px;
+          width: 22px;
+          height: 22px;
           border-radius: 50%;
-          background: white;
+          background: linear-gradient(145deg, #ffffff, #e6e6e6);
           border: 3px solid #00c730;
           cursor: pointer;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          box-shadow: 
+            0 2px 8px rgba(0,0,0,0.3),
+            inset 0 1px 2px rgba(255,255,255,0.8),
+            0 0 10px rgba(0,199,48,0.5);
         }
-        
-        .volume-slider::-moz-range-progress {
-          background: #00c730;
-          height: 8px;
-          border-radius: 10px 0 0 10px;
+
+        /* Skeuomorphic Card */
+        .skeuo-card {
+          background: linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8));
+          border: 1px solid rgba(0,199,48,0.2);
+          box-shadow: 
+            0 8px 32px rgba(0,0,0,0.4),
+            inset 0 1px 0 rgba(255,255,255,0.05),
+            inset 0 -1px 0 rgba(0,0,0,0.2);
+          backdrop-filter: blur(10px);
+        }
+
+        /* Visualizer bar animation - GPU accelerated */
+        .viz-bar {
+          will-change: transform, opacity;
+          transform: translateZ(0);
         }
       `}</style>
-    </div>
+
+      <div 
+        className="min-h-screen flex flex-col items-center justify-center p-4"
+        style={{ 
+          background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.dark} 100%)`,
+        }}
+      >
+        {/* Ambient glow background */}
+        <div 
+          className="fixed inset-0 pointer-events-none"
+          style={{ 
+            background: `radial-gradient(ellipse 80% 50% at 50% 30%, rgba(0,199,48,0.15) 0%, transparent 50%),
+                         radial-gradient(ellipse 60% 40% at 30% 60%, rgba(255,0,102,0.1) 0%, transparent 50%),
+                         radial-gradient(ellipse 60% 40% at 70% 70%, rgba(0,255,204,0.1) 0%, transparent 50%)`
+          }}
+        />
+
+        <div className="relative z-10 w-full max-w-xs">
+          {/* Logo - Skeuomorphic */}
+          <div className="relative mb-4">
+            <motion.div 
+              className="w-28 h-28 mx-auto rounded-full overflow-hidden skeuo-card p-1"
+              animate={isPlaying ? { scale: [1, 1.02, 1] } : {}}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              style={{
+                boxShadow: isPlaying 
+                  ? `0 0 60px rgba(0,199,48,0.6), 0 0 100px rgba(0,199,48,0.3), inset 0 0 20px rgba(0,199,48,0.1)`
+                  : `0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)`,
+              }}
+            >
+              <div 
+                className="w-full h-full rounded-full overflow-hidden"
+                style={{
+                  border: `2px solid ${COLORS.secondary}`,
+                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)',
+                }}
+              >
+                <img 
+                  src={STATION_LOGO} 
+                  alt={STATION_NAME} 
+                  className="w-full h-full object-cover"
+                  style={{ filter: isPlaying ? 'none' : 'brightness(0.9)' }}
+                />
+              </div>
+            </motion.div>
+            
+            <AnimatePresence>
+              {isPlaying && (
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  className="absolute top-0 right-6 px-2 py-0.5 rounded-full text-xs font-bold"
+                  style={{ 
+                    background: `linear-gradient(145deg, ${COLORS.secondary}, ${COLORS.accent})`,
+                    color: COLORS.dark,
+                    boxShadow: `0 0 20px rgba(0,199,48,0.8), 0 2px 8px rgba(0,0,0,0.3)`,
+                  }}
+                >
+                  LIVE
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Enhanced Visualizer - 24 bars with 3 frequency bands */}
+          <div 
+            className="skeuo-card rounded-2xl p-3 mb-4"
+            style={{
+              background: 'linear-gradient(180deg, rgba(13,0,38,0.8) 0%, rgba(46,0,113,0.4) 100%)',
+            }}
+          >
+            <div className="flex justify-center items-end gap-1 h-16">
+              {audioData.map((value, i) => {
+                const colors = getBarColor(i, value)
+                const height = Math.max(4, value * 60)
+                
+                return (
+                  <div
+                    key={i}
+                    className="viz-bar rounded-full"
+                    style={{
+                      width: '6px',
+                      background: colors.gradient,
+                      height: `${height}px`,
+                      boxShadow: value > 0.05 ? colors.glow : 'none',
+                      transform: `scaleY(${Math.max(0.1, value)})`,
+                      opacity: 0.7 + value * 0.3,
+                      transition: 'transform 0.05s ease-out, opacity 0.05s ease-out',
+                      transformOrigin: 'bottom',
+                    }}
+                  />
+                )
+              })}
+            </div>
+            
+            {/* Frequency labels */}
+            <div className="flex justify-between mt-2 px-1">
+              <span className="text-xs" style={{ color: COLORS.bass }}>BASS</span>
+              <span className="text-xs" style={{ color: COLORS.mid }}>MID</span>
+              <span className="text-xs" style={{ color: COLORS.high }}>HIGH</span>
+            </div>
+          </div>
+
+          {/* Info - Skeuomorphic */}
+          <div className="skeuo-card rounded-xl p-3 text-center mb-4">
+            <div className="flex items-center justify-center gap-1.5 mb-1">
+              <Radio className="w-3 h-3" style={{ color: COLORS.secondary }} />
+              <span className="text-xs uppercase tracking-wider" style={{ color: COLORS.secondary }}>
+                Онлайн-радио
+              </span>
+            </div>
+            <h1 className="text-lg font-bold text-white mb-0.5" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+              {STATION_NAME}
+            </h1>
+            <p style={{ color: COLORS.text }} className="text-sm">{currentTrack}</p>
+            <div 
+              className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full"
+              style={{ 
+                background: 'rgba(0,199,48,0.1)',
+                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)',
+              }}
+            >
+              <span className="text-sm" style={{ color: COLORS.accent }}>👥</span>
+              <span className="text-sm font-medium" style={{ color: COLORS.accent }}>
+                {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
+              </span>
+            </div>
+          </div>
+
+          {/* Buffering status */}
+          {buffering && (
+            <div 
+              className="flex items-center justify-center gap-2 mb-3 p-2 rounded-xl"
+              style={{ 
+                background: 'rgba(0,199,48,0.1)',
+                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)',
+              }}
+            >
+              <Wifi className="w-4 h-4 animate-pulse" style={{ color: COLORS.secondary }} />
+              <span className="text-sm" style={{ color: COLORS.secondary }}>Буферизация...</span>
+            </div>
+          )}
+
+          {/* Error message */}
+          {error && (
+            <div 
+              className="flex items-center justify-center gap-2 mb-3 p-2 rounded-xl"
+              style={{ 
+                background: 'rgba(255,0,102,0.1)',
+                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)',
+              }}
+            >
+              <AlertCircle className="w-4 h-4" style={{ color: COLORS.bass }} />
+              <span className="text-sm" style={{ color: '#ff6699' }}>{error}</span>
+            </div>
+          )}
+
+          {/* Play Button - Skeuomorphic */}
+          <div className="flex justify-center mb-4">
+            <motion.button
+              onClick={handlePlay}
+              disabled={isLoading}
+              whileTap={{ scale: 0.95 }}
+              className="rounded-full flex items-center justify-center"
+              style={{
+                width: '64px',
+                height: '64px',
+                background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.secondary})`,
+                boxShadow: `
+                  0 4px 20px rgba(0,199,48,0.5),
+                  0 8px 40px rgba(0,199,48,0.3),
+                  inset 0 2px 4px rgba(255,255,255,0.3),
+                  inset 0 -2px 4px rgba(0,0,0,0.2)
+                `,
+              }}
+            >
+              {isLoading || buffering ? (
+                <Loader2 className="w-6 h-6 animate-spin" style={{ color: COLORS.dark }} />
+              ) : isPlaying ? (
+                <Pause className="w-6 h-6" style={{ color: COLORS.dark }} />
+              ) : (
+                <Play className="w-6 h-6 ml-1" style={{ color: COLORS.dark }} />
+              )}
+            </motion.button>
+          </div>
+
+          {/* Volume - Skeuomorphic */}
+          {!isIOS ? (
+            <div 
+              className="flex items-center gap-3 mb-4 px-3 py-2 rounded-xl skeuo-card"
+            >
+              <button 
+                onClick={() => setIsMuted(!isMuted)}
+                className="flex-shrink-0 p-2 rounded-lg"
+                style={{ 
+                  background: 'rgba(255,255,255,0.05)',
+                  boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)',
+                }}
+              >
+                {isMuted ? (
+                  <VolumeX className="w-5 h-5" style={{ color: '#666' }} />
+                ) : (
+                  <Volume2 className="w-5 h-5" style={{ color: COLORS.secondary }} />
+                )}
+              </button>
+              
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={displayVolume}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10)
+                  setVolume(v)
+                  if (v > 0) setIsMuted(false)
+                }}
+                className="volume-slider flex-1 cursor-pointer"
+              />
+              
+              <span 
+                className="text-sm font-medium w-10 text-right"
+                style={{ color: COLORS.secondary }}
+              >
+                {displayVolume}%
+              </span>
+            </div>
+          ) : (
+            <div 
+              className="text-center mb-4 px-4 py-3 rounded-xl skeuo-card"
+            >
+              <p className="text-sm" style={{ color: COLORS.text }}>
+                💡 Громкость — кнопки устройства
+              </p>
+            </div>
+          )}
+
+          {/* Buttons - Skeuomorphic */}
+          <div className="flex justify-center gap-3">
+            <motion.button
+              onClick={share}
+              whileTap={{ scale: 0.95 }}
+              className="p-3 rounded-xl"
+              style={{ 
+                background: 'linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8))',
+                border: `1px solid ${COLORS.secondary}40`,
+                boxShadow: `
+                  0 4px 12px rgba(0,0,0,0.3),
+                  inset 0 1px 0 rgba(255,255,255,0.05)
+                `,
+              }}
+            >
+              <Share2 className="w-5 h-5" style={{ color: COLORS.secondary }} />
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              className="p-3 rounded-xl"
+              style={{ 
+                background: 'linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8))',
+                border: `1px solid ${COLORS.secondary}40`,
+                boxShadow: `
+                  0 4px 12px rgba(0,0,0,0.3),
+                  inset 0 1px 0 rgba(255,255,255,0.05)
+                `,
+              }}
+            >
+              <Heart className="w-5 h-5" style={{ color: COLORS.secondary }} />
+            </motion.button>
+          </div>
+
+          <p className="text-center text-xs mt-4" style={{ color: '#555' }}>
+            Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
+          </p>
+        </div>
+      </div>
+    </>
   )
 }
