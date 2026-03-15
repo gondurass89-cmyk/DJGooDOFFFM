@@ -212,8 +212,8 @@ export default function RadioMiniApp() {
       
       if (!analyserRef.current) {
         analyserRef.current = ctx.createAnalyser()
-        analyserRef.current.fftSize = 64
-        analyserRef.current.smoothingTimeConstant = 0.8
+        analyserRef.current.fftSize = 256
+        analyserRef.current.smoothingTimeConstant = 0.75
       }
       
       if (!sourceRef.current && audioRef.current) {
@@ -223,29 +223,35 @@ export default function RadioMiniApp() {
       }
       
       const analyser = analyserRef.current
-      const dataArray = new Uint8Array(analyser.frequencyBinCount)
+      const bufferLength = analyser.frequencyBinCount // 128 bins with fftSize=256
+      const dataArray = new Uint8Array(bufferLength)
       
       const update = () => {
         analyser.getByteFrequencyData(dataArray)
         const mapped = []
+        
         for (let i = 0; i < BAR_COUNT; i++) {
-          // Map 32 frequency bins to 24 bars
-          // BASS: bars 0-7 (bins 0-10)
-          // MID: bars 8-15 (bins 11-21)  
-          // HIGH: bars 16-23 (bins 22-31)
+          // Better frequency distribution:
+          // BASS (bars 0-7): use bins 0-15 (concentrated low frequencies)
+          // MID (bars 8-15): use bins 16-63 (spread mid frequencies)  
+          // HIGH (bars 16-23): use bins 64-100 (concentrated high frequencies)
           let idx
           if (i < 8) {
-            // BASS - use bins 0-10
-            idx = Math.floor(i * 11 / 8)
+            // BASS - bins 0-15 (16 bins for 8 bars)
+            idx = Math.floor(i * 2)
           } else if (i < 16) {
-            // MID - use bins 11-21
-            idx = 10 + Math.floor((i - 8) * 11 / 8)
+            // MID - bins 16-63 (48 bins for 8 bars)
+            idx = 16 + Math.floor((i - 8) * 6)
           } else {
-            // HIGH - use bins 22-31
-            idx = 21 + Math.floor((i - 16) * 10 / 8)
+            // HIGH - bins 64-100 (36 bins for 8 bars)
+            idx = 64 + Math.floor((i - 16) * 4.5)
           }
+          
+          // Clamp index
+          idx = Math.min(idx, bufferLength - 1)
           mapped.push(dataArray[idx] / 255)
         }
+        
         setAudioData(mapped)
         animationRef.current = requestAnimationFrame(update)
       }
