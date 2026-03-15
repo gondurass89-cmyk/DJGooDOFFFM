@@ -436,15 +436,15 @@ export default function RadioMiniApp() {
         />
 
         <div className="relative z-10 w-full max-w-xs">
-          {/* Logo - 1.5x larger, on background layer */}
-          <div className="relative z-0 -mb-16">
+          {/* Logo - larger, above equalizer */}
+          <div className="relative z-0 mb-3">
             <motion.img
               src={STATION_LOGO}
               alt={STATION_NAME}
               className="mx-auto"
               style={{
-                width: '120px',
-                height: '120px',
+                width: '150px',
+                height: '150px',
                 filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
               }}
               animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
@@ -452,7 +452,7 @@ export default function RadioMiniApp() {
             />
           </div>
 
-          {/* Visualizer - on top of logo */}
+          {/* Visualizer */}
           <div className="relative z-10 mb-3">
             {/* LIVE badge */}
             <AnimatePresence>
