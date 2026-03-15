@@ -21,8 +21,8 @@ const COLORS = {
   high: '#00ffcc',
 }
 
-// Admin ID - don't send notifications for this user
 const ADMIN_USER_ID = 55068554
+const BAR_COUNT = 24
 
 declare global {
   interface Window {
@@ -50,8 +50,6 @@ declare global {
   }
 }
 
-const BAR_COUNT = 24
-
 export default function RadioMiniApp() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -64,22 +62,130 @@ export default function RadioMiniApp() {
   const [error, setError] = useState<string | null>(null)
   const [buffering, setBuffering] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
-  const [userId, setUserId] = useState<number | null>(null)
   
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const animationRef = useRef<number | null>(null)
-  const isAnalyserReady = useRef(false)
   const fakeAnimationRef = useRef<number | null>(null)
+  const isAnalyserReady = useRef(false)
 
   // Detect iOS
   useEffect(() => {
     const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
     setIsIOS(iOS)
+    console.log('Is iOS:', iOS)
   }, [])
+
+  // Fake animation for iOS - simple and reliable
+  const startFakeAnimation = useCallback(() => {
+    console.log('Starting fake animation')
+    
+    const animate = () => {
+      const time = Date.now() / 1000
+      const newData = []
+      
+      for (let i = 0; i < BAR_COUNT; i++) {
+        // Create a wave pattern
+        const wave1 = Math.sin(time * 2 + i * 0.3) * 0.3
+        const wave2 = Math.sin(time * 3 + i * 0.5) * 0.2
+        const wave3 = Math.sin(time * 5 + i * 0.2) * 0.15
+        const random = Math.random() * 0.15
+        
+        // Bass frequencies (first 8 bars) - more intense
+        let value = 0.3 + wave1 + wave2 + wave3 + random
+        if (i < 8) value += 0.2
+        // Mid frequencies (middle 8 bars)
+        else if (i < 16) value += 0.1
+        
+        newData.push(Math.max(0.05, Math.min(1, value)))
+      }
+      
+      setAudioData(newData)
+      fakeAnimationRef.current = requestAnimationFrame(animate)
+    }
+    
+    animate()
+  }, [])
+
+  const stopFakeAnimation = useCallback(() => {
+    console.log('Stopping fake animation')
+    if (fakeAnimationRef.current) {
+      cancelAnimationFrame(fakeAnimationRef.current)
+      fakeAnimationRef.current = null
+    }
+    setAudioData(new Array(BAR_COUNT).fill(0))
+  }, [])
+
+  // Real audio visualization
+  const startRealVisualization = useCallback(() => {
+    if (!analyserRef.current) return
+    
+    const analyser = analyserRef.current
+    const dataArray = new Uint8Array(analyser.frequencyBinCount)
+    
+    const update = () => {
+      if (analyser && audioContextRef.current?.state === 'running') {
+        analyser.getByteFrequencyData(dataArray)
+        const mapped = []
+        for (let i = 0; i < BAR_COUNT; i++) {
+          const idx = Math.floor(i * (dataArray.length / BAR_COUNT))
+          mapped.push(dataArray[idx] / 255)
+        }
+        setAudioData(mapped)
+      }
+      animationRef.current = requestAnimationFrame(update)
+    }
+    
+    update()
+  }, [])
+
+  const stopRealVisualization = useCallback(() => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current)
+      animationRef.current = null
+    }
+    setAudioData(new Array(BAR_COUNT).fill(0))
+  }, [])
+
+  // Initialize audio analyzer (for non-iOS)
+  const initAudioAnalyser = useCallback((): boolean => {
+    if (isAnalyserReady.current || isIOS) return false
+    
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext
+      
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioCtx()
+      }
+      
+      const ctx = audioContextRef.current
+      
+      if (ctx.state === 'suspended') {
+        ctx.resume()
+      }
+      
+      if (!analyserRef.current) {
+        analyserRef.current = ctx.createAnalyser()
+        analyserRef.current.fftSize = 64
+        analyserRef.current.smoothingTimeConstant = 0.8
+      }
+      
+      if (!sourceRef.current && audioRef.current) {
+        sourceRef.current = ctx.createMediaElementSource(audioRef.current)
+        sourceRef.current.connect(analyserRef.current)
+        analyserRef.current.connect(ctx.destination)
+        isAnalyserReady.current = true
+      }
+      
+      return true
+    } catch (e) {
+      console.error('Audio analyser error:', e)
+      return false
+    }
+  }, [isIOS])
 
   // Fetch listeners count
   const fetchListenersCount = useCallback(async () => {
@@ -92,17 +198,15 @@ export default function RadioMiniApp() {
     } catch (e) {}
   }, [])
 
-  // Register listener action - DON'T send notification for admin
+  // Register listener
   const registerListener = useCallback(async (action: 'open' | 'close') => {
     const tg = window.Telegram?.WebApp
     const user = tg?.initDataUnsafe?.user
     
     if (!user) return
 
-    setUserId(user.id)
-
     try {
-      const res = await fetch(LISTENERS_API, {
+      await fetch(LISTENERS_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -112,17 +216,13 @@ export default function RadioMiniApp() {
           username: user.username,
           language_code: user.language_code,
           action,
-          // Tell API if this is admin (don't notify)
           isAdmin: user.id === ADMIN_USER_ID,
         })
       })
       
-      if (res.ok) {
-        const data = await res.json()
-        setListeners(data.totalListeners || 0)
-      }
+      fetchListenersCount()
     } catch (e) {}
-  }, [])
+  }, [fetchListenersCount])
 
   // Handle app close
   useEffect(() => {
@@ -143,15 +243,6 @@ export default function RadioMiniApp() {
       
       const blob = new Blob([data], { type: 'application/json' })
       navigator.sendBeacon(LISTENERS_API, blob)
-      
-      try {
-        fetch(LISTENERS_API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: data,
-          keepalive: true,
-        })
-      } catch (e) {}
     }
 
     window.addEventListener('beforeunload', sendClose)
@@ -166,7 +257,7 @@ export default function RadioMiniApp() {
     }
   }, [])
 
-  // Initialize Telegram WebApp
+  // Initialize Telegram
   useEffect(() => {
     const initTelegram = () => {
       const tg = window.Telegram?.WebApp
@@ -205,30 +296,6 @@ export default function RadioMiniApp() {
     return () => clearInterval(interval)
   }, [fetchListenersCount])
 
-  // Fake animation for iOS fallback
-  const startFakeAnimation = useCallback(() => {
-    const animate = () => {
-      setAudioData(prev => 
-        prev.map((v, i) => {
-          // Create wave-like pattern based on position
-          const baseAmplitude = 0.3 + 0.4 * Math.sin(Date.now() / 300 + i * 0.3)
-          const random = Math.random() * 0.2
-          return Math.min(1, Math.max(0.05, v * 0.7 + baseAmplitude * 0.3 + random))
-        })
-      )
-      fakeAnimationRef.current = requestAnimationFrame(animate)
-    }
-    animate()
-  }, [])
-
-  const stopFakeAnimation = useCallback(() => {
-    if (fakeAnimationRef.current) {
-      cancelAnimationFrame(fakeAnimationRef.current)
-      fakeAnimationRef.current = null
-    }
-    setAudioData(new Array(BAR_COUNT).fill(0))
-  }, [])
-
   // Audio setup
   useEffect(() => {
     const audio = new Audio()
@@ -237,21 +304,32 @@ export default function RadioMiniApp() {
     audioRef.current = audio
 
     audio.addEventListener('playing', () => {
+      console.log('Audio playing')
       setIsPlaying(true)
       setIsLoading(false)
       setBuffering(false)
       setError(null)
       
-      // Try to init real analyzer, fall back to fake on iOS
-      const initialized = initAudioAnalyser()
-      if (!initialized && isIOS) {
+      // Start visualization
+      if (isIOS) {
+        // On iOS always use fake animation
         startFakeAnimation()
+      } else {
+        // On desktop try real analyzer
+        const success = initAudioAnalyser()
+        if (success) {
+          startRealVisualization()
+        } else {
+          // Fallback to fake
+          startFakeAnimation()
+        }
       }
     })
     
     audio.addEventListener('pause', () => {
+      console.log('Audio paused')
       setIsPlaying(false)
-      stopAudioAnalyser()
+      stopRealVisualization()
       stopFakeAnimation()
     })
     
@@ -271,89 +349,17 @@ export default function RadioMiniApp() {
       setIsPlaying(false)
       setBuffering(false)
       setError('Ошибка воспроизведения')
+      stopRealVisualization()
       stopFakeAnimation()
     })
 
     return () => {
       audio.pause()
       audio.src = ''
-      stopAudioAnalyser()
+      stopRealVisualization()
       stopFakeAnimation()
     }
-  }, [isIOS, startFakeAnimation, stopFakeAnimation])
-
-  // Init AudioContext - returns false if failed
-  const initAudioAnalyser = (): boolean => {
-    if (!audioRef.current || isAnalyserReady.current) return true
-    
-    try {
-      // Create context - works differently on iOS
-      const AudioCtx = window.AudioContext || window.webkitAudioContext
-      
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioCtx()
-      }
-      
-      const ctx = audioContextRef.current
-      
-      // iOS requires user interaction to resume
-      if (ctx.state === 'suspended') {
-        ctx.resume().catch(() => {
-          // Failed to resume - will use fake animation
-          return false
-        })
-      }
-      
-      if (!analyserRef.current) {
-        analyserRef.current = ctx.createAnalyser()
-        analyserRef.current.fftSize = 64
-        analyserRef.current.smoothingTimeConstant = 0.8
-      }
-      
-      if (!sourceRef.current && audioRef.current) {
-        sourceRef.current = ctx.createMediaElementSource(audioRef.current)
-        sourceRef.current.connect(analyserRef.current)
-        analyserRef.current.connect(ctx.destination)
-        isAnalyserReady.current = true
-      }
-      
-      startVisualization()
-      return true
-    } catch (e) {
-      console.error('Audio analyser error:', e)
-      return false
-    }
-  }
-
-  const startVisualization = () => {
-    if (!analyserRef.current) return
-    
-    const analyser = analyserRef.current
-    const dataArray = new Uint8Array(analyser.frequencyBinCount)
-    
-    const update = () => {
-      if (analyser && audioContextRef.current?.state === 'running') {
-        analyser.getByteFrequencyData(dataArray)
-        const mapped = []
-        for (let i = 0; i < BAR_COUNT; i++) {
-          const idx = Math.floor(i * (dataArray.length / BAR_COUNT))
-          mapped.push(dataArray[idx] / 255)
-        }
-        setAudioData(mapped)
-      }
-      animationRef.current = requestAnimationFrame(update)
-    }
-    
-    update()
-  }
-
-  const stopAudioAnalyser = () => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current)
-      animationRef.current = null
-    }
-    setAudioData(new Array(BAR_COUNT).fill(0))
-  }
+  }, [isIOS, startFakeAnimation, stopFakeAnimation, initAudioAnalyser, startRealVisualization, stopRealVisualization])
 
   useEffect(() => {
     if (audioRef.current && !isIOS) {
@@ -381,18 +387,13 @@ export default function RadioMiniApp() {
       
       audio.src = STREAM_URL
       audio.load()
-      
-      const playPromise = audio.play()
-      
-      if (playPromise !== undefined) {
-        await playPromise
-      }
+      await audio.play()
     } catch (err: any) {
       console.error('Play error:', err)
       setIsLoading(false)
       
       if (err.name === 'NotAllowedError') {
-        setError('Нажмите ещё раз для воспроизведения')
+        setError('Нажмите ещё раз')
       } else if (err.name === 'NotSupportedError') {
         setError('Формат не поддерживается')
       } else {
@@ -444,7 +445,6 @@ export default function RadioMiniApp() {
           border-radius: 10px;
           background: linear-gradient(90deg, rgba(255,0,102,0.3) 0%, rgba(0,199,48,0.3) 50%, rgba(0,255,204,0.3) 100%);
           outline: none;
-          box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
         }
         
         .volume-slider::-webkit-slider-thumb {
@@ -466,19 +466,12 @@ export default function RadioMiniApp() {
           background: linear-gradient(145deg, #ffffff, #e6e6e6);
           border: 3px solid #00c730;
           cursor: pointer;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 0 10px rgba(0,199,48,0.5);
         }
 
         .skeuo-card {
           background: linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8));
           border: 1px solid rgba(0,199,48,0.2);
           box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
-          backdrop-filter: blur(10px);
-        }
-
-        .viz-bar {
-          will-change: transform, height;
-          transform: translateZ(0);
         }
       `}</style>
 
@@ -490,8 +483,7 @@ export default function RadioMiniApp() {
           className="fixed inset-0 pointer-events-none"
           style={{ 
             background: `radial-gradient(ellipse 80% 50% at 50% 30%, rgba(0,199,48,0.15) 0%, transparent 50%),
-                         radial-gradient(ellipse 60% 40% at 30% 60%, rgba(255,0,102,0.1) 0%, transparent 50%),
-                         radial-gradient(ellipse 60% 40% at 70% 70%, rgba(0,255,204,0.1) 0%, transparent 50%)`
+                         radial-gradient(ellipse 60% 40% at 30% 60%, rgba(255,0,102,0.1) 0%, transparent 50%)`
           }}
         />
 
@@ -504,7 +496,7 @@ export default function RadioMiniApp() {
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               style={{
                 boxShadow: isPlaying 
-                  ? `0 0 60px rgba(0,199,48,0.6), 0 0 100px rgba(0,199,48,0.3)`
+                  ? `0 0 60px rgba(0,199,48,0.6)`
                   : `0 8px 32px rgba(0,0,0,0.5)`,
               }}
             >
@@ -536,10 +528,7 @@ export default function RadioMiniApp() {
           </div>
 
           {/* Visualizer */}
-          <div 
-            className="skeuo-card rounded-2xl p-3 mb-4"
-            style={{ background: 'linear-gradient(180deg, rgba(13,0,38,0.8) 0%, rgba(46,0,113,0.4) 100%)' }}
-          >
+          <div className="skeuo-card rounded-2xl p-3 mb-4">
             <div className="flex justify-center items-end gap-1 h-16">
               {audioData.map((value, i) => {
                 const colors = getBarColor(i, value)
@@ -548,7 +537,7 @@ export default function RadioMiniApp() {
                 return (
                   <div
                     key={i}
-                    className="viz-bar rounded-full"
+                    className="rounded-full transition-none"
                     style={{
                       width: '6px',
                       background: colors.gradient,
@@ -575,25 +564,16 @@ export default function RadioMiniApp() {
                 Онлайн-радио
               </span>
             </div>
-            <h1 className="text-lg font-bold text-white mb-0.5">{STATION_NAME}</h1>
+            <h1 className="text-lg font-bold text-white">{STATION_NAME}</h1>
             <p style={{ color: COLORS.text }} className="text-sm">{currentTrack}</p>
-            <div 
-              className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full"
-              style={{ background: 'rgba(0,199,48,0.1)' }}
-            >
-              <span className="text-sm" style={{ color: COLORS.accent }}>👥</span>
-              <span className="text-sm font-medium" style={{ color: COLORS.accent }}>
-                {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
-              </span>
-            </div>
+            <p className="text-sm mt-1" style={{ color: COLORS.accent }}>
+              👥 {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
+            </p>
           </div>
 
           {/* Buffering */}
           {buffering && (
-            <div 
-              className="flex items-center justify-center gap-2 mb-3 p-2 rounded-xl"
-              style={{ background: 'rgba(0,199,48,0.1)' }}
-            >
+            <div className="flex items-center justify-center gap-2 mb-3 p-2 rounded-xl skeuo-card">
               <Wifi className="w-4 h-4 animate-pulse" style={{ color: COLORS.secondary }} />
               <span className="text-sm" style={{ color: COLORS.secondary }}>Буферизация...</span>
             </div>
@@ -601,10 +581,7 @@ export default function RadioMiniApp() {
 
           {/* Error */}
           {error && (
-            <div 
-              className="flex items-center justify-center gap-2 mb-3 p-2 rounded-xl"
-              style={{ background: 'rgba(255,0,102,0.1)' }}
-            >
+            <div className="flex items-center justify-center gap-2 mb-3 p-2 rounded-xl" style={{ background: 'rgba(255,0,102,0.1)' }}>
               <AlertCircle className="w-4 h-4" style={{ color: COLORS.bass }} />
               <span className="text-sm" style={{ color: '#ff6699' }}>{error}</span>
             </div>
@@ -621,7 +598,7 @@ export default function RadioMiniApp() {
                 width: '64px',
                 height: '64px',
                 background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.secondary})`,
-                boxShadow: `0 4px 20px rgba(0,199,48,0.5), 0 8px 40px rgba(0,199,48,0.3)`,
+                boxShadow: `0 4px 20px rgba(0,199,48,0.5)`,
               }}
             >
               {isLoading || buffering ? (
@@ -637,11 +614,7 @@ export default function RadioMiniApp() {
           {/* Volume */}
           {!isIOS ? (
             <div className="flex items-center gap-3 mb-4 px-3 py-2 rounded-xl skeuo-card">
-              <button 
-                onClick={() => setIsMuted(!isMuted)}
-                className="flex-shrink-0 p-2 rounded-lg"
-                style={{ background: 'rgba(255,255,255,0.05)' }}
-              >
+              <button onClick={() => setIsMuted(!isMuted)} className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
                 {isMuted ? (
                   <VolumeX className="w-5 h-5" style={{ color: '#666' }} />
                 ) : (
@@ -662,7 +635,7 @@ export default function RadioMiniApp() {
                 className="volume-slider flex-1 cursor-pointer"
               />
               
-              <span className="text-sm font-medium w-10 text-right" style={{ color: COLORS.secondary }}>
+              <span className="text-sm w-10 text-right" style={{ color: COLORS.secondary }}>
                 {displayVolume}%
               </span>
             </div>
@@ -680,20 +653,14 @@ export default function RadioMiniApp() {
               onClick={share}
               whileTap={{ scale: 0.95 }}
               className="p-3 rounded-xl"
-              style={{ 
-                background: 'linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8))',
-                border: `1px solid ${COLORS.secondary}40`,
-              }}
+              style={{ background: 'linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8))', border: `1px solid ${COLORS.secondary}40` }}
             >
               <Share2 className="w-5 h-5" style={{ color: COLORS.secondary }} />
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.95 }}
               className="p-3 rounded-xl"
-              style={{ 
-                background: 'linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8))',
-                border: `1px solid ${COLORS.secondary}40`,
-              }}
+              style={{ background: 'linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8))', border: `1px solid ${COLORS.secondary}40` }}
             >
               <Heart className="w-5 h-5" style={{ color: COLORS.secondary }} />
             </motion.button>
