@@ -23,8 +23,14 @@ if (!global.listenersStorage) {
 }
 const listeners = global.listenersStorage
 
-// Send notification without waiting (fire and forget)
-function notifyAdmin(data: ListenerData, count: number) {
+// Send notification - skip if user is admin
+function notifyAdmin(data: ListenerData, count: number, isAdmin: boolean) {
+  // Don't notify for admin user
+  if (isAdmin) {
+    console.log('Skip notification for admin user:', data.user_id)
+    return
+  }
+  
   const name = data.username 
     ? `@${data.username}` 
     : `${data.first_name}${data.last_name ? ' ' + data.last_name : ''}`
@@ -42,7 +48,6 @@ function notifyAdmin(data: ListenerData, count: number) {
 👥 Всего: ${count}
 👤 ID: \`${data.user_id}\``
   
-  // Fire and forget - don't wait for response
   fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -57,7 +62,7 @@ function notifyAdmin(data: ListenerData, count: number) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { user_id, first_name, last_name, username, language_code, action } = body
+    const { user_id, first_name, last_name, username, language_code, action, isAdmin } = body
     
     if (!user_id || !first_name) {
       return NextResponse.json({ error: 'Missing user data' }, { status: 400 })
@@ -78,12 +83,10 @@ export async function POST(request: NextRequest) {
     
     if (action === 'open') {
       listeners.set(user_id, listenerData)
-      // Notify immediately (fire and forget)
-      notifyAdmin(listenerData, listeners.size)
+      notifyAdmin(listenerData, listeners.size, isAdmin || user_id === Number(ADMIN_CHAT_ID))
     } else if (action === 'close') {
       listeners.delete(user_id)
-      // Notify immediately (fire and forget)
-      notifyAdmin(listenerData, listeners.size)
+      notifyAdmin(listenerData, listeners.size, isAdmin || user_id === Number(ADMIN_CHAT_ID))
     }
     
     return NextResponse.json({ 

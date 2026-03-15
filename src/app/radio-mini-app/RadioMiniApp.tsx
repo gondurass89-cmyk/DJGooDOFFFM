@@ -16,10 +16,13 @@ const COLORS = {
   text: '#c4c4c4',
   dark: '#0d0026',
   glow: 'rgba(0, 199, 48, 0.5)',
-  bass: '#ff0066',      // Pink/Red for bass
-  mid: '#00c730',       // Green for mids
-  high: '#00ffcc',      // Cyan for highs
+  bass: '#ff0066',
+  mid: '#00c730',
+  high: '#00ffcc',
 }
+
+// Admin ID - don't send notifications for this user
+const ADMIN_USER_ID = 55068554
 
 declare global {
   interface Window {
@@ -47,7 +50,6 @@ declare global {
   }
 }
 
-// Number of visualizer bars
 const BAR_COUNT = 24
 
 export default function RadioMiniApp() {
@@ -62,6 +64,7 @@ export default function RadioMiniApp() {
   const [error, setError] = useState<string | null>(null)
   const [buffering, setBuffering] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
+  const [userId, setUserId] = useState<number | null>(null)
   
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -69,6 +72,7 @@ export default function RadioMiniApp() {
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const animationRef = useRef<number | null>(null)
   const isAnalyserReady = useRef(false)
+  const fakeAnimationRef = useRef<number | null>(null)
 
   // Detect iOS
   useEffect(() => {
@@ -85,17 +89,17 @@ export default function RadioMiniApp() {
         const data = await res.json()
         setListeners(data.total || 0)
       }
-    } catch (e) {
-      // silent fail
-    }
+    } catch (e) {}
   }, [])
 
-  // Register listener action
+  // Register listener action - DON'T send notification for admin
   const registerListener = useCallback(async (action: 'open' | 'close') => {
     const tg = window.Telegram?.WebApp
     const user = tg?.initDataUnsafe?.user
     
     if (!user) return
+
+    setUserId(user.id)
 
     try {
       const res = await fetch(LISTENERS_API, {
@@ -108,6 +112,8 @@ export default function RadioMiniApp() {
           username: user.username,
           language_code: user.language_code,
           action,
+          // Tell API if this is admin (don't notify)
+          isAdmin: user.id === ADMIN_USER_ID,
         })
       })
       
@@ -115,9 +121,7 @@ export default function RadioMiniApp() {
         const data = await res.json()
         setListeners(data.totalListeners || 0)
       }
-    } catch (e) {
-      // silent fail
-    }
+    } catch (e) {}
   }, [])
 
   // Handle app close
@@ -134,6 +138,7 @@ export default function RadioMiniApp() {
         last_name: user.last_name,
         username: user.username,
         action: 'close',
+        isAdmin: user.id === ADMIN_USER_ID,
       })
       
       const blob = new Blob([data], { type: 'application/json' })
@@ -200,6 +205,30 @@ export default function RadioMiniApp() {
     return () => clearInterval(interval)
   }, [fetchListenersCount])
 
+  // Fake animation for iOS fallback
+  const startFakeAnimation = useCallback(() => {
+    const animate = () => {
+      setAudioData(prev => 
+        prev.map((v, i) => {
+          // Create wave-like pattern based on position
+          const baseAmplitude = 0.3 + 0.4 * Math.sin(Date.now() / 300 + i * 0.3)
+          const random = Math.random() * 0.2
+          return Math.min(1, Math.max(0.05, v * 0.7 + baseAmplitude * 0.3 + random))
+        })
+      )
+      fakeAnimationRef.current = requestAnimationFrame(animate)
+    }
+    animate()
+  }, [])
+
+  const stopFakeAnimation = useCallback(() => {
+    if (fakeAnimationRef.current) {
+      cancelAnimationFrame(fakeAnimationRef.current)
+      fakeAnimationRef.current = null
+    }
+    setAudioData(new Array(BAR_COUNT).fill(0))
+  }, [])
+
   // Audio setup
   useEffect(() => {
     const audio = new Audio()
@@ -212,43 +241,53 @@ export default function RadioMiniApp() {
       setIsLoading(false)
       setBuffering(false)
       setError(null)
-      initAudioAnalyser()
+      
+      // Try to init real analyzer, fall back to fake on iOS
+      const initialized = initAudioAnalyser()
+      if (!initialized && isIOS) {
+        startFakeAnimation()
+      }
     })
     
     audio.addEventListener('pause', () => {
       setIsPlaying(false)
       stopAudioAnalyser()
+      stopFakeAnimation()
     })
+    
     audio.addEventListener('waiting', () => {
       setBuffering(true)
       setIsLoading(true)
     })
+    
     audio.addEventListener('canplay', () => {
       setBuffering(false)
       setIsLoading(false)
     })
-    audio.addEventListener('playing', () => {
-      setBuffering(false)
-    })
+    
     audio.addEventListener('error', (e) => {
       console.error('Audio error:', e)
       setIsLoading(false)
       setIsPlaying(false)
       setBuffering(false)
       setError('Ошибка воспроизведения')
+      stopFakeAnimation()
     })
 
     return () => {
       audio.pause()
       audio.src = ''
       stopAudioAnalyser()
+      stopFakeAnimation()
     }
-  }, [])
+  }, [isIOS, startFakeAnimation, stopFakeAnimation])
 
-  const initAudioAnalyser = () => {
-    if (!audioRef.current || isAnalyserReady.current) return
+  // Init AudioContext - returns false if failed
+  const initAudioAnalyser = (): boolean => {
+    if (!audioRef.current || isAnalyserReady.current) return true
     
     try {
+      // Create context - works differently on iOS
       const AudioCtx = window.AudioContext || window.webkitAudioContext
       
       if (!audioContextRef.current) {
@@ -257,8 +296,12 @@ export default function RadioMiniApp() {
       
       const ctx = audioContextRef.current
       
+      // iOS requires user interaction to resume
       if (ctx.state === 'suspended') {
-        ctx.resume()
+        ctx.resume().catch(() => {
+          // Failed to resume - will use fake animation
+          return false
+        })
       }
       
       if (!analyserRef.current) {
@@ -275,8 +318,10 @@ export default function RadioMiniApp() {
       }
       
       startVisualization()
+      return true
     } catch (e) {
       console.error('Audio analyser error:', e)
+      return false
     }
   }
 
@@ -289,7 +334,6 @@ export default function RadioMiniApp() {
     const update = () => {
       if (analyser && audioContextRef.current?.state === 'running') {
         analyser.getByteFrequencyData(dataArray)
-        // Map 32 bins to 24 bars with some averaging
         const mapped = []
         for (let i = 0; i < BAR_COUNT; i++) {
           const idx = Math.floor(i * (dataArray.length / BAR_COUNT))
@@ -337,6 +381,7 @@ export default function RadioMiniApp() {
       
       audio.src = STREAM_URL
       audio.load()
+      
       const playPromise = audio.play()
       
       if (playPromise !== undefined) {
@@ -349,7 +394,7 @@ export default function RadioMiniApp() {
       if (err.name === 'NotAllowedError') {
         setError('Нажмите ещё раз для воспроизведения')
       } else if (err.name === 'NotSupportedError') {
-        setError('Формат не поддерживается браузером')
+        setError('Формат не поддерживается')
       } else {
         setError('Ошибка воспроизведения')
       }
@@ -369,29 +414,22 @@ export default function RadioMiniApp() {
 
   const displayVolume = isMuted ? 0 : volume
 
-  // Get bar color based on position (bass/mid/high)
   const getBarColor = (index: number, value: number) => {
     const third = BAR_COUNT / 3
     if (index < third) {
-      // Bass - Pink/Red with neon glow
       return {
         gradient: `linear-gradient(to top, ${COLORS.bass}, #ff3399)`,
         glow: `0 0 ${8 + value * 12}px rgba(255, 0, 102, ${0.5 + value * 0.5})`,
-        shadow: `0 0 ${4 + value * 8}px rgba(255, 0, 102, ${0.3 + value * 0.4})`
       }
     } else if (index < third * 2) {
-      // Mids - Green with neon glow
       return {
         gradient: `linear-gradient(to top, ${COLORS.mid}, ${COLORS.accent})`,
         glow: `0 0 ${8 + value * 12}px rgba(0, 199, 48, ${0.5 + value * 0.5})`,
-        shadow: `0 0 ${4 + value * 8}px rgba(0, 199, 48, ${0.3 + value * 0.4})`
       }
     } else {
-      // Highs - Cyan with neon glow
       return {
         gradient: `linear-gradient(to top, ${COLORS.high}, #66ffee)`,
         glow: `0 0 ${8 + value * 12}px rgba(0, 255, 204, ${0.5 + value * 0.5})`,
-        shadow: `0 0 ${4 + value * 8}px rgba(0, 255, 204, ${0.3 + value * 0.4})`
       }
     }
   }
@@ -399,7 +437,6 @@ export default function RadioMiniApp() {
   return (
     <>
       <style jsx global>{`
-        /* Volume Slider Styles */
         .volume-slider {
           -webkit-appearance: none;
           appearance: none;
@@ -410,14 +447,8 @@ export default function RadioMiniApp() {
           box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
         }
         
-        .volume-slider::-webkit-slider-runnable-track {
-          height: 8px;
-          border-radius: 10px;
-        }
-        
         .volume-slider::-webkit-slider-thumb {
           -webkit-appearance: none;
-          appearance: none;
           width: 22px;
           height: 22px;
           border-radius: 50%;
@@ -425,16 +456,7 @@ export default function RadioMiniApp() {
           border: 3px solid #00c730;
           cursor: pointer;
           margin-top: -7px;
-          box-shadow: 
-            0 2px 8px rgba(0,0,0,0.3),
-            inset 0 1px 2px rgba(255,255,255,0.8),
-            0 0 10px rgba(0,199,48,0.5);
-        }
-        
-        .volume-slider::-moz-range-track {
-          height: 8px;
-          border-radius: 10px;
-          background: linear-gradient(90deg, rgba(255,0,102,0.3) 0%, rgba(0,199,48,0.3) 50%, rgba(0,255,204,0.3) 100%);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 0 10px rgba(0,199,48,0.5);
         }
         
         .volume-slider::-moz-range-thumb {
@@ -444,37 +466,26 @@ export default function RadioMiniApp() {
           background: linear-gradient(145deg, #ffffff, #e6e6e6);
           border: 3px solid #00c730;
           cursor: pointer;
-          box-shadow: 
-            0 2px 8px rgba(0,0,0,0.3),
-            inset 0 1px 2px rgba(255,255,255,0.8),
-            0 0 10px rgba(0,199,48,0.5);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 0 10px rgba(0,199,48,0.5);
         }
 
-        /* Skeuomorphic Card */
         .skeuo-card {
           background: linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8));
           border: 1px solid rgba(0,199,48,0.2);
-          box-shadow: 
-            0 8px 32px rgba(0,0,0,0.4),
-            inset 0 1px 0 rgba(255,255,255,0.05),
-            inset 0 -1px 0 rgba(0,0,0,0.2);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
           backdrop-filter: blur(10px);
         }
 
-        /* Visualizer bar animation - GPU accelerated */
         .viz-bar {
-          will-change: transform, opacity;
+          will-change: transform, height;
           transform: translateZ(0);
         }
       `}</style>
 
       <div 
         className="min-h-screen flex flex-col items-center justify-center p-4"
-        style={{ 
-          background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.dark} 100%)`,
-        }}
+        style={{ background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.dark} 100%)` }}
       >
-        {/* Ambient glow background */}
         <div 
           className="fixed inset-0 pointer-events-none"
           style={{ 
@@ -485,7 +496,7 @@ export default function RadioMiniApp() {
         />
 
         <div className="relative z-10 w-full max-w-xs">
-          {/* Logo - Skeuomorphic */}
+          {/* Logo */}
           <div className="relative mb-4">
             <motion.div 
               className="w-28 h-28 mx-auto rounded-full overflow-hidden skeuo-card p-1"
@@ -493,38 +504,29 @@ export default function RadioMiniApp() {
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               style={{
                 boxShadow: isPlaying 
-                  ? `0 0 60px rgba(0,199,48,0.6), 0 0 100px rgba(0,199,48,0.3), inset 0 0 20px rgba(0,199,48,0.1)`
-                  : `0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)`,
+                  ? `0 0 60px rgba(0,199,48,0.6), 0 0 100px rgba(0,199,48,0.3)`
+                  : `0 8px 32px rgba(0,0,0,0.5)`,
               }}
             >
               <div 
                 className="w-full h-full rounded-full overflow-hidden"
-                style={{
-                  border: `2px solid ${COLORS.secondary}`,
-                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)',
-                }}
+                style={{ border: `2px solid ${COLORS.secondary}` }}
               >
-                <img 
-                  src={STATION_LOGO} 
-                  alt={STATION_NAME} 
-                  className="w-full h-full object-cover"
-                  style={{ filter: isPlaying ? 'none' : 'brightness(0.9)' }}
-                />
+                <img src={STATION_LOGO} alt={STATION_NAME} className="w-full h-full object-cover" />
               </div>
             </motion.div>
             
             <AnimatePresence>
               {isPlaying && (
                 <motion.div
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
                   className="absolute top-0 right-6 px-2 py-0.5 rounded-full text-xs font-bold"
                   style={{ 
                     background: `linear-gradient(145deg, ${COLORS.secondary}, ${COLORS.accent})`,
                     color: COLORS.dark,
-                    boxShadow: `0 0 20px rgba(0,199,48,0.8), 0 2px 8px rgba(0,0,0,0.3)`,
+                    boxShadow: `0 0 20px rgba(0,199,48,0.8)`,
                   }}
                 >
                   LIVE
@@ -533,12 +535,10 @@ export default function RadioMiniApp() {
             </AnimatePresence>
           </div>
 
-          {/* Enhanced Visualizer - 24 bars with 3 frequency bands */}
+          {/* Visualizer */}
           <div 
             className="skeuo-card rounded-2xl p-3 mb-4"
-            style={{
-              background: 'linear-gradient(180deg, rgba(13,0,38,0.8) 0%, rgba(46,0,113,0.4) 100%)',
-            }}
+            style={{ background: 'linear-gradient(180deg, rgba(13,0,38,0.8) 0%, rgba(46,0,113,0.4) 100%)' }}
           >
             <div className="flex justify-center items-end gap-1 h-16">
               {audioData.map((value, i) => {
@@ -554,17 +554,12 @@ export default function RadioMiniApp() {
                       background: colors.gradient,
                       height: `${height}px`,
                       boxShadow: value > 0.05 ? colors.glow : 'none',
-                      transform: `scaleY(${Math.max(0.1, value)})`,
-                      opacity: 0.7 + value * 0.3,
-                      transition: 'transform 0.05s ease-out, opacity 0.05s ease-out',
-                      transformOrigin: 'bottom',
                     }}
                   />
                 )
               })}
             </div>
             
-            {/* Frequency labels */}
             <div className="flex justify-between mt-2 px-1">
               <span className="text-xs" style={{ color: COLORS.bass }}>BASS</span>
               <span className="text-xs" style={{ color: COLORS.mid }}>MID</span>
@@ -572,7 +567,7 @@ export default function RadioMiniApp() {
             </div>
           </div>
 
-          {/* Info - Skeuomorphic */}
+          {/* Info */}
           <div className="skeuo-card rounded-xl p-3 text-center mb-4">
             <div className="flex items-center justify-center gap-1.5 mb-1">
               <Radio className="w-3 h-3" style={{ color: COLORS.secondary }} />
@@ -580,16 +575,11 @@ export default function RadioMiniApp() {
                 Онлайн-радио
               </span>
             </div>
-            <h1 className="text-lg font-bold text-white mb-0.5" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
-              {STATION_NAME}
-            </h1>
+            <h1 className="text-lg font-bold text-white mb-0.5">{STATION_NAME}</h1>
             <p style={{ color: COLORS.text }} className="text-sm">{currentTrack}</p>
             <div 
               className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full"
-              style={{ 
-                background: 'rgba(0,199,48,0.1)',
-                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)',
-              }}
+              style={{ background: 'rgba(0,199,48,0.1)' }}
             >
               <span className="text-sm" style={{ color: COLORS.accent }}>👥</span>
               <span className="text-sm font-medium" style={{ color: COLORS.accent }}>
@@ -598,35 +588,29 @@ export default function RadioMiniApp() {
             </div>
           </div>
 
-          {/* Buffering status */}
+          {/* Buffering */}
           {buffering && (
             <div 
               className="flex items-center justify-center gap-2 mb-3 p-2 rounded-xl"
-              style={{ 
-                background: 'rgba(0,199,48,0.1)',
-                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)',
-              }}
+              style={{ background: 'rgba(0,199,48,0.1)' }}
             >
               <Wifi className="w-4 h-4 animate-pulse" style={{ color: COLORS.secondary }} />
               <span className="text-sm" style={{ color: COLORS.secondary }}>Буферизация...</span>
             </div>
           )}
 
-          {/* Error message */}
+          {/* Error */}
           {error && (
             <div 
               className="flex items-center justify-center gap-2 mb-3 p-2 rounded-xl"
-              style={{ 
-                background: 'rgba(255,0,102,0.1)',
-                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)',
-              }}
+              style={{ background: 'rgba(255,0,102,0.1)' }}
             >
               <AlertCircle className="w-4 h-4" style={{ color: COLORS.bass }} />
               <span className="text-sm" style={{ color: '#ff6699' }}>{error}</span>
             </div>
           )}
 
-          {/* Play Button - Skeuomorphic */}
+          {/* Play Button */}
           <div className="flex justify-center mb-4">
             <motion.button
               onClick={handlePlay}
@@ -637,12 +621,7 @@ export default function RadioMiniApp() {
                 width: '64px',
                 height: '64px',
                 background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.secondary})`,
-                boxShadow: `
-                  0 4px 20px rgba(0,199,48,0.5),
-                  0 8px 40px rgba(0,199,48,0.3),
-                  inset 0 2px 4px rgba(255,255,255,0.3),
-                  inset 0 -2px 4px rgba(0,0,0,0.2)
-                `,
+                boxShadow: `0 4px 20px rgba(0,199,48,0.5), 0 8px 40px rgba(0,199,48,0.3)`,
               }}
             >
               {isLoading || buffering ? (
@@ -655,18 +634,13 @@ export default function RadioMiniApp() {
             </motion.button>
           </div>
 
-          {/* Volume - Skeuomorphic */}
+          {/* Volume */}
           {!isIOS ? (
-            <div 
-              className="flex items-center gap-3 mb-4 px-3 py-2 rounded-xl skeuo-card"
-            >
+            <div className="flex items-center gap-3 mb-4 px-3 py-2 rounded-xl skeuo-card">
               <button 
                 onClick={() => setIsMuted(!isMuted)}
                 className="flex-shrink-0 p-2 rounded-lg"
-                style={{ 
-                  background: 'rgba(255,255,255,0.05)',
-                  boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)',
-                }}
+                style={{ background: 'rgba(255,255,255,0.05)' }}
               >
                 {isMuted ? (
                   <VolumeX className="w-5 h-5" style={{ color: '#666' }} />
@@ -688,24 +662,19 @@ export default function RadioMiniApp() {
                 className="volume-slider flex-1 cursor-pointer"
               />
               
-              <span 
-                className="text-sm font-medium w-10 text-right"
-                style={{ color: COLORS.secondary }}
-              >
+              <span className="text-sm font-medium w-10 text-right" style={{ color: COLORS.secondary }}>
                 {displayVolume}%
               </span>
             </div>
           ) : (
-            <div 
-              className="text-center mb-4 px-4 py-3 rounded-xl skeuo-card"
-            >
+            <div className="text-center mb-4 px-4 py-3 rounded-xl skeuo-card">
               <p className="text-sm" style={{ color: COLORS.text }}>
                 💡 Громкость — кнопки устройства
               </p>
             </div>
           )}
 
-          {/* Buttons - Skeuomorphic */}
+          {/* Buttons */}
           <div className="flex justify-center gap-3">
             <motion.button
               onClick={share}
@@ -714,10 +683,6 @@ export default function RadioMiniApp() {
               style={{ 
                 background: 'linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8))',
                 border: `1px solid ${COLORS.secondary}40`,
-                boxShadow: `
-                  0 4px 12px rgba(0,0,0,0.3),
-                  inset 0 1px 0 rgba(255,255,255,0.05)
-                `,
               }}
             >
               <Share2 className="w-5 h-5" style={{ color: COLORS.secondary }} />
@@ -728,10 +693,6 @@ export default function RadioMiniApp() {
               style={{ 
                 background: 'linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8))',
                 border: `1px solid ${COLORS.secondary}40`,
-                boxShadow: `
-                  0 4px 12px rgba(0,0,0,0.3),
-                  inset 0 1px 0 rgba(255,255,255,0.05)
-                `,
               }}
             >
               <Heart className="w-5 h-5" style={{ color: COLORS.secondary }} />
