@@ -436,18 +436,18 @@ export default function RadioMiniApp() {
         />
 
         <div className="relative z-10 w-full max-w-xs">
-          {/* Logo */}
-          <div className="relative mb-4">
-            <motion.div 
-              className="w-28 h-28 mx-auto"
-              animate={isPlaying ? { scale: [1, 1.02, 1] } : {}}
+          {/* Logo - transparent, no background */}
+          <div className="relative mb-2">
+            <motion.img 
+              src={STATION_LOGO} 
+              alt={STATION_NAME}
+              className="w-20 h-20 mx-auto"
+              animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               style={{
-                filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.8))' : 'none',
+                filter: isPlaying ? 'drop-shadow(0 0 20px rgba(0,199,48,0.6))' : 'none',
               }}
-            >
-              <img src={STATION_LOGO} alt={STATION_NAME} className="w-full h-full object-contain" />
-            </motion.div>
+            />
             
             <AnimatePresence>
               {isPlaying && (
@@ -455,11 +455,11 @@ export default function RadioMiniApp() {
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   exit={{ scale: 0 }}
-                  className="absolute top-0 right-6 px-2 py-0.5 rounded-full text-xs font-bold"
+                  className="absolute top-0 right-4 px-1.5 py-0.5 rounded-full text-xs font-bold"
                   style={{ 
                     background: `linear-gradient(145deg, ${COLORS.secondary}, ${COLORS.accent})`,
                     color: '#0d0026',
-                    boxShadow: `0 0 20px rgba(0,199,48,0.8)`,
+                    boxShadow: `0 0 15px rgba(0,199,48,0.8)`,
                   }}
                 >
                   LIVE
@@ -469,8 +469,8 @@ export default function RadioMiniApp() {
           </div>
 
           {/* Visualizer */}
-          <div className="skeuo-card rounded-2xl p-3 mb-4">
-            <div className="flex justify-center items-end gap-1 h-16">
+          <div className="skeuo-card rounded-xl p-2 mb-3">
+            <div className="flex justify-center items-end gap-1 h-12">
               {useCSSAnimation && isPlaying ? (
                 // CSS animated bars (iOS)
                 Array.from({ length: BAR_COUNT }).map((_, i) => {
@@ -513,7 +513,7 @@ export default function RadioMiniApp() {
               )}
             </div>
             
-            <div className="flex justify-between mt-2 px-1">
+            <div className="flex justify-between mt-1 px-1">
               <span className="text-xs" style={{ color: COLORS.bass }}>BASS</span>
               <span className="text-xs" style={{ color: COLORS.mid }}>MID</span>
               <span className="text-xs" style={{ color: COLORS.high }}>HIGH</span>
@@ -521,72 +521,72 @@ export default function RadioMiniApp() {
           </div>
 
           {/* Info */}
-          <div className="skeuo-card rounded-xl p-3 text-center mb-4">
-            <div className="flex items-center justify-center gap-1.5 mb-1">
+          <div className="skeuo-card rounded-xl p-2 text-center mb-3">
+            <div className="flex items-center justify-center gap-1 mb-0.5">
               <Radio className="w-3 h-3" style={{ color: COLORS.secondary }} />
               <span className="text-xs uppercase tracking-wider" style={{ color: COLORS.secondary }}>
                 Онлайн-радио
               </span>
             </div>
-            <h1 className="text-lg font-bold text-white">{STATION_NAME}</h1>
-            <p style={{ color: COLORS.text }} className="text-sm">{currentTrack}</p>
-            <p className="text-sm mt-1" style={{ color: COLORS.accent }}>
+            <h1 className="text-base font-bold text-white">{STATION_NAME}</h1>
+            <p style={{ color: COLORS.text }} className="text-xs">{currentTrack}</p>
+            <p className="text-xs mt-0.5" style={{ color: COLORS.accent }}>
               👥 {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
             </p>
           </div>
 
           {/* Buffering */}
           {buffering && (
-            <div className="flex items-center justify-center gap-2 mb-3 p-2 rounded-xl skeuo-card">
-              <Wifi className="w-4 h-4 animate-pulse" style={{ color: COLORS.secondary }} />
-              <span className="text-sm" style={{ color: COLORS.secondary }}>Буферизация...</span>
+            <div className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl skeuo-card">
+              <Wifi className="w-3 h-3 animate-pulse" style={{ color: COLORS.secondary }} />
+              <span className="text-xs" style={{ color: COLORS.secondary }}>Буферизация...</span>
             </div>
           )}
 
           {/* Error */}
           {error && (
-            <div className="flex items-center justify-center gap-2 mb-3 p-2 rounded-xl" style={{ background: 'rgba(255,0,102,0.1)' }}>
-              <AlertCircle className="w-4 h-4" style={{ color: COLORS.bass }} />
-              <span className="text-sm" style={{ color: '#ff6699' }}>{error}</span>
+            <div className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl" style={{ background: 'rgba(255,0,102,0.1)' }}>
+              <AlertCircle className="w-3 h-3" style={{ color: COLORS.bass }} />
+              <span className="text-xs" style={{ color: '#ff6699' }}>{error}</span>
             </div>
           )}
 
           {/* Play Button */}
-          <div className="flex justify-center mb-4">
+          <div className="flex justify-center mb-3">
             <motion.button
               onClick={handlePlay}
               disabled={isLoading}
               whileTap={{ scale: 0.95 }}
               className="rounded-full flex items-center justify-center"
               style={{
-                width: '64px',
-                height: '64px',
+                width: '56px',
+                height: '56px',
                 background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.secondary})`,
-                boxShadow: `0 4px 20px rgba(0,199,48,0.5)`,
+                boxShadow: `0 4px 15px rgba(0,199,48,0.5)`,
               }}
             >
               {isLoading || buffering ? (
-                <Loader2 className="w-6 h-6 animate-spin" style={{ color: COLORS.dark }} />
+                <Loader2 className="w-5 h-5 animate-spin" style={{ color: COLORS.dark }} />
               ) : isPlaying ? (
-                <Pause className="w-6 h-6" style={{ color: COLORS.dark }} />
+                <Pause className="w-5 h-5" style={{ color: COLORS.dark }} />
               ) : (
-                <Play className="w-6 h-6 ml-1" style={{ color: COLORS.dark }} />
+                <Play className="w-5 h-5 ml-0.5" style={{ color: COLORS.dark }} />
               )}
             </motion.button>
           </div>
 
           {/* Volume - hide on iOS */}
           {!useCSSAnimation && (
-            <div className="flex items-center gap-3 mb-4 px-3 py-2 rounded-xl skeuo-card">
+            <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-xl skeuo-card">
               <button 
                 onClick={() => setIsMuted(!isMuted)} 
-                className="p-2 rounded-lg"
+                className="p-1.5 rounded-lg"
                 style={{ background: 'rgba(255,255,255,0.05)' }}
               >
                 {isMuted ? (
-                  <VolumeX className="w-5 h-5" style={{ color: '#666' }} />
+                  <VolumeX className="w-4 h-4" style={{ color: '#666' }} />
                 ) : (
-                  <Volume2 className="w-5 h-5" style={{ color: COLORS.secondary }} />
+                  <Volume2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
                 )}
               </button>
               
@@ -603,7 +603,7 @@ export default function RadioMiniApp() {
                 className="volume-slider flex-1 cursor-pointer"
               />
               
-              <span className="text-sm w-10 text-right" style={{ color: COLORS.secondary }}>
+              <span className="text-xs w-8 text-right" style={{ color: COLORS.secondary }}>
                 {displayVolume}%
               </span>
             </div>
@@ -611,33 +611,33 @@ export default function RadioMiniApp() {
 
           {/* iOS volume hint */}
           {useCSSAnimation && (
-            <div className="text-center mb-4 px-4 py-3 rounded-xl skeuo-card">
-              <p className="text-sm" style={{ color: COLORS.text }}>
+            <div className="text-center mb-3 px-3 py-2 rounded-xl skeuo-card">
+              <p className="text-xs" style={{ color: COLORS.text }}>
                 💡 Громкость — кнопки устройства
               </p>
             </div>
           )}
 
           {/* Buttons */}
-          <div className="flex justify-center gap-3">
+          <div className="flex justify-center gap-2">
             <motion.button
               onClick={share}
               whileTap={{ scale: 0.95 }}
-              className="p-3 rounded-xl"
+              className="p-2 rounded-xl"
               style={{ background: 'linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8))', border: `1px solid ${COLORS.secondary}40` }}
             >
-              <Share2 className="w-5 h-5" style={{ color: COLORS.secondary }} />
+              <Share2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.95 }}
-              className="p-3 rounded-xl"
+              className="p-2 rounded-xl"
               style={{ background: 'linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8))', border: `1px solid ${COLORS.secondary}40` }}
             >
-              <Heart className="w-5 h-5" style={{ color: COLORS.secondary }} />
+              <Heart className="w-4 h-4" style={{ color: COLORS.secondary }} />
             </motion.button>
           </div>
 
-          <p className="text-center text-xs mt-4" style={{ color: '#555' }}>
+          <p className="text-center text-xs mt-3" style={{ color: '#555' }}>
             Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
           </p>
         </div>
