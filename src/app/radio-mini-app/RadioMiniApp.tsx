@@ -436,27 +436,33 @@ export default function RadioMiniApp() {
         />
 
         <div className="relative z-10 w-full max-w-xs">
-          {/* Logo - transparent, no background */}
-          <div className="relative mb-2">
-            <motion.img 
-              src={STATION_LOGO} 
+          {/* Logo - 1.5x larger, on background layer */}
+          <div className="relative z-0 -mb-16">
+            <motion.img
+              src={STATION_LOGO}
               alt={STATION_NAME}
-              className="w-20 h-20 mx-auto"
+              className="mx-auto"
+              style={{
+                width: '120px',
+                height: '120px',
+                filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
+              }}
               animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              style={{
-                filter: isPlaying ? 'drop-shadow(0 0 20px rgba(0,199,48,0.6))' : 'none',
-              }}
             />
-            
+          </div>
+
+          {/* Visualizer - on top of logo */}
+          <div className="relative z-10 mb-3">
+            {/* LIVE badge */}
             <AnimatePresence>
               {isPlaying && (
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   exit={{ scale: 0 }}
-                  className="absolute top-0 right-4 px-1.5 py-0.5 rounded-full text-xs font-bold"
-                  style={{ 
+                  className="absolute -top-2 right-2 px-2 py-0.5 rounded-full text-xs font-bold z-20"
+                  style={{
                     background: `linear-gradient(145deg, ${COLORS.secondary}, ${COLORS.accent})`,
                     color: '#0d0026',
                     boxShadow: `0 0 15px rgba(0,199,48,0.8)`,
@@ -466,10 +472,7 @@ export default function RadioMiniApp() {
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
 
-          {/* Visualizer */}
-          <div className="mb-3">
             {/* Equalizer container with overflow hidden */}
             <div className="skeuo-card rounded-xl p-2 overflow-hidden">
               <div className="flex justify-center items-end gap-1 h-12 relative">
