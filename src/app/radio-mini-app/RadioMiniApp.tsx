@@ -61,12 +61,32 @@ export default function RadioMiniApp() {
   const [isTgReady, setIsTgReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [buffering, setBuffering] = useState(false)
+  const [useCSSAnimation, setUseCSSAnimation] = useState(false)
   
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const animationRef = useRef<number | null>(null)
+
+  // Detect if we need CSS animation (iOS in Telegram)
+  useEffect(() => {
+    const checkPlatform = () => {
+      // Check Telegram platform
+      const tgPlatform = window.Telegram?.WebApp?.platform
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+      
+      // Use CSS animation on iOS or if Telegram reports iOS
+      const needsCSS = isIOS || tgPlatform === 'ios'
+      setUseCSSAnimation(needsCSS)
+      console.log('Platform:', tgPlatform, 'iOS detected:', isIOS, 'Use CSS:', needsCSS)
+    }
+    
+    // Check immediately and after Telegram loads
+    checkPlatform()
+    setTimeout(checkPlatform, 500)
+  }, [])
 
   // Fetch listeners
   const fetchListenersCount = useCallback(async () => {
@@ -173,9 +193,9 @@ export default function RadioMiniApp() {
     return () => clearInterval(interval)
   }, [fetchListenersCount])
 
-  // Visualization
-  const startVisualization = useCallback(() => {
-    if (!audioRef.current) return
+  // Real audio visualization (for desktop/Android)
+  const startRealVisualization = useCallback(() => {
+    if (!audioRef.current) return false
     
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext
@@ -217,18 +237,10 @@ export default function RadioMiniApp() {
       }
       
       update()
+      return true
     } catch (e) {
-      console.error('Visualization error:', e)
-      // Fallback to random animation
-      const updateRandom = () => {
-        const mapped = []
-        for (let i = 0; i < BAR_COUNT; i++) {
-          mapped.push(0.2 + Math.random() * 0.6)
-        }
-        setAudioData(mapped)
-        animationRef.current = requestAnimationFrame(updateRandom)
-      }
-      updateRandom()
+      console.error('Real visualization error:', e)
+      return false
     }
   }, [])
 
@@ -252,7 +264,15 @@ export default function RadioMiniApp() {
       setIsLoading(false)
       setBuffering(false)
       setError(null)
-      startVisualization()
+      
+      // Only try real visualization if NOT using CSS animation
+      if (!useCSSAnimation) {
+        const success = startRealVisualization()
+        if (!success) {
+          console.log('Falling back to CSS animation')
+          setUseCSSAnimation(true)
+        }
+      }
     })
     
     audio.addEventListener('pause', () => {
@@ -283,7 +303,7 @@ export default function RadioMiniApp() {
       audio.src = ''
       stopVisualization()
     }
-  }, [startVisualization, stopVisualization])
+  }, [useCSSAnimation, startRealVisualization, stopVisualization])
 
   useEffect(() => {
     if (audioRef.current) {
@@ -350,7 +370,7 @@ export default function RadioMiniApp() {
           width: 22px;
           height: 22px;
           border-radius: 50%;
-          background: white;
+          background: linear-gradient(145deg, #ffffff, #e6e6e6);
           border: 3px solid #00c730;
           cursor: pointer;
         }
@@ -359,7 +379,7 @@ export default function RadioMiniApp() {
           width: 22px;
           height: 22px;
           border-radius: 50%;
-          background: white;
+          background: linear-gradient(145deg, #ffffff, #e6e6e6);
           border: 3px solid #00c730;
         }
 
@@ -369,7 +389,7 @@ export default function RadioMiniApp() {
           box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
         }
 
-        /* CSS Animation for visualizer bars - works everywhere */
+        /* CSS Animation for iOS fallback */
         @keyframes barAnim1 { 0%, 100% { height: 8px; } 50% { height: 50px; } }
         @keyframes barAnim2 { 0%, 100% { height: 12px; } 50% { height: 40px; } }
         @keyframes barAnim3 { 0%, 100% { height: 6px; } 50% { height: 35px; } }
@@ -403,7 +423,9 @@ export default function RadioMiniApp() {
               animate={isPlaying ? { scale: [1, 1.02, 1] } : {}}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               style={{
-                boxShadow: isPlaying ? `0 0 60px rgba(0,199,48,0.6)` : `0 8px 32px rgba(0,0,0,0.5)`,
+                boxShadow: isPlaying 
+                  ? `0 0 60px rgba(0,199,48,0.6)`
+                  : `0 8px 32px rgba(0,0,0,0.5)`,
               }}
             >
               <div 
@@ -433,11 +455,11 @@ export default function RadioMiniApp() {
             </AnimatePresence>
           </div>
 
-          {/* Visualizer with CSS animation fallback */}
+          {/* Visualizer */}
           <div className="skeuo-card rounded-2xl p-3 mb-4">
             <div className="flex justify-center items-end gap-1 h-16">
-              {isPlaying ? (
-                // CSS animated bars when playing
+              {useCSSAnimation && isPlaying ? (
+                // CSS animated bars (iOS)
                 Array.from({ length: BAR_COUNT }).map((_, i) => {
                   const colors = getBarColor(i)
                   const animClass = `bar-anim-${(i % 5) + 1}`
@@ -457,7 +479,7 @@ export default function RadioMiniApp() {
                   )
                 })
               ) : (
-                // Static bars when not playing - use audioData from JS
+                // Real audio data (desktop/Android)
                 audioData.map((value, i) => {
                   const colors = getBarColor(i)
                   const height = Math.max(4, value * 60)
@@ -540,37 +562,48 @@ export default function RadioMiniApp() {
             </motion.button>
           </div>
 
-          {/* Volume */}
-          <div className="flex items-center gap-3 mb-4 px-3 py-2 rounded-xl skeuo-card">
-            <button 
-              onClick={() => setIsMuted(!isMuted)} 
-              className="p-2 rounded-lg"
-              style={{ background: 'rgba(255,255,255,0.05)' }}
-            >
-              {isMuted ? (
-                <VolumeX className="w-5 h-5" style={{ color: '#666' }} />
-              ) : (
-                <Volume2 className="w-5 h-5" style={{ color: COLORS.secondary }} />
-              )}
-            </button>
-            
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={displayVolume}
-              onChange={(e) => {
-                const v = parseInt(e.target.value, 10)
-                setVolume(v)
-                if (v > 0) setIsMuted(false)
-              }}
-              className="volume-slider flex-1 cursor-pointer"
-            />
-            
-            <span className="text-sm w-10 text-right" style={{ color: COLORS.secondary }}>
-              {displayVolume}%
-            </span>
-          </div>
+          {/* Volume - hide on iOS */}
+          {!useCSSAnimation && (
+            <div className="flex items-center gap-3 mb-4 px-3 py-2 rounded-xl skeuo-card">
+              <button 
+                onClick={() => setIsMuted(!isMuted)} 
+                className="p-2 rounded-lg"
+                style={{ background: 'rgba(255,255,255,0.05)' }}
+              >
+                {isMuted ? (
+                  <VolumeX className="w-5 h-5" style={{ color: '#666' }} />
+                ) : (
+                  <Volume2 className="w-5 h-5" style={{ color: COLORS.secondary }} />
+                )}
+              </button>
+              
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={displayVolume}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10)
+                  setVolume(v)
+                  if (v > 0) setIsMuted(false)
+                }}
+                className="volume-slider flex-1 cursor-pointer"
+              />
+              
+              <span className="text-sm w-10 text-right" style={{ color: COLORS.secondary }}>
+                {displayVolume}%
+              </span>
+            </div>
+          )}
+
+          {/* iOS volume hint */}
+          {useCSSAnimation && (
+            <div className="text-center mb-4 px-4 py-3 rounded-xl skeuo-card">
+              <p className="text-sm" style={{ color: COLORS.text }}>
+                💡 Громкость — кнопки устройства
+              </p>
+            </div>
+          )}
 
           {/* Buttons */}
           <div className="flex justify-center gap-3">
