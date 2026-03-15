@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Sliders, ChevronDown, ChevronUp } from 'lucide-react'
 
 const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
@@ -540,37 +540,37 @@ export default function RadioMiniApp() {
           }}
         />
 
+        <LayoutGroup>
         <div className="relative z-10 w-full max-w-xs">
-          {/* Logo - with parallax disappear effect */}
-          <AnimatePresence>
-            {!showEqualizer && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8, y: -50 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.8, y: -50 }}
-                transition={{ 
-                  type: "spring",
-                  stiffness: 300,
-                  damping: 25,
-                  mass: 0.8
-                }}
-                className="relative z-0 mb-3"
-              >
-                <motion.img
-                  src={STATION_LOGO}
-                  alt={STATION_NAME}
-                  className="mx-auto"
-                  style={{
-                    width: '150px',
-                    height: '150px',
-                    filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
-                  }}
-                  animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
-                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Logo - with parallax collapse effect */}
+          <motion.div
+            layout
+            animate={{
+              height: showEqualizer ? 0 : 150,
+              opacity: showEqualizer ? 0 : 1,
+              marginBottom: showEqualizer ? 0 : 12,
+            }}
+            transition={{ 
+              type: "spring",
+              stiffness: 300,
+              damping: 30,
+              mass: 1
+            }}
+            className="relative z-0 overflow-hidden"
+          >
+            <motion.img
+              src={STATION_LOGO}
+              alt={STATION_NAME}
+              className="mx-auto"
+              style={{
+                width: '150px',
+                height: '150px',
+                filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
+              }}
+              animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            />
+          </motion.div>
 
           {/* Visualizer - with layout animation */}
           <motion.div 
@@ -915,6 +915,7 @@ export default function RadioMiniApp() {
             Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
           </motion.p>
         </div>
+        </LayoutGroup>
       </div>
     </>
   )
