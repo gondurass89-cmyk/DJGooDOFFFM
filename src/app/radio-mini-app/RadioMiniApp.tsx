@@ -478,40 +478,37 @@ export default function RadioMiniApp() {
           border: 3px solid #00c730;
         }
 
-        /* Equalizer vertical sliders */
-        .eq-slider {
+        /* Equalizer horizontal sliders - compact */
+        .eq-slider-h {
           -webkit-appearance: none;
-          width: 60px;
-          height: 80px;
-          writing-mode: vertical-lr;
-          direction: rtl;
-          border-radius: 10px;
-          background: rgba(255,255,255,0.1);
+          height: 6px;
+          border-radius: 5px;
+          background: rgba(255,255,255,0.15);
         }
 
-        .eq-slider::-webkit-slider-thumb {
+        .eq-slider-h::-webkit-slider-thumb {
           -webkit-appearance: none;
-          width: 18px;
-          height: 18px;
+          width: 14px;
+          height: 14px;
           border-radius: 50%;
           background: linear-gradient(145deg, #ffffff, #e6e6e6);
           cursor: pointer;
         }
 
-        .eq-slider::-moz-range-thumb {
-          width: 18px;
-          height: 18px;
+        .eq-slider-h::-moz-range-thumb {
+          width: 14px;
+          height: 14px;
           border-radius: 50%;
           background: linear-gradient(145deg, #ffffff, #e6e6e6);
           cursor: pointer;
         }
 
-        .eq-slider.bass::-webkit-slider-thumb { border: 3px solid #ff0066; }
-        .eq-slider.mid::-webkit-slider-thumb { border: 3px solid #00c730; }
-        .eq-slider.high::-webkit-slider-thumb { border: 3px solid #00ffcc; }
-        .eq-slider.bass::-moz-range-thumb { border: 3px solid #ff0066; }
-        .eq-slider.mid::-moz-range-thumb { border: 3px solid #00c730; }
-        .eq-slider.high::-moz-range-thumb { border: 3px solid #00ffcc; }
+        .eq-slider-h.bass::-webkit-slider-thumb { border: 2px solid #ff0066; }
+        .eq-slider-h.mid::-webkit-slider-thumb { border: 2px solid #00c730; }
+        .eq-slider-h.high::-webkit-slider-thumb { border: 2px solid #00ffcc; }
+        .eq-slider-h.bass::-moz-range-thumb { border: 2px solid #ff0066; }
+        .eq-slider-h.mid::-moz-range-thumb { border: 2px solid #00c730; }
+        .eq-slider-h.high::-moz-range-thumb { border: 2px solid #00ffcc; }
 
         .skeuo-card {
           background: linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8));
@@ -736,78 +733,75 @@ export default function RadioMiniApp() {
             </div>
           )}
 
-          {/* 3-Band Equalizer */}
-          <div className="skeuo-card rounded-xl p-3 mb-3">
-            <div className="flex items-center justify-center gap-1 mb-2">
+          {/* 3-Band Equalizer - compact horizontal */}
+          <div className="skeuo-card rounded-xl p-2 mb-3">
+            <div className="flex items-center justify-center gap-1 mb-1">
               <Sliders className="w-3 h-3" style={{ color: COLORS.secondary }} />
-              <span className="text-xs font-medium" style={{ color: COLORS.secondary }}>
-                Эквалайзер
-              </span>
+              <span className="text-xs" style={{ color: COLORS.secondary }}>Эквалайзер</span>
             </div>
             
-            <p className="text-center text-xs mb-3" style={{ color: COLORS.text }}>
-              Настройте звук под себя
-            </p>
-            
-            <div className="flex justify-center items-end gap-4">
+            <div className="flex gap-2">
               {/* BASS */}
-              <div className="flex flex-col items-center">
+              <div className="flex-1 flex items-center gap-1">
+                <span className="text-xs font-bold w-8" style={{ color: COLORS.bass }}>BASS</span>
                 <input
                   type="range"
                   min={EQ_RANGE.min}
                   max={EQ_RANGE.max}
                   value={eqValues.bass}
                   onChange={(e) => updateEqualizer('bass', parseInt(e.target.value))}
-                  className="eq-slider bass cursor-pointer"
+                  className="eq-slider-h flex-1 cursor-pointer bass"
                 />
-                <span className="text-xs mt-2 font-bold" style={{ color: COLORS.bass }}>BASS</span>
-                <span className="text-xs" style={{ color: COLORS.bass }}>
+                <span className="text-xs w-6 text-right" style={{ color: COLORS.bass }}>
                   {eqValues.bass > 0 ? '+' : ''}{eqValues.bass}
                 </span>
               </div>
-              
+            </div>
+            
+            <div className="flex gap-2 mt-1">
               {/* MID */}
-              <div className="flex flex-col items-center">
+              <div className="flex-1 flex items-center gap-1">
+                <span className="text-xs font-bold w-8" style={{ color: COLORS.mid }}>MID</span>
                 <input
                   type="range"
                   min={EQ_RANGE.min}
                   max={EQ_RANGE.max}
                   value={eqValues.mid}
                   onChange={(e) => updateEqualizer('mid', parseInt(e.target.value))}
-                  className="eq-slider mid cursor-pointer"
+                  className="eq-slider-h flex-1 cursor-pointer mid"
                 />
-                <span className="text-xs mt-2 font-bold" style={{ color: COLORS.mid }}>MID</span>
-                <span className="text-xs" style={{ color: COLORS.mid }}>
+                <span className="text-xs w-6 text-right" style={{ color: COLORS.mid }}>
                   {eqValues.mid > 0 ? '+' : ''}{eqValues.mid}
                 </span>
               </div>
-              
+            </div>
+            
+            <div className="flex gap-2 mt-1">
               {/* HIGH */}
-              <div className="flex flex-col items-center">
+              <div className="flex-1 flex items-center gap-1">
+                <span className="text-xs font-bold w-8" style={{ color: COLORS.high }}>HIGH</span>
                 <input
                   type="range"
                   min={EQ_RANGE.min}
                   max={EQ_RANGE.max}
                   value={eqValues.high}
                   onChange={(e) => updateEqualizer('high', parseInt(e.target.value))}
-                  className="eq-slider high cursor-pointer"
+                  className="eq-slider-h flex-1 cursor-pointer high"
                 />
-                <span className="text-xs mt-2 font-bold" style={{ color: COLORS.high }}>HIGH</span>
-                <span className="text-xs" style={{ color: COLORS.high }}>
+                <span className="text-xs w-6 text-right" style={{ color: COLORS.high }}>
                   {eqValues.high > 0 ? '+' : ''}{eqValues.high}
                 </span>
               </div>
             </div>
             
             {/* Reset button */}
-            <div className="flex justify-center mt-3">
+            <div className="flex justify-center mt-1">
               <button
                 onClick={resetEqualizer}
-                className="px-3 py-1 rounded-lg text-xs"
+                className="px-2 py-0.5 rounded text-xs"
                 style={{ 
-                  background: 'rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.05)',
                   color: COLORS.text,
-                  border: `1px solid ${COLORS.secondary}40`
                 }}
               >
                 Сбросить
