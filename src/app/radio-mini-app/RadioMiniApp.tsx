@@ -722,81 +722,83 @@ export default function RadioMiniApp() {
             </div>
           )}
 
-          {/* 3-Band Equalizer - compact horizontal */}
-          <div className="skeuo-card rounded-xl p-2 mb-3">
-            <div className="flex items-center justify-center gap-1 mb-1">
-              <Sliders className="w-3 h-3" style={{ color: COLORS.secondary }} />
-              <span className="text-xs" style={{ color: COLORS.secondary }}>Эквалайзер</span>
-            </div>
-            
-            <div className="flex gap-2">
-              {/* BASS */}
-              <div className="flex-1 flex items-center gap-1">
-                <span className="text-xs font-bold w-8" style={{ color: COLORS.bass }}>BASS</span>
-                <input
-                  type="range"
-                  min={EQ_RANGE.min}
-                  max={EQ_RANGE.max}
-                  value={eqValues.bass}
-                  onChange={(e) => updateEqualizer('bass', parseInt(e.target.value))}
-                  className="eq-slider-h flex-1 cursor-pointer bass"
-                />
-                <span className="text-xs w-6 text-right" style={{ color: COLORS.bass }}>
-                  {eqValues.bass > 0 ? '+' : ''}{eqValues.bass}
-                </span>
+          {/* 3-Band Equalizer - hide on iOS (doesn't work there) */}
+          {!useCSSAnimation && (
+            <div className="skeuo-card rounded-xl p-2 mb-3">
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <Sliders className="w-3 h-3" style={{ color: COLORS.secondary }} />
+                <span className="text-xs" style={{ color: COLORS.secondary }}>Эквалайзер</span>
+              </div>
+              
+              <div className="flex gap-2">
+                {/* BASS */}
+                <div className="flex-1 flex items-center gap-1">
+                  <span className="text-xs font-bold w-8" style={{ color: COLORS.bass }}>BASS</span>
+                  <input
+                    type="range"
+                    min={EQ_RANGE.min}
+                    max={EQ_RANGE.max}
+                    value={eqValues.bass}
+                    onChange={(e) => updateEqualizer('bass', parseInt(e.target.value))}
+                    className="eq-slider-h flex-1 cursor-pointer bass"
+                  />
+                  <span className="text-xs w-6 text-right" style={{ color: COLORS.bass }}>
+                    {eqValues.bass > 0 ? '+' : ''}{eqValues.bass}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="flex gap-2 mt-1">
+                {/* MID */}
+                <div className="flex-1 flex items-center gap-1">
+                  <span className="text-xs font-bold w-8" style={{ color: COLORS.mid }}>MID</span>
+                  <input
+                    type="range"
+                    min={EQ_RANGE.min}
+                    max={EQ_RANGE.max}
+                    value={eqValues.mid}
+                    onChange={(e) => updateEqualizer('mid', parseInt(e.target.value))}
+                    className="eq-slider-h flex-1 cursor-pointer mid"
+                  />
+                  <span className="text-xs w-6 text-right" style={{ color: COLORS.mid }}>
+                    {eqValues.mid > 0 ? '+' : ''}{eqValues.mid}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="flex gap-2 mt-1">
+                {/* HIGH */}
+                <div className="flex-1 flex items-center gap-1">
+                  <span className="text-xs font-bold w-8" style={{ color: COLORS.high }}>HIGH</span>
+                  <input
+                    type="range"
+                    min={EQ_RANGE.min}
+                    max={EQ_RANGE.max}
+                    value={eqValues.high}
+                    onChange={(e) => updateEqualizer('high', parseInt(e.target.value))}
+                    className="eq-slider-h flex-1 cursor-pointer high"
+                  />
+                  <span className="text-xs w-6 text-right" style={{ color: COLORS.high }}>
+                    {eqValues.high > 0 ? '+' : ''}{eqValues.high}
+                  </span>
+                </div>
+              </div>
+              
+              {/* Reset button */}
+              <div className="flex justify-center mt-1">
+                <button
+                  onClick={resetEqualizer}
+                  className="px-2 py-0.5 rounded text-xs"
+                  style={{ 
+                    background: 'rgba(255,255,255,0.05)',
+                    color: COLORS.text,
+                  }}
+                >
+                  Сбросить
+                </button>
               </div>
             </div>
-            
-            <div className="flex gap-2 mt-1">
-              {/* MID */}
-              <div className="flex-1 flex items-center gap-1">
-                <span className="text-xs font-bold w-8" style={{ color: COLORS.mid }}>MID</span>
-                <input
-                  type="range"
-                  min={EQ_RANGE.min}
-                  max={EQ_RANGE.max}
-                  value={eqValues.mid}
-                  onChange={(e) => updateEqualizer('mid', parseInt(e.target.value))}
-                  className="eq-slider-h flex-1 cursor-pointer mid"
-                />
-                <span className="text-xs w-6 text-right" style={{ color: COLORS.mid }}>
-                  {eqValues.mid > 0 ? '+' : ''}{eqValues.mid}
-                </span>
-              </div>
-            </div>
-            
-            <div className="flex gap-2 mt-1">
-              {/* HIGH */}
-              <div className="flex-1 flex items-center gap-1">
-                <span className="text-xs font-bold w-8" style={{ color: COLORS.high }}>HIGH</span>
-                <input
-                  type="range"
-                  min={EQ_RANGE.min}
-                  max={EQ_RANGE.max}
-                  value={eqValues.high}
-                  onChange={(e) => updateEqualizer('high', parseInt(e.target.value))}
-                  className="eq-slider-h flex-1 cursor-pointer high"
-                />
-                <span className="text-xs w-6 text-right" style={{ color: COLORS.high }}>
-                  {eqValues.high > 0 ? '+' : ''}{eqValues.high}
-                </span>
-              </div>
-            </div>
-            
-            {/* Reset button */}
-            <div className="flex justify-center mt-1">
-              <button
-                onClick={resetEqualizer}
-                className="px-2 py-0.5 rounded text-xs"
-                style={{ 
-                  background: 'rgba(255,255,255,0.05)',
-                  color: COLORS.text,
-                }}
-              >
-                Сбросить
-              </button>
-            </div>
-          </div>
+          )}
 
           <p className="text-center text-xs mt-2" style={{ color: '#555' }}>
             Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
