@@ -64,7 +64,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { user_id, first_name, last_name, username, language_code, action, isAdmin } = body
     
+    console.log('Listener API POST:', { user_id, first_name, action, isAdmin })
+    
     if (!user_id || !first_name) {
+      console.log('Missing user data')
       return NextResponse.json({ error: 'Missing user data' }, { status: 400 })
     }
     
@@ -83,9 +86,11 @@ export async function POST(request: NextRequest) {
     
     if (action === 'open') {
       listeners.set(user_id, listenerData)
+      console.log('Added listener, total:', listeners.size)
       notifyAdmin(listenerData, listeners.size, isAdmin || user_id === Number(ADMIN_CHAT_ID))
     } else if (action === 'close') {
       listeners.delete(user_id)
+      console.log('Removed listener, total:', listeners.size)
       notifyAdmin(listenerData, listeners.size, isAdmin || user_id === Number(ADMIN_CHAT_ID))
     }
     
@@ -110,6 +115,8 @@ export async function GET() {
       listeners.delete(id)
     }
   })
+  
+  console.log('Listener API GET, total:', listeners.size)
   
   return NextResponse.json({
     total: listeners.size,

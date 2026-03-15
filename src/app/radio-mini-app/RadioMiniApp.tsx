@@ -125,10 +125,14 @@ export default function RadioMiniApp() {
   const registerListener = useCallback(async (action: 'open' | 'close') => {
     const tg = window.Telegram?.WebApp
     const user = tg?.initDataUnsafe?.user
-    if (!user) return
+    console.log('registerListener called:', action, 'user:', user)
+    if (!user) {
+      console.log('No user data, skipping registration')
+      return
+    }
 
     try {
-      await fetch(LISTENERS_API, {
+      const response = await fetch(LISTENERS_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -141,8 +145,12 @@ export default function RadioMiniApp() {
           isAdmin: user.id === ADMIN_USER_ID,
         })
       })
+      const result = await response.json()
+      console.log('Listener registered:', action, result)
       fetchListenersCount()
-    } catch (e) {}
+    } catch (e) {
+      console.error('registerListener error:', e)
+    }
   }, [fetchListenersCount])
 
   // Handle close
