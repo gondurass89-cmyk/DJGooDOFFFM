@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Pause, Volume2, VolumeX, Loader2, Share2, Heart, Radio, AlertCircle } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Loader2, Share2, Heart, Radio, AlertCircle, Wifi } from 'lucide-react'
 
 const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
 const STATION_NAME = 'DJ GooD OFF FM'
@@ -54,6 +54,7 @@ export default function RadioMiniApp() {
   const [audioData, setAudioData] = useState<number[]>(new Array(32).fill(0))
   const [isTgReady, setIsTgReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [buffering, setBuffering] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
   
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -61,6 +62,7 @@ export default function RadioMiniApp() {
   const analyserRef = useRef<AnalyserNode | null>(null)
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const animationRef = useRef<number | null>(null)
+  const isAnalyserReady = useRef(false)
 
   // Detect iOS
   useEffect(() => {
@@ -78,7 +80,7 @@ export default function RadioMiniApp() {
         setListeners(data.total || 0)
       }
     } catch (e) {
-      console.error('Failed to fetch listeners:', e)
+      // silent fail
     }
   }, [])
 
@@ -90,7 +92,7 @@ export default function RadioMiniApp() {
     if (!user) return
 
     try {
-      await fetch(LISTENERS_API, {
+      const res = await fetch(LISTENERS_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -102,33 +104,62 @@ export default function RadioMiniApp() {
           action,
         })
       })
-      fetchListenersCount()
+      
+      if (res.ok) {
+        const data = await res.json()
+        setListeners(data.totalListeners || 0)
+      }
     } catch (e) {
-      console.error('Failed to register listener:', e)
+      // silent fail
     }
-  }, [fetchListenersCount])
+  }, [])
 
-  // Handle app close
+  // Handle app close - use multiple methods for reliability
   useEffect(() => {
-    const handleClose = () => {
+    const sendClose = () => {
       const tg = window.Telegram?.WebApp
       const user = tg?.initDataUnsafe?.user
       
-      if (user) {
-        const data = JSON.stringify({
-          user_id: user.id,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          username: user.username,
-          action: 'close',
+      if (!user) return
+      
+      const data = JSON.stringify({
+        user_id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        username: user.username,
+        action: 'close',
+      })
+      
+      // Method 1: sendBeacon
+      const blob = new Blob([data], { type: 'application/json' })
+      navigator.sendBeacon(LISTENERS_API, blob)
+      
+      // Method 2: fetch with keepalive (fallback)
+      try {
+        fetch(LISTENERS_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: data,
+          keepalive: true,
         })
-        const blob = new Blob([data], { type: 'application/json' })
-        navigator.sendBeacon(LISTENERS_API, blob)
+      } catch (e) {
+        // ignore
       }
     }
 
-    window.addEventListener('beforeunload', handleClose)
-    return () => window.removeEventListener('beforeunload', handleClose)
+    // Listen for multiple close events
+    window.addEventListener('beforeunload', sendClose)
+    window.addEventListener('pagehide', sendClose)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        sendClose()
+      }
+    })
+    
+    return () => {
+      window.removeEventListener('beforeunload', sendClose)
+      window.removeEventListener('pagehide', sendClose)
+    }
   }, [])
 
   // Initialize Telegram WebApp
@@ -184,6 +215,7 @@ export default function RadioMiniApp() {
     audio.addEventListener('playing', () => {
       setIsPlaying(true)
       setIsLoading(false)
+      setBuffering(false)
       setError(null)
       initAudioAnalyser()
     })
@@ -193,14 +225,25 @@ export default function RadioMiniApp() {
       stopAudioAnalyser()
     })
     
-    audio.addEventListener('waiting', () => setIsLoading(true))
-    audio.addEventListener('canplay', () => setIsLoading(false))
+    audio.addEventListener('waiting', () => {
+      setBuffering(true)
+    })
+    
+    audio.addEventListener('canplay', () => {
+      setBuffering(false)
+      setIsLoading(false)
+    })
+    
+    audio.addEventListener('playing', () => {
+      setBuffering(false)
+    })
     
     audio.addEventListener('error', (e) => {
       console.error('Audio error:', e)
       setIsLoading(false)
       setIsPlaying(false)
-      setError('Ошибка воспроизведения. Проверьте соединение.')
+      setBuffering(false)
+      setError('Ошибка воспроизведения')
     })
 
     return () => {
@@ -211,9 +254,10 @@ export default function RadioMiniApp() {
   }, [])
 
   const initAudioAnalyser = () => {
-    if (!audioRef.current) return
+    if (!audioRef.current || isAnalyserReady.current) return
     
     try {
+      // Use webkitAudioContext for Safari
       const AudioCtx = window.AudioContext || window.webkitAudioContext
       
       if (!audioContextRef.current) {
@@ -222,24 +266,30 @@ export default function RadioMiniApp() {
       
       const ctx = audioContextRef.current
       
+      // Resume if suspended (required by Safari)
       if (ctx.state === 'suspended') {
-        ctx.resume()
+        ctx.resume().then(() => {
+          console.log('AudioContext resumed')
+        })
       }
       
       if (!analyserRef.current) {
         analyserRef.current = ctx.createAnalyser()
         analyserRef.current.fftSize = 64
+        analyserRef.current.smoothingTimeConstant = 0.8
       }
       
       if (!sourceRef.current && audioRef.current) {
         sourceRef.current = ctx.createMediaElementSource(audioRef.current)
         sourceRef.current.connect(analyserRef.current)
         analyserRef.current.connect(ctx.destination)
+        isAnalyserReady.current = true
       }
       
       startVisualization()
     } catch (e) {
       console.error('Audio analyser error:', e)
+      // Continue without visualization
     }
   }
 
@@ -250,8 +300,10 @@ export default function RadioMiniApp() {
     const dataArray = new Uint8Array(analyser.frequencyBinCount)
     
     const update = () => {
-      analyser.getByteFrequencyData(dataArray)
-      setAudioData(Array.from(dataArray).map(v => v / 255))
+      if (analyser && audioContextRef.current?.state === 'running') {
+        analyser.getByteFrequencyData(dataArray)
+        setAudioData(Array.from(dataArray).map(v => v / 255))
+      }
       animationRef.current = requestAnimationFrame(update)
     }
     
@@ -285,8 +337,14 @@ export default function RadioMiniApp() {
     }
 
     setIsLoading(true)
+    setBuffering(true)
     
     try {
+      // Resume AudioContext if suspended (Safari fix)
+      if (audioContextRef.current?.state === 'suspended') {
+        await audioContextRef.current.resume()
+      }
+      
       // Set volume before playing
       if (!isIOS) {
         audio.volume = isMuted ? 0 : volume / 100
@@ -295,22 +353,18 @@ export default function RadioMiniApp() {
       audio.src = STREAM_URL
       audio.load()
       
-      // Try to play
-      const playPromise = audio.play()
-      
-      if (playPromise !== undefined) {
-        await playPromise
-      }
+      await audio.play()
     } catch (err: any) {
       console.error('Play error:', err)
       setIsLoading(false)
+      setBuffering(false)
       
       if (err.name === 'NotAllowedError') {
         setError('Нажмите ещё раз для воспроизведения')
       } else if (err.name === 'NotSupportedError') {
-        setError('Формат не поддерживается браузером')
+        setError('Формат не поддерживается')
       } else {
-        setError('Ошибка воспроизведения: ' + (err.message || 'неизвестная'))
+        setError('Ошибка: ' + (err.message || 'неизвестная'))
       }
     }
   }
@@ -401,6 +455,15 @@ export default function RadioMiniApp() {
           </p>
         </div>
 
+        {/* Buffering status */}
+        {buffering && (
+          <div className="flex items-center justify-center gap-2 mb-2 p-2 rounded-lg" 
+               style={{ background: 'rgba(0,199,48,0.1)' }}>
+            <Wifi className="w-4 h-4 animate-pulse" style={{ color: COLORS.secondary }} />
+            <span className="text-xs" style={{ color: COLORS.secondary }}>Буферизация...</span>
+          </div>
+        )}
+
         {/* Error message */}
         {error && (
           <div className="flex items-center justify-center gap-2 mb-2 p-2 rounded-lg" 
@@ -422,7 +485,7 @@ export default function RadioMiniApp() {
               boxShadow: `0 3px 15px ${COLORS.glow}`
             }}
           >
-            {isLoading ? (
+            {isLoading || buffering ? (
               <Loader2 className="w-5 h-5 animate-spin" style={{ color: COLORS.dark }} />
             ) : isPlaying ? (
               <Pause className="w-5 h-5" style={{ color: COLORS.dark }} />

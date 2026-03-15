@@ -23,7 +23,8 @@ if (!global.listenersStorage) {
 }
 const listeners = global.listenersStorage
 
-async function notifyAdmin(data: ListenerData, count: number) {
+// Send notification without waiting (fire and forget)
+function notifyAdmin(data: ListenerData, count: number) {
   const name = data.username 
     ? `@${data.username}` 
     : `${data.first_name}${data.last_name ? ' ' + data.last_name : ''}`
@@ -41,19 +42,16 @@ async function notifyAdmin(data: ListenerData, count: number) {
 👥 Всего: ${count}
 👤 ID: \`${data.user_id}\``
   
-  try {
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: ADMIN_CHAT_ID,
-        text: message,
-        parse_mode: 'Markdown'
-      })
+  // Fire and forget - don't wait for response
+  fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: ADMIN_CHAT_ID,
+      text: message,
+      parse_mode: 'Markdown'
     })
-  } catch (e) {
-    console.error('Failed to notify admin:', e)
-  }
+  }).catch(e => console.error('Telegram notify error:', e))
 }
 
 export async function POST(request: NextRequest) {
@@ -80,9 +78,11 @@ export async function POST(request: NextRequest) {
     
     if (action === 'open') {
       listeners.set(user_id, listenerData)
+      // Notify immediately (fire and forget)
       notifyAdmin(listenerData, listeners.size)
     } else if (action === 'close') {
       listeners.delete(user_id)
+      // Notify immediately (fire and forget)
       notifyAdmin(listenerData, listeners.size)
     }
     
