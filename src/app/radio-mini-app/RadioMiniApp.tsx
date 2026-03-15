@@ -409,13 +409,13 @@ export default function RadioMiniApp() {
           box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
         }
 
-        /* CSS Animation for iOS fallback */
-        @keyframes barAnim1 { 0%, 100% { height: 8px; } 50% { height: 50px; } }
-        @keyframes barAnim2 { 0%, 100% { height: 12px; } 50% { height: 40px; } }
-        @keyframes barAnim3 { 0%, 100% { height: 6px; } 50% { height: 35px; } }
-        @keyframes barAnim4 { 0%, 100% { height: 10px; } 50% { height: 55px; } }
-        @keyframes barAnim5 { 0%, 100% { height: 15px; } 50% { height: 45px; } }
-        
+        /* CSS Animation for iOS fallback - max 48px to fit container */
+        @keyframes barAnim1 { 0%, 100% { height: 6px; } 50% { height: 44px; } }
+        @keyframes barAnim2 { 0%, 100% { height: 10px; } 50% { height: 36px; } }
+        @keyframes barAnim3 { 0%, 100% { height: 4px; } 50% { height: 32px; } }
+        @keyframes barAnim4 { 0%, 100% { height: 8px; } 50% { height: 48px; } }
+        @keyframes barAnim5 { 0%, 100% { height: 12px; } 50% { height: 40px; } }
+
         .bar-anim-1 { animation: barAnim1 0.5s ease-in-out infinite; }
         .bar-anim-2 { animation: barAnim2 0.7s ease-in-out infinite; }
         .bar-anim-3 { animation: barAnim3 0.4s ease-in-out infinite; }
@@ -469,54 +469,59 @@ export default function RadioMiniApp() {
           </div>
 
           {/* Visualizer */}
-          <div className="skeuo-card rounded-xl p-2 mb-3">
-            <div className="flex justify-center items-end gap-1 h-12">
-              {useCSSAnimation && isPlaying ? (
-                // CSS animated bars (iOS)
-                Array.from({ length: BAR_COUNT }).map((_, i) => {
-                  const colors = getBarColor(i)
-                  const animClass = `bar-anim-${(i % 5) + 1}`
-                  const delay = `${i * 0.05}s`
-                  
-                  return (
-                    <div
-                      key={i}
-                      className={`rounded-full ${animClass}`}
-                      style={{
-                        width: '6px',
-                        background: colors.gradient,
-                        animationDelay: delay,
-                        boxShadow: `0 0 8px ${colors.color}`,
-                      }}
-                    />
-                  )
-                })
-              ) : (
-                // Real audio data (desktop/Android)
-                audioData.map((value, i) => {
-                  const colors = getBarColor(i)
-                  const height = Math.max(4, value * 60)
-                  
-                  return (
-                    <div
-                      key={i}
-                      className="rounded-full"
-                      style={{
-                        width: '6px',
-                        background: colors.gradient,
-                        height: `${height}px`,
-                        boxShadow: value > 0.05 ? `0 0 8px ${colors.color}` : 'none',
-                      }}
-                    />
-                  )
-                })
-              )}
+          <div className="mb-3">
+            {/* Equalizer container with overflow hidden */}
+            <div className="skeuo-card rounded-xl p-2 overflow-hidden">
+              <div className="flex justify-center items-end gap-1 h-12 relative">
+                {useCSSAnimation && isPlaying ? (
+                  // CSS animated bars (iOS) - with overflow-hidden on container
+                  Array.from({ length: BAR_COUNT }).map((_, i) => {
+                    const colors = getBarColor(i)
+                    const animClass = `bar-anim-${(i % 5) + 1}`
+                    const delay = `${i * 0.05}s`
+
+                    return (
+                      <div
+                        key={i}
+                        className={`rounded-full ${animClass}`}
+                        style={{
+                          width: '6px',
+                          background: colors.gradient,
+                          animationDelay: delay,
+                          boxShadow: `0 0 8px ${colors.color}`,
+                          maxHeight: '48px',
+                        }}
+                      />
+                    )
+                  })
+                ) : (
+                  // Real audio data (desktop/Android)
+                  audioData.map((value, i) => {
+                    const colors = getBarColor(i)
+                    const height = Math.min(48, Math.max(4, value * 48))
+
+                    return (
+                      <div
+                        key={i}
+                        className="rounded-full"
+                        style={{
+                          width: '6px',
+                          background: colors.gradient,
+                          height: `${height}px`,
+                          boxShadow: value > 0.05 ? `0 0 8px ${colors.color}` : 'none',
+                        }}
+                      />
+                    )
+                  })
+                )}
+              </div>
             </div>
-            
-            <div className="flex justify-between mt-1 px-1">
-              <span className="text-xs" style={{ color: COLORS.bass }}>BASS</span>
-              <span className="text-xs" style={{ color: COLORS.mid }}>MID</span>
-              <span className="text-xs" style={{ color: COLORS.high }}>HIGH</span>
+
+            {/* Labels under the container */}
+            <div className="flex justify-between mt-1.5 px-2">
+              <span className="text-xs font-medium" style={{ color: COLORS.bass }}>BASS</span>
+              <span className="text-xs font-medium" style={{ color: COLORS.mid }}>MID</span>
+              <span className="text-xs font-medium" style={{ color: COLORS.high }}>HIGH</span>
             </div>
           </div>
 
