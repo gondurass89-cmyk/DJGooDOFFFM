@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Pause, Volume2, VolumeX, Loader2, Share2, Heart, Radio, AlertCircle, Wifi, Sliders } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Sliders } from 'lucide-react'
 
 const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
 const STATION_NAME = 'DJ GooD OFF FM'
@@ -404,17 +404,6 @@ export default function RadioMiniApp() {
     }
   }
 
-  const share = () => {
-    const text = `🎵 ${STATION_NAME}`
-    const url = window.location.href
-    
-    if (window.Telegram?.WebApp?.openTelegramLink) {
-      window.Telegram.WebApp.openTelegramLink(
-        `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
-      )
-    }
-  }
-
   const displayVolume = isMuted ? 0 : volume
 
   // Update equalizer filter values
@@ -809,26 +798,7 @@ export default function RadioMiniApp() {
             </div>
           </div>
 
-          {/* Buttons */}
-          <div className="flex justify-center gap-2">
-            <motion.button
-              onClick={share}
-              whileTap={{ scale: 0.95 }}
-              className="p-2 rounded-xl"
-              style={{ background: 'linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8))', border: `1px solid ${COLORS.secondary}40` }}
-            >
-              <Share2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              className="p-2 rounded-xl"
-              style={{ background: 'linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8))', border: `1px solid ${COLORS.secondary}40` }}
-            >
-              <Heart className="w-4 h-4" style={{ color: COLORS.secondary }} />
-            </motion.button>
-          </div>
-
-          <p className="text-center text-xs mt-3" style={{ color: '#555' }}>
+          <p className="text-center text-xs mt-2" style={{ color: '#555' }}>
             Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
           </p>
         </div>
