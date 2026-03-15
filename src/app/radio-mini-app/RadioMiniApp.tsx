@@ -510,40 +510,18 @@ export default function RadioMiniApp() {
               )}
             </button>
             
-            <div className="flex-1 relative h-6 flex items-center">
-              <div 
-                className="absolute w-full h-2 rounded-full"
-                style={{ background: 'rgba(255,255,255,0.1)' }}
-              />
-              <div 
-                className="absolute h-2 rounded-full"
-                style={{ 
-                  width: `${displayVolume}%`,
-                  background: COLORS.secondary
-                }}
-              />
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={displayVolume}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10)
-                  setVolume(v)
-                  if (v > 0) setIsMuted(false)
-                }}
-                className="absolute w-full opacity-0 cursor-pointer"
-                style={{ height: '24px' }}
-              />
-              <div 
-                className="absolute w-5 h-5 rounded-full border-2"
-                style={{ 
-                  left: `calc(${displayVolume}% - 10px)`,
-                  background: '#fff',
-                  borderColor: COLORS.secondary,
-                }}
-              />
-            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={displayVolume}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10)
+                setVolume(v)
+                if (v > 0) setIsMuted(false)
+              }}
+              className="volume-slider flex-1 cursor-pointer"
+            />
             
             <span 
               className="text-xs w-8 text-right"
@@ -583,6 +561,58 @@ export default function RadioMiniApp() {
           Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
         </p>
       </div>
+
+      {/* Volume Slider Styles */}
+      <style jsx global>{`
+        .volume-slider {
+          -webkit-appearance: none;
+          appearance: none;
+          height: 8px;
+          border-radius: 10px;
+          background: rgba(255,255,255,0.1);
+          outline: none;
+        }
+        
+        .volume-slider::-webkit-slider-runnable-track {
+          height: 8px;
+          border-radius: 10px;
+        }
+        
+        .volume-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: white;
+          border: 3px solid #00c730;
+          cursor: pointer;
+          margin-top: -6px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        
+        .volume-slider::-moz-range-track {
+          height: 8px;
+          border-radius: 10px;
+          background: rgba(255,255,255,0.1);
+        }
+        
+        .volume-slider::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: white;
+          border: 3px solid #00c730;
+          cursor: pointer;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        
+        .volume-slider::-moz-range-progress {
+          background: #00c730;
+          height: 8px;
+          border-radius: 10px 0 0 10px;
+        }
+      `}</style>
     </div>
   )
 }
