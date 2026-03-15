@@ -61,98 +61,121 @@ export default function RadioMiniApp() {
   const [isTgReady, setIsTgReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [buffering, setBuffering] = useState(false)
-  const [isIOS, setIsIOS] = useState(false)
   
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const animationRef = useRef<number | null>(null)
-  const fakeAnimationRef = useRef<number | null>(null)
-  const isAnalyserReady = useRef(false)
 
-  // Detect iOS
+  // Fetch listeners
+  const fetchListenersCount = useCallback(async () => {
+    try {
+      const res = await fetch(LISTENERS_API)
+      if (res.ok) {
+        const data = await res.json()
+        setListeners(data.total || 0)
+      }
+    } catch (e) {}
+  }, [])
+
+  // Register listener
+  const registerListener = useCallback(async (action: 'open' | 'close') => {
+    const tg = window.Telegram?.WebApp
+    const user = tg?.initDataUnsafe?.user
+    if (!user) return
+
+    try {
+      await fetch(LISTENERS_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          username: user.username,
+          language_code: user.language_code,
+          action,
+          isAdmin: user.id === ADMIN_USER_ID,
+        })
+      })
+      fetchListenersCount()
+    } catch (e) {}
+  }, [fetchListenersCount])
+
+  // Handle close
   useEffect(() => {
-    const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-    setIsIOS(iOS)
-    console.log('Is iOS:', iOS)
-  }, [])
-
-  // Fake animation for iOS - simple and reliable
-  const startFakeAnimation = useCallback(() => {
-    console.log('Starting fake animation')
-    
-    const animate = () => {
-      const time = Date.now() / 1000
-      const newData = []
+    const sendClose = () => {
+      const tg = window.Telegram?.WebApp
+      const user = tg?.initDataUnsafe?.user
+      if (!user) return
       
-      for (let i = 0; i < BAR_COUNT; i++) {
-        // Create a wave pattern
-        const wave1 = Math.sin(time * 2 + i * 0.3) * 0.3
-        const wave2 = Math.sin(time * 3 + i * 0.5) * 0.2
-        const wave3 = Math.sin(time * 5 + i * 0.2) * 0.15
-        const random = Math.random() * 0.15
-        
-        // Bass frequencies (first 8 bars) - more intense
-        let value = 0.3 + wave1 + wave2 + wave3 + random
-        if (i < 8) value += 0.2
-        // Mid frequencies (middle 8 bars)
-        else if (i < 16) value += 0.1
-        
-        newData.push(Math.max(0.05, Math.min(1, value)))
-      }
+      const data = JSON.stringify({
+        user_id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        username: user.username,
+        action: 'close',
+        isAdmin: user.id === ADMIN_USER_ID,
+      })
       
-      setAudioData(newData)
-      fakeAnimationRef.current = requestAnimationFrame(animate)
+      navigator.sendBeacon(LISTENERS_API, new Blob([data], { type: 'application/json' }))
     }
+
+    window.addEventListener('beforeunload', sendClose)
+    window.addEventListener('pagehide', sendClose)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') sendClose()
+    })
     
-    animate()
+    return () => {
+      window.removeEventListener('beforeunload', sendClose)
+      window.removeEventListener('pagehide', sendClose)
+    }
   }, [])
 
-  const stopFakeAnimation = useCallback(() => {
-    console.log('Stopping fake animation')
-    if (fakeAnimationRef.current) {
-      cancelAnimationFrame(fakeAnimationRef.current)
-      fakeAnimationRef.current = null
-    }
-    setAudioData(new Array(BAR_COUNT).fill(0))
-  }, [])
-
-  // Real audio visualization
-  const startRealVisualization = useCallback(() => {
-    if (!analyserRef.current) return
-    
-    const analyser = analyserRef.current
-    const dataArray = new Uint8Array(analyser.frequencyBinCount)
-    
-    const update = () => {
-      if (analyser && audioContextRef.current?.state === 'running') {
-        analyser.getByteFrequencyData(dataArray)
-        const mapped = []
-        for (let i = 0; i < BAR_COUNT; i++) {
-          const idx = Math.floor(i * (dataArray.length / BAR_COUNT))
-          mapped.push(dataArray[idx] / 255)
-        }
-        setAudioData(mapped)
+  // Init Telegram
+  useEffect(() => {
+    const init = () => {
+      const tg = window.Telegram?.WebApp
+      if (tg) {
+        tg.ready()
+        tg.expand()
+        setIsTgReady(true)
+        return true
       }
-      animationRef.current = requestAnimationFrame(update)
+      return false
     }
-    
-    update()
-  }, [])
 
-  const stopRealVisualization = useCallback(() => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current)
-      animationRef.current = null
+    if (init()) {
+      fetchListenersCount()
+      return
     }
-    setAudioData(new Array(BAR_COUNT).fill(0))
-  }, [])
 
-  // Initialize audio analyzer (for non-iOS)
-  const initAudioAnalyser = useCallback((): boolean => {
-    if (isAnalyserReady.current || isIOS) return false
+    let attempts = 0
+    const interval = setInterval(() => {
+      attempts++
+      if (init() || attempts >= 20) {
+        clearInterval(interval)
+        fetchListenersCount()
+      }
+    }, 100)
+
+    return () => clearInterval(interval)
+  }, [fetchListenersCount])
+
+  useEffect(() => {
+    if (isTgReady) registerListener('open')
+  }, [isTgReady, registerListener])
+
+  useEffect(() => {
+    const interval = setInterval(fetchListenersCount, 10000)
+    return () => clearInterval(interval)
+  }, [fetchListenersCount])
+
+  // Visualization
+  const startVisualization = useCallback(() => {
+    if (!audioRef.current) return
     
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext
@@ -177,124 +200,45 @@ export default function RadioMiniApp() {
         sourceRef.current = ctx.createMediaElementSource(audioRef.current)
         sourceRef.current.connect(analyserRef.current)
         analyserRef.current.connect(ctx.destination)
-        isAnalyserReady.current = true
       }
       
-      return true
+      const analyser = analyserRef.current
+      const dataArray = new Uint8Array(analyser.frequencyBinCount)
+      
+      const update = () => {
+        analyser.getByteFrequencyData(dataArray)
+        const mapped = []
+        for (let i = 0; i < BAR_COUNT; i++) {
+          const idx = Math.floor(i * (dataArray.length / BAR_COUNT))
+          mapped.push(dataArray[idx] / 255)
+        }
+        setAudioData(mapped)
+        animationRef.current = requestAnimationFrame(update)
+      }
+      
+      update()
     } catch (e) {
-      console.error('Audio analyser error:', e)
-      return false
-    }
-  }, [isIOS])
-
-  // Fetch listeners count
-  const fetchListenersCount = useCallback(async () => {
-    try {
-      const res = await fetch(LISTENERS_API)
-      if (res.ok) {
-        const data = await res.json()
-        setListeners(data.total || 0)
+      console.error('Visualization error:', e)
+      // Fallback to random animation
+      const updateRandom = () => {
+        const mapped = []
+        for (let i = 0; i < BAR_COUNT; i++) {
+          mapped.push(0.2 + Math.random() * 0.6)
+        }
+        setAudioData(mapped)
+        animationRef.current = requestAnimationFrame(updateRandom)
       }
-    } catch (e) {}
-  }, [])
-
-  // Register listener
-  const registerListener = useCallback(async (action: 'open' | 'close') => {
-    const tg = window.Telegram?.WebApp
-    const user = tg?.initDataUnsafe?.user
-    
-    if (!user) return
-
-    try {
-      await fetch(LISTENERS_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: user.id,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          username: user.username,
-          language_code: user.language_code,
-          action,
-          isAdmin: user.id === ADMIN_USER_ID,
-        })
-      })
-      
-      fetchListenersCount()
-    } catch (e) {}
-  }, [fetchListenersCount])
-
-  // Handle app close
-  useEffect(() => {
-    const sendClose = () => {
-      const tg = window.Telegram?.WebApp
-      const user = tg?.initDataUnsafe?.user
-      
-      if (!user) return
-      
-      const data = JSON.stringify({
-        user_id: user.id,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        username: user.username,
-        action: 'close',
-        isAdmin: user.id === ADMIN_USER_ID,
-      })
-      
-      const blob = new Blob([data], { type: 'application/json' })
-      navigator.sendBeacon(LISTENERS_API, blob)
-    }
-
-    window.addEventListener('beforeunload', sendClose)
-    window.addEventListener('pagehide', sendClose)
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') sendClose()
-    })
-    
-    return () => {
-      window.removeEventListener('beforeunload', sendClose)
-      window.removeEventListener('pagehide', sendClose)
+      updateRandom()
     }
   }, [])
 
-  // Initialize Telegram
-  useEffect(() => {
-    const initTelegram = () => {
-      const tg = window.Telegram?.WebApp
-      if (tg) {
-        tg.ready()
-        tg.expand()
-        setIsTgReady(true)
-        return true
-      }
-      return false
+  const stopVisualization = useCallback(() => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current)
+      animationRef.current = null
     }
-
-    if (initTelegram()) {
-      fetchListenersCount()
-      return
-    }
-
-    let attempts = 0
-    const interval = setInterval(() => {
-      attempts++
-      if (initTelegram() || attempts >= 20) {
-        clearInterval(interval)
-        fetchListenersCount()
-      }
-    }, 100)
-
-    return () => clearInterval(interval)
-  }, [fetchListenersCount])
-
-  useEffect(() => {
-    if (isTgReady) registerListener('open')
-  }, [isTgReady, registerListener])
-
-  useEffect(() => {
-    const interval = setInterval(fetchListenersCount, 10000)
-    return () => clearInterval(interval)
-  }, [fetchListenersCount])
+    setAudioData(new Array(BAR_COUNT).fill(0))
+  }, [])
 
   // Audio setup
   useEffect(() => {
@@ -304,33 +248,16 @@ export default function RadioMiniApp() {
     audioRef.current = audio
 
     audio.addEventListener('playing', () => {
-      console.log('Audio playing')
       setIsPlaying(true)
       setIsLoading(false)
       setBuffering(false)
       setError(null)
-      
-      // Start visualization
-      if (isIOS) {
-        // On iOS always use fake animation
-        startFakeAnimation()
-      } else {
-        // On desktop try real analyzer
-        const success = initAudioAnalyser()
-        if (success) {
-          startRealVisualization()
-        } else {
-          // Fallback to fake
-          startFakeAnimation()
-        }
-      }
+      startVisualization()
     })
     
     audio.addEventListener('pause', () => {
-      console.log('Audio paused')
       setIsPlaying(false)
-      stopRealVisualization()
-      stopFakeAnimation()
+      stopVisualization()
     })
     
     audio.addEventListener('waiting', () => {
@@ -343,29 +270,26 @@ export default function RadioMiniApp() {
       setIsLoading(false)
     })
     
-    audio.addEventListener('error', (e) => {
-      console.error('Audio error:', e)
+    audio.addEventListener('error', () => {
       setIsLoading(false)
       setIsPlaying(false)
       setBuffering(false)
       setError('Ошибка воспроизведения')
-      stopRealVisualization()
-      stopFakeAnimation()
+      stopVisualization()
     })
 
     return () => {
       audio.pause()
       audio.src = ''
-      stopRealVisualization()
-      stopFakeAnimation()
+      stopVisualization()
     }
-  }, [isIOS, startFakeAnimation, stopFakeAnimation, initAudioAnalyser, startRealVisualization, stopRealVisualization])
+  }, [startVisualization, stopVisualization])
 
   useEffect(() => {
-    if (audioRef.current && !isIOS) {
+    if (audioRef.current) {
       audioRef.current.volume = isMuted ? 0 : volume / 100
     }
-  }, [volume, isMuted, isIOS])
+  }, [volume, isMuted])
 
   const handlePlay = async () => {
     const audio = audioRef.current
@@ -381,24 +305,13 @@ export default function RadioMiniApp() {
     setIsLoading(true)
     
     try {
-      if (!isIOS) {
-        audio.volume = isMuted ? 0 : volume / 100
-      }
-      
+      audio.volume = isMuted ? 0 : volume / 100
       audio.src = STREAM_URL
       audio.load()
       await audio.play()
     } catch (err: any) {
-      console.error('Play error:', err)
       setIsLoading(false)
-      
-      if (err.name === 'NotAllowedError') {
-        setError('Нажмите ещё раз')
-      } else if (err.name === 'NotSupportedError') {
-        setError('Формат не поддерживается')
-      } else {
-        setError('Ошибка воспроизведения')
-      }
+      setError(err.name === 'NotAllowedError' ? 'Нажмите ещё раз' : 'Ошибка воспроизведения')
     }
   }
 
@@ -415,24 +328,11 @@ export default function RadioMiniApp() {
 
   const displayVolume = isMuted ? 0 : volume
 
-  const getBarColor = (index: number, value: number) => {
+  const getBarColor = (index: number) => {
     const third = BAR_COUNT / 3
-    if (index < third) {
-      return {
-        gradient: `linear-gradient(to top, ${COLORS.bass}, #ff3399)`,
-        glow: `0 0 ${8 + value * 12}px rgba(255, 0, 102, ${0.5 + value * 0.5})`,
-      }
-    } else if (index < third * 2) {
-      return {
-        gradient: `linear-gradient(to top, ${COLORS.mid}, ${COLORS.accent})`,
-        glow: `0 0 ${8 + value * 12}px rgba(0, 199, 48, ${0.5 + value * 0.5})`,
-      }
-    } else {
-      return {
-        gradient: `linear-gradient(to top, ${COLORS.high}, #66ffee)`,
-        glow: `0 0 ${8 + value * 12}px rgba(0, 255, 204, ${0.5 + value * 0.5})`,
-      }
-    }
+    if (index < third) return { gradient: `linear-gradient(to top, ${COLORS.bass}, #ff3399)`, color: COLORS.bass }
+    if (index < third * 2) return { gradient: `linear-gradient(to top, ${COLORS.mid}, ${COLORS.accent})`, color: COLORS.mid }
+    return { gradient: `linear-gradient(to top, ${COLORS.high}, #66ffee)`, color: COLORS.high }
   }
 
   return (
@@ -440,11 +340,9 @@ export default function RadioMiniApp() {
       <style jsx global>{`
         .volume-slider {
           -webkit-appearance: none;
-          appearance: none;
           height: 8px;
           border-radius: 10px;
           background: linear-gradient(90deg, rgba(255,0,102,0.3) 0%, rgba(0,199,48,0.3) 50%, rgba(0,255,204,0.3) 100%);
-          outline: none;
         }
         
         .volume-slider::-webkit-slider-thumb {
@@ -452,20 +350,17 @@ export default function RadioMiniApp() {
           width: 22px;
           height: 22px;
           border-radius: 50%;
-          background: linear-gradient(145deg, #ffffff, #e6e6e6);
+          background: white;
           border: 3px solid #00c730;
           cursor: pointer;
-          margin-top: -7px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 0 10px rgba(0,199,48,0.5);
         }
         
         .volume-slider::-moz-range-thumb {
           width: 22px;
           height: 22px;
           border-radius: 50%;
-          background: linear-gradient(145deg, #ffffff, #e6e6e6);
+          background: white;
           border: 3px solid #00c730;
-          cursor: pointer;
         }
 
         .skeuo-card {
@@ -473,6 +368,19 @@ export default function RadioMiniApp() {
           border: 1px solid rgba(0,199,48,0.2);
           box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
         }
+
+        /* CSS Animation for visualizer bars - works everywhere */
+        @keyframes barAnim1 { 0%, 100% { height: 8px; } 50% { height: 50px; } }
+        @keyframes barAnim2 { 0%, 100% { height: 12px; } 50% { height: 40px; } }
+        @keyframes barAnim3 { 0%, 100% { height: 6px; } 50% { height: 35px; } }
+        @keyframes barAnim4 { 0%, 100% { height: 10px; } 50% { height: 55px; } }
+        @keyframes barAnim5 { 0%, 100% { height: 15px; } 50% { height: 45px; } }
+        
+        .bar-anim-1 { animation: barAnim1 0.5s ease-in-out infinite; }
+        .bar-anim-2 { animation: barAnim2 0.7s ease-in-out infinite; }
+        .bar-anim-3 { animation: barAnim3 0.4s ease-in-out infinite; }
+        .bar-anim-4 { animation: barAnim4 0.6s ease-in-out infinite; }
+        .bar-anim-5 { animation: barAnim5 0.55s ease-in-out infinite; }
       `}</style>
 
       <div 
@@ -495,9 +403,7 @@ export default function RadioMiniApp() {
               animate={isPlaying ? { scale: [1, 1.02, 1] } : {}}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               style={{
-                boxShadow: isPlaying 
-                  ? `0 0 60px rgba(0,199,48,0.6)`
-                  : `0 8px 32px rgba(0,0,0,0.5)`,
+                boxShadow: isPlaying ? `0 0 60px rgba(0,199,48,0.6)` : `0 8px 32px rgba(0,0,0,0.5)`,
               }}
             >
               <div 
@@ -527,26 +433,49 @@ export default function RadioMiniApp() {
             </AnimatePresence>
           </div>
 
-          {/* Visualizer */}
+          {/* Visualizer with CSS animation fallback */}
           <div className="skeuo-card rounded-2xl p-3 mb-4">
             <div className="flex justify-center items-end gap-1 h-16">
-              {audioData.map((value, i) => {
-                const colors = getBarColor(i, value)
-                const height = Math.max(4, value * 60)
-                
-                return (
-                  <div
-                    key={i}
-                    className="rounded-full transition-none"
-                    style={{
-                      width: '6px',
-                      background: colors.gradient,
-                      height: `${height}px`,
-                      boxShadow: value > 0.05 ? colors.glow : 'none',
-                    }}
-                  />
-                )
-              })}
+              {isPlaying ? (
+                // CSS animated bars when playing
+                Array.from({ length: BAR_COUNT }).map((_, i) => {
+                  const colors = getBarColor(i)
+                  const animClass = `bar-anim-${(i % 5) + 1}`
+                  const delay = `${i * 0.05}s`
+                  
+                  return (
+                    <div
+                      key={i}
+                      className={`rounded-full ${animClass}`}
+                      style={{
+                        width: '6px',
+                        background: colors.gradient,
+                        animationDelay: delay,
+                        boxShadow: `0 0 8px ${colors.color}`,
+                      }}
+                    />
+                  )
+                })
+              ) : (
+                // Static bars when not playing - use audioData from JS
+                audioData.map((value, i) => {
+                  const colors = getBarColor(i)
+                  const height = Math.max(4, value * 60)
+                  
+                  return (
+                    <div
+                      key={i}
+                      className="rounded-full"
+                      style={{
+                        width: '6px',
+                        background: colors.gradient,
+                        height: `${height}px`,
+                        boxShadow: value > 0.05 ? `0 0 8px ${colors.color}` : 'none',
+                      }}
+                    />
+                  )
+                })
+              )}
             </div>
             
             <div className="flex justify-between mt-2 px-1">
@@ -612,40 +541,36 @@ export default function RadioMiniApp() {
           </div>
 
           {/* Volume */}
-          {!isIOS ? (
-            <div className="flex items-center gap-3 mb-4 px-3 py-2 rounded-xl skeuo-card">
-              <button onClick={() => setIsMuted(!isMuted)} className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                {isMuted ? (
-                  <VolumeX className="w-5 h-5" style={{ color: '#666' }} />
-                ) : (
-                  <Volume2 className="w-5 h-5" style={{ color: COLORS.secondary }} />
-                )}
-              </button>
-              
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={displayVolume}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10)
-                  setVolume(v)
-                  if (v > 0) setIsMuted(false)
-                }}
-                className="volume-slider flex-1 cursor-pointer"
-              />
-              
-              <span className="text-sm w-10 text-right" style={{ color: COLORS.secondary }}>
-                {displayVolume}%
-              </span>
-            </div>
-          ) : (
-            <div className="text-center mb-4 px-4 py-3 rounded-xl skeuo-card">
-              <p className="text-sm" style={{ color: COLORS.text }}>
-                💡 Громкость — кнопки устройства
-              </p>
-            </div>
-          )}
+          <div className="flex items-center gap-3 mb-4 px-3 py-2 rounded-xl skeuo-card">
+            <button 
+              onClick={() => setIsMuted(!isMuted)} 
+              className="p-2 rounded-lg"
+              style={{ background: 'rgba(255,255,255,0.05)' }}
+            >
+              {isMuted ? (
+                <VolumeX className="w-5 h-5" style={{ color: '#666' }} />
+              ) : (
+                <Volume2 className="w-5 h-5" style={{ color: COLORS.secondary }} />
+              )}
+            </button>
+            
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={displayVolume}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10)
+                setVolume(v)
+                if (v > 0) setIsMuted(false)
+              }}
+              className="volume-slider flex-1 cursor-pointer"
+            />
+            
+            <span className="text-sm w-10 text-right" style={{ color: COLORS.secondary }}>
+              {displayVolume}%
+            </span>
+          </div>
 
           {/* Buttons */}
           <div className="flex justify-center gap-3">
