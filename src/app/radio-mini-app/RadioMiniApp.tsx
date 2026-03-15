@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Pause, Volume2, VolumeX, Loader2, Share2, Heart, Radio, AlertCircle, Wifi } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Loader2, Share2, Heart, Radio, AlertCircle, Wifi, Sliders } from 'lucide-react'
 
 const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
 const STATION_NAME = 'DJ GooD OFF FM'
@@ -23,6 +23,10 @@ const COLORS = {
 
 const ADMIN_USER_ID = 55068554
 const BAR_COUNT = 24
+
+// Equalizer default values (in dB, -12 to +12)
+const EQ_DEFAULTS = { bass: 0, mid: 0, high: 0 }
+const EQ_RANGE = { min: -12, max: 12 }
 
 declare global {
   interface Window {
@@ -63,11 +67,28 @@ export default function RadioMiniApp() {
   const [buffering, setBuffering] = useState(false)
   const [useCSSAnimation, setUseCSSAnimation] = useState(false)
   
+  // Equalizer state (in dB)
+  const [eqValues, setEqValues] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('djgoodoff-eq')
+      if (saved) {
+        try { return JSON.parse(saved) }
+        catch { return EQ_DEFAULTS }
+      }
+    }
+    return EQ_DEFAULTS
+  })
+  
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const animationRef = useRef<number | null>(null)
+  
+  // Equalizer filters
+  const bassFilterRef = useRef<BiquadFilterNode | null>(null)
+  const midFilterRef = useRef<BiquadFilterNode | null>(null)
+  const highFilterRef = useRef<BiquadFilterNode | null>(null)
 
   // Detect if we need CSS animation (iOS in Telegram)
   useEffect(() => {
@@ -193,7 +214,7 @@ export default function RadioMiniApp() {
     return () => clearInterval(interval)
   }, [fetchListenersCount])
 
-  // Real audio visualization (for desktop/Android)
+  // Real audio visualization with equalizer (for desktop/Android)
   const startRealVisualization = useCallback(() => {
     if (!audioRef.current) return false
     
@@ -210,15 +231,43 @@ export default function RadioMiniApp() {
         ctx.resume()
       }
       
+      // Create analyser
       if (!analyserRef.current) {
         analyserRef.current = ctx.createAnalyser()
         analyserRef.current.fftSize = 256
         analyserRef.current.smoothingTimeConstant = 0.75
       }
       
+      // Create equalizer filters
+      if (!bassFilterRef.current) {
+        bassFilterRef.current = ctx.createBiquadFilter()
+        bassFilterRef.current.type = 'lowshelf'
+        bassFilterRef.current.frequency.value = 200
+        bassFilterRef.current.gain.value = eqValues.bass
+      }
+      
+      if (!midFilterRef.current) {
+        midFilterRef.current = ctx.createBiquadFilter()
+        midFilterRef.current.type = 'peaking'
+        midFilterRef.current.frequency.value = 1000
+        midFilterRef.current.Q.value = 1
+        midFilterRef.current.gain.value = eqValues.mid
+      }
+      
+      if (!highFilterRef.current) {
+        highFilterRef.current = ctx.createBiquadFilter()
+        highFilterRef.current.type = 'highshelf'
+        highFilterRef.current.frequency.value = 4000
+        highFilterRef.current.gain.value = eqValues.high
+      }
+      
+      // Connect: source -> bass -> mid -> high -> analyser -> destination
       if (!sourceRef.current && audioRef.current) {
         sourceRef.current = ctx.createMediaElementSource(audioRef.current)
-        sourceRef.current.connect(analyserRef.current)
+        sourceRef.current.connect(bassFilterRef.current)
+        bassFilterRef.current.connect(midFilterRef.current)
+        midFilterRef.current.connect(highFilterRef.current)
+        highFilterRef.current.connect(analyserRef.current)
         analyserRef.current.connect(ctx.destination)
       }
       
@@ -368,6 +417,32 @@ export default function RadioMiniApp() {
 
   const displayVolume = isMuted ? 0 : volume
 
+  // Update equalizer filter values
+  const updateEqualizer = useCallback((band: 'bass' | 'mid' | 'high', value: number) => {
+    const newValues = { ...eqValues, [band]: value }
+    setEqValues(newValues)
+    localStorage.setItem('djgoodoff-eq', JSON.stringify(newValues))
+    
+    // Apply to filters if they exist
+    if (bassFilterRef.current && band === 'bass') {
+      bassFilterRef.current.gain.value = value
+    }
+    if (midFilterRef.current && band === 'mid') {
+      midFilterRef.current.gain.value = value
+    }
+    if (highFilterRef.current && band === 'high') {
+      highFilterRef.current.gain.value = value
+    }
+  }, [eqValues])
+
+  const resetEqualizer = useCallback(() => {
+    setEqValues(EQ_DEFAULTS)
+    localStorage.setItem('djgoodoff-eq', JSON.stringify(EQ_DEFAULTS))
+    if (bassFilterRef.current) bassFilterRef.current.gain.value = 0
+    if (midFilterRef.current) midFilterRef.current.gain.value = 0
+    if (highFilterRef.current) highFilterRef.current.gain.value = 0
+  }, [])
+
   const getBarColor = (index: number) => {
     const third = BAR_COUNT / 3
     if (index < third) return { gradient: `linear-gradient(to top, ${COLORS.bass}, #ff3399)`, color: COLORS.bass }
@@ -402,6 +477,41 @@ export default function RadioMiniApp() {
           background: linear-gradient(145deg, #ffffff, #e6e6e6);
           border: 3px solid #00c730;
         }
+
+        /* Equalizer vertical sliders */
+        .eq-slider {
+          -webkit-appearance: none;
+          width: 60px;
+          height: 80px;
+          writing-mode: vertical-lr;
+          direction: rtl;
+          border-radius: 10px;
+          background: rgba(255,255,255,0.1);
+        }
+
+        .eq-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: linear-gradient(145deg, #ffffff, #e6e6e6);
+          cursor: pointer;
+        }
+
+        .eq-slider::-moz-range-thumb {
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: linear-gradient(145deg, #ffffff, #e6e6e6);
+          cursor: pointer;
+        }
+
+        .eq-slider.bass::-webkit-slider-thumb { border: 3px solid #ff0066; }
+        .eq-slider.mid::-webkit-slider-thumb { border: 3px solid #00c730; }
+        .eq-slider.high::-webkit-slider-thumb { border: 3px solid #00ffcc; }
+        .eq-slider.bass::-moz-range-thumb { border: 3px solid #ff0066; }
+        .eq-slider.mid::-moz-range-thumb { border: 3px solid #00c730; }
+        .eq-slider.high::-moz-range-thumb { border: 3px solid #00ffcc; }
 
         .skeuo-card {
           background: linear-gradient(145deg, rgba(46,0,113,0.6), rgba(13,0,38,0.8));
@@ -625,6 +735,85 @@ export default function RadioMiniApp() {
               </p>
             </div>
           )}
+
+          {/* 3-Band Equalizer */}
+          <div className="skeuo-card rounded-xl p-3 mb-3">
+            <div className="flex items-center justify-center gap-1 mb-2">
+              <Sliders className="w-3 h-3" style={{ color: COLORS.secondary }} />
+              <span className="text-xs font-medium" style={{ color: COLORS.secondary }}>
+                Эквалайзер
+              </span>
+            </div>
+            
+            <p className="text-center text-xs mb-3" style={{ color: COLORS.text }}>
+              Настройте звук под себя
+            </p>
+            
+            <div className="flex justify-center items-end gap-4">
+              {/* BASS */}
+              <div className="flex flex-col items-center">
+                <input
+                  type="range"
+                  min={EQ_RANGE.min}
+                  max={EQ_RANGE.max}
+                  value={eqValues.bass}
+                  onChange={(e) => updateEqualizer('bass', parseInt(e.target.value))}
+                  className="eq-slider bass cursor-pointer"
+                />
+                <span className="text-xs mt-2 font-bold" style={{ color: COLORS.bass }}>BASS</span>
+                <span className="text-xs" style={{ color: COLORS.bass }}>
+                  {eqValues.bass > 0 ? '+' : ''}{eqValues.bass}
+                </span>
+              </div>
+              
+              {/* MID */}
+              <div className="flex flex-col items-center">
+                <input
+                  type="range"
+                  min={EQ_RANGE.min}
+                  max={EQ_RANGE.max}
+                  value={eqValues.mid}
+                  onChange={(e) => updateEqualizer('mid', parseInt(e.target.value))}
+                  className="eq-slider mid cursor-pointer"
+                />
+                <span className="text-xs mt-2 font-bold" style={{ color: COLORS.mid }}>MID</span>
+                <span className="text-xs" style={{ color: COLORS.mid }}>
+                  {eqValues.mid > 0 ? '+' : ''}{eqValues.mid}
+                </span>
+              </div>
+              
+              {/* HIGH */}
+              <div className="flex flex-col items-center">
+                <input
+                  type="range"
+                  min={EQ_RANGE.min}
+                  max={EQ_RANGE.max}
+                  value={eqValues.high}
+                  onChange={(e) => updateEqualizer('high', parseInt(e.target.value))}
+                  className="eq-slider high cursor-pointer"
+                />
+                <span className="text-xs mt-2 font-bold" style={{ color: COLORS.high }}>HIGH</span>
+                <span className="text-xs" style={{ color: COLORS.high }}>
+                  {eqValues.high > 0 ? '+' : ''}{eqValues.high}
+                </span>
+              </div>
+            </div>
+            
+            {/* Reset button */}
+            <div className="flex justify-center mt-3">
+              <button
+                onClick={resetEqualizer}
+                className="px-3 py-1 rounded-lg text-xs"
+                style={{ 
+                  background: 'rgba(255,255,255,0.1)',
+                  color: COLORS.text,
+                  border: `1px solid ${COLORS.secondary}40`
+                }}
+              >
+                Сбросить
+              </button>
+            </div>
+          </div>
 
           {/* Buttons */}
           <div className="flex justify-center gap-2">
