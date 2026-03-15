@@ -541,24 +541,48 @@ export default function RadioMiniApp() {
         />
 
         <div className="relative z-10 w-full max-w-xs">
-          {/* Logo - larger, above equalizer */}
-          <div className="relative z-0 mb-3">
-            <motion.img
-              src={STATION_LOGO}
-              alt={STATION_NAME}
-              className="mx-auto"
-              style={{
-                width: '150px',
-                height: '150px',
-                filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
-              }}
-              animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            />
-          </div>
+          {/* Logo - with parallax disappear effect */}
+          <AnimatePresence>
+            {!showEqualizer && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8, y: -50 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.8, y: -50 }}
+                transition={{ 
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 25,
+                  mass: 0.8
+                }}
+                className="relative z-0 mb-3"
+              >
+                <motion.img
+                  src={STATION_LOGO}
+                  alt={STATION_NAME}
+                  className="mx-auto"
+                  style={{
+                    width: '150px',
+                    height: '150px',
+                    filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
+                  }}
+                  animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* Visualizer */}
-          <div className="relative z-10 mb-3">
+          {/* Visualizer - with layout animation */}
+          <motion.div 
+            layout
+            transition={{ 
+              type: "spring",
+              stiffness: 300,
+              damping: 25,
+              mass: 0.8
+            }}
+            className="relative z-10 mb-3"
+          >
             {/* LIVE badge */}
             <AnimatePresence>
               {isPlaying && (
@@ -631,10 +655,19 @@ export default function RadioMiniApp() {
               <span className="text-xs font-medium" style={{ color: COLORS.mid }}>MID</span>
               <span className="text-xs font-medium" style={{ color: COLORS.high }}>HIGH</span>
             </div>
-          </div>
+          </motion.div>
 
-          {/* Info */}
-          <div className="skeuo-card rounded-xl p-2 text-center mb-3">
+          {/* Info - with layout animation */}
+          <motion.div 
+            layout
+            transition={{ 
+              type: "spring",
+              stiffness: 300,
+              damping: 25,
+              mass: 0.8
+            }}
+            className="skeuo-card rounded-xl p-2 text-center mb-3"
+          >
             <div className="flex items-center justify-center gap-1 mb-0.5">
               <Radio className="w-3 h-3" style={{ color: COLORS.secondary }} />
               <span className="text-xs uppercase tracking-wider" style={{ color: COLORS.secondary }}>
@@ -646,26 +679,39 @@ export default function RadioMiniApp() {
             <p className="text-xs mt-0.5" style={{ color: COLORS.accent }}>
               👥 {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
             </p>
-          </div>
+          </motion.div>
 
-          {/* Buffering */}
-          {buffering && (
-            <div className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl skeuo-card">
-              <Wifi className="w-3 h-3 animate-pulse" style={{ color: COLORS.secondary }} />
-              <span className="text-xs" style={{ color: COLORS.secondary }}>Буферизация...</span>
-            </div>
-          )}
+          {/* Buffering - with layout animation */}
+          <motion.div layout transition={{ type: "spring", stiffness: 300, damping: 25 }}>
+            {buffering && (
+              <div className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl skeuo-card">
+                <Wifi className="w-3 h-3 animate-pulse" style={{ color: COLORS.secondary }} />
+                <span className="text-xs" style={{ color: COLORS.secondary }}>Буферизация...</span>
+              </div>
+            )}
+          </motion.div>
 
-          {/* Error */}
-          {error && (
-            <div className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl" style={{ background: 'rgba(255,0,102,0.1)' }}>
-              <AlertCircle className="w-3 h-3" style={{ color: COLORS.bass }} />
-              <span className="text-xs" style={{ color: '#ff6699' }}>{error}</span>
-            </div>
-          )}
+          {/* Error - with layout animation */}
+          <motion.div layout transition={{ type: "spring", stiffness: 300, damping: 25 }}>
+            {error && (
+              <div className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl" style={{ background: 'rgba(255,0,102,0.1)' }}>
+                <AlertCircle className="w-3 h-3" style={{ color: COLORS.bass }} />
+                <span className="text-xs" style={{ color: '#ff6699' }}>{error}</span>
+              </div>
+            )}
+          </motion.div>
 
-          {/* Play Button */}
-          <div className="flex justify-center mb-3">
+          {/* Play Button - with layout animation */}
+          <motion.div 
+            layout
+            transition={{ 
+              type: "spring",
+              stiffness: 300,
+              damping: 25,
+              mass: 0.8
+            }}
+            className="flex justify-center mb-3"
+          >
             <motion.button
               onClick={handlePlay}
               disabled={isLoading}
@@ -686,50 +732,70 @@ export default function RadioMiniApp() {
                 <Play className="w-5 h-5 ml-0.5" style={{ color: COLORS.dark }} />
               )}
             </motion.button>
-          </div>
+          </motion.div>
 
-          {/* Volume - hide on iOS */}
-          {!useCSSAnimation && (
-            <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-xl skeuo-card">
-              <button 
-                onClick={() => setIsMuted(!isMuted)} 
-                className="p-1.5 rounded-lg"
-                style={{ background: 'rgba(255,255,255,0.05)' }}
-              >
-                {isMuted ? (
-                  <VolumeX className="w-4 h-4" style={{ color: '#666' }} />
-                ) : (
-                  <Volume2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
-                )}
-              </button>
-              
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={displayVolume}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10)
-                  setVolume(v)
-                  if (v > 0) setIsMuted(false)
-                }}
-                className="volume-slider flex-1 cursor-pointer"
-              />
-              
-              <span className="text-xs w-8 text-right" style={{ color: COLORS.secondary }}>
-                {displayVolume}%
-              </span>
-            </div>
-          )}
+          {/* Volume - with layout animation - hide on iOS */}
+          <motion.div 
+            layout 
+            transition={{ 
+              type: "spring",
+              stiffness: 300,
+              damping: 25,
+              mass: 0.8
+            }}
+          >
+            {!useCSSAnimation && (
+              <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-xl skeuo-card">
+                <button 
+                  onClick={() => setIsMuted(!isMuted)} 
+                  className="p-1.5 rounded-lg"
+                  style={{ background: 'rgba(255,255,255,0.05)' }}
+                >
+                  {isMuted ? (
+                    <VolumeX className="w-4 h-4" style={{ color: '#666' }} />
+                  ) : (
+                    <Volume2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
+                  )}
+                </button>
+                
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={displayVolume}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10)
+                    setVolume(v)
+                    if (v > 0) setIsMuted(false)
+                  }}
+                  className="volume-slider flex-1 cursor-pointer"
+                />
+                
+                <span className="text-xs w-8 text-right" style={{ color: COLORS.secondary }}>
+                  {displayVolume}%
+                </span>
+              </div>
+            )}
+          </motion.div>
 
-          {/* iOS volume hint */}
-          {useCSSAnimation && (
-            <div className="text-center mb-3 px-3 py-2 rounded-xl skeuo-card">
-              <p className="text-xs" style={{ color: COLORS.text }}>
-                💡 Громкость — кнопки устройства
-              </p>
-            </div>
-          )}
+          {/* iOS volume hint - with layout animation */}
+          <motion.div 
+            layout 
+            transition={{ 
+              type: "spring",
+              stiffness: 300,
+              damping: 25,
+              mass: 0.8
+            }}
+          >
+            {useCSSAnimation && (
+              <div className="text-center mb-3 px-3 py-2 rounded-xl skeuo-card">
+                <p className="text-xs" style={{ color: COLORS.text }}>
+                  💡 Громкость — кнопки устройства
+                </p>
+              </div>
+            )}
+          </motion.div>
 
           {/* Equalizer toggle button - hide on iOS */}
           {!useCSSAnimation && (
@@ -834,9 +900,20 @@ export default function RadioMiniApp() {
             </div>
           )}
 
-          <p className="text-center text-xs mt-2" style={{ color: '#555' }}>
+          {/* Footer - with layout animation */}
+          <motion.p 
+            layout
+            transition={{ 
+              type: "spring",
+              stiffness: 300,
+              damping: 25,
+              mass: 0.8
+            }}
+            className="text-center text-xs mt-2" 
+            style={{ color: '#555' }}
+          >
             Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
-          </p>
+          </motion.p>
         </div>
       </div>
     </>
