@@ -439,21 +439,14 @@ export default function RadioMiniApp() {
           {/* Logo */}
           <div className="relative mb-4">
             <motion.div 
-              className="w-28 h-28 mx-auto rounded-full overflow-hidden skeuo-card p-1"
+              className="w-28 h-28 mx-auto"
               animate={isPlaying ? { scale: [1, 1.02, 1] } : {}}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               style={{
-                boxShadow: isPlaying 
-                  ? `0 0 60px rgba(0,199,48,0.6)`
-                  : `0 8px 32px rgba(0,0,0,0.5)`,
+                filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.8))' : 'none',
               }}
             >
-              <div 
-                className="w-full h-full rounded-full overflow-hidden"
-                style={{ border: `2px solid ${COLORS.secondary}` }}
-              >
-                <img src={STATION_LOGO} alt={STATION_NAME} className="w-full h-full object-cover" />
-              </div>
+              <img src={STATION_LOGO} alt={STATION_NAME} className="w-full h-full object-contain" />
             </motion.div>
             
             <AnimatePresence>
@@ -465,7 +458,7 @@ export default function RadioMiniApp() {
                   className="absolute top-0 right-6 px-2 py-0.5 rounded-full text-xs font-bold"
                   style={{ 
                     background: `linear-gradient(145deg, ${COLORS.secondary}, ${COLORS.accent})`,
-                    color: COLORS.dark,
+                    color: '#0d0026',
                     boxShadow: `0 0 20px rgba(0,199,48,0.8)`,
                   }}
                 >
