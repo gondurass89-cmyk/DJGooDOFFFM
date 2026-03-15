@@ -229,7 +229,21 @@ export default function RadioMiniApp() {
         analyser.getByteFrequencyData(dataArray)
         const mapped = []
         for (let i = 0; i < BAR_COUNT; i++) {
-          const idx = Math.floor(i * (dataArray.length / BAR_COUNT))
+          // Map 32 frequency bins to 24 bars
+          // BASS: bars 0-7 (bins 0-10)
+          // MID: bars 8-15 (bins 11-21)  
+          // HIGH: bars 16-23 (bins 22-31)
+          let idx
+          if (i < 8) {
+            // BASS - use bins 0-10
+            idx = Math.floor(i * 11 / 8)
+          } else if (i < 16) {
+            // MID - use bins 11-21
+            idx = 10 + Math.floor((i - 8) * 11 / 8)
+          } else {
+            // HIGH - use bins 22-31
+            idx = 21 + Math.floor((i - 16) * 10 / 8)
+          }
           mapped.push(dataArray[idx] / 255)
         }
         setAudioData(mapped)
