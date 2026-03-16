@@ -8,6 +8,7 @@ const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
 const LISTENERS_API = '/api/listener'
+const NOW_PLAYING_API = '/api/now-playing'
 
 const COLORS = {
   primary: '#2e0071',
@@ -59,7 +60,7 @@ export default function RadioMiniApp() {
   const [isLoading, setIsLoading] = useState(false)
   const [volume, setVolume] = useState(100)
   const [isMuted, setIsMuted] = useState(false)
-  const [currentTrack] = useState('Нажмите ▶')
+  const [currentTrack, setCurrentTrack] = useState('Нажмите ▶')
   const [listeners, setListeners] = useState(0)
   const [audioData, setAudioData] = useState<number[]>(new Array(BAR_COUNT).fill(0))
   const [isTgReady, setIsTgReady] = useState(false)
@@ -117,6 +118,19 @@ export default function RadioMiniApp() {
       if (res.ok) {
         const data = await res.json()
         setListeners(data.total || 0)
+      }
+    } catch (e) {}
+  }, [])
+
+  // Fetch current track
+  const fetchCurrentTrack = useCallback(async () => {
+    try {
+      const res = await fetch(NOW_PLAYING_API)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.title) {
+          setCurrentTrack(data.title)
+        }
       }
     } catch (e) {}
   }, [])
@@ -222,6 +236,13 @@ export default function RadioMiniApp() {
     const interval = setInterval(fetchListenersCount, 10000)
     return () => clearInterval(interval)
   }, [fetchListenersCount])
+
+  // Fetch track periodically
+  useEffect(() => {
+    fetchCurrentTrack() // Initial fetch
+    const interval = setInterval(fetchCurrentTrack, 10000) // Every 10 seconds
+    return () => clearInterval(interval)
+  }, [fetchCurrentTrack])
 
   // Real audio visualization with equalizer (for desktop/Android)
   const startRealVisualization = useCallback(() => {
