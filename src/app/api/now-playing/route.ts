@@ -15,6 +15,27 @@ const PATTERNS_TO_REMOVE = [
   /\d+\s*BPM/gi,
   // Key info variations
   /Key[:\s]*[A-G][#b]?\s*(min|maj|minor|major)?\s*[-–—]\s*/gi,
+  // Website URLs - www.domain.com, domain.com, etc.
+  /www\.[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}/gi,
+  /https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}/gi,
+  // Common music download sites
+  /livingelectro\.com/gi,
+  /beatport\.com/gi,
+  /junodownload\.com/gi,
+  /bandcamp\.com/gi,
+  /soundcloud\.com/gi,
+  /spotify\.com/gi,
+  /apple\.music/gi,
+  /music\.apple\.com/gi,
+  /youtube\.com/gi,
+  /youtu\.be/gi,
+  /audiio\.com/gi,
+  /artlist\.io/gi,
+  /epidemicsound\.com/gi,
+  // Site names without TLD (common patterns)
+  /\blivingelectro\b/gi,
+  /\bbeatport\b/gi,
+  /\bjunodownload\b/gi,
 ]
 
 function cleanTrackTitle(title: string): string {
