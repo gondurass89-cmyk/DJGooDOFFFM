@@ -8,50 +8,41 @@ function cleanTrackTitle(title: string): string {
   
   let cleaned = title
   
-  // 1. Remove file extensions (.mp3, .wav, .flac, etc.) with optional BPM number before
-  cleaned = cleaned.replace(/\s*[-–—]?\s*\d+\.mp3$/gi, '')
-  cleaned = cleaned.replace(/\.(mp3|wav|flac|aac|ogg|m4a)$/gi, '')
+  // 1. Remove file extension at the end (.mp3, .wav, etc.)
+  cleaned = cleaned.replace(/\.(mp3|wav|flac|aac|ogg|m4a)$/i, '')
   
-  // 2. Remove Camelot Wheel keys (1A-12A, 1B-12B) with separator after
+  // 2. Remove trailing " - NUMBER" pattern (BPM like " - 115")
+  cleaned = cleaned.replace(/\s*[-–—]\s*\d+\s*$/g, '')
+  
+  // 3. Remove Camelot Wheel keys: " - 5A" or " - 11B" at the end or before BPM
+  cleaned = cleaned.replace(/\s*[-–—]\s*\d{1,2}[AB]\s*$/gi, '')
   cleaned = cleaned.replace(/\s*[-–—]\s*\d{1,2}[AB](\s*[-–—]\s*)?/gi, ' ')
   
-  // 3. Remove Energy levels (Energy 1-10) with separator
+  // 4. Remove Energy levels: "Energy 8" or " - Energy 5"
   cleaned = cleaned.replace(/\s*[-–—]?\s*Energy\s*\d{1,2}(\s*[-–—]\s*)?/gi, ' ')
   
-  // 4. Remove BPM info (with or without "BPM" label)
-  cleaned = cleaned.replace(/\s*[-–—]\s*\d+\s*BPM/gi, '')
-  cleaned = cleaned.replace(/\s*[-–—]\s*\d+\s*$/gi, '')  // Just number at end
-  
-  // 5. Remove websites in parentheses: (megapesni.com), (site.ru), etc.
+  // 5. Remove websites in parentheses: (megapesni.com), (site.ru)
   cleaned = cleaned.replace(/\s*\([^)]*\.(com|ru|net|org|io|info|biz|me)[^)]*\)\s*/gi, ' ')
   
-  // 6. Remove www.domain.com patterns
-  cleaned = cleaned.replace(/www\.[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}/gi, '')
+  // 6. Remove www.domain.com and http(s):// URLs
+  cleaned = cleaned.replace(/www\.\S+\.\S+/gi, '')
+  cleaned = cleaned.replace(/https?:\/\/\S+/gi, '')
   
-  // 7. Remove https:// and http:// URLs
-  cleaned = cleaned.replace(/https?:\/\/[^\s]+/gi, '')
-  
-  // 8. Remove common music site names (standalone or in text)
-  const sitePatterns = [
-    'livingelectro', 'beatport', 'junodownload', 'megapesni',
-    'zaycev', 'mp3store', 'mp3poisk', 'muzofan', 'primemusic',
-    'hitmos', 'hotplayer', 'pumpitupparty'
-  ]
-  for (const site of sitePatterns) {
+  // 7. Remove common music site names
+  const sites = ['livingelectro', 'beatport', 'junodownload', 'megapesni', 'zaycev', 
+                 'mp3store', 'mp3poisk', 'muzofan', 'primemusic', 'hitmos', 'hotplayer']
+  for (const site of sites) {
     cleaned = cleaned.replace(new RegExp(`\\b${site}\\b`, 'gi'), '')
   }
   
-  // 9. Remove Key info
-  cleaned = cleaned.replace(/Key[:\s]*[A-G][#b]?\s*(min|maj|minor|major)?/gi, '')
-  
   // Final cleanup
   cleaned = cleaned
-    .replace(/\s{2,}/g, ' ')  // Multiple spaces to single
-    .replace(/\s*[-–—]\s*$/g, '')  // Trailing separator
-    .replace(/^[\s\-–—:,]+|[\s\-–—:,]+$/g, '')  // Trim separators from ends
+    .replace(/\s{2,}/g, ' ')           // Multiple spaces to single
+    .replace(/\s*[-–—]\s*$/g, '')       // Trailing separator
+    .replace(/^[\s\-–—:]+/, '')         // Leading separators
     .trim()
   
-  return cleaned || title  // Return original if cleaning resulted in empty string
+  return cleaned || title
 }
 
 async function fetchCurrentTrack(): Promise<string> {
