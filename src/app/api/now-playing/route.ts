@@ -3,55 +3,52 @@ import { NextResponse } from 'next/server'
 const ICECAST_STATUS_URL = 'http://s0.radioheart.ru:8000/status.xsl'
 const MOUNT_POINT = 'RH84200'
 
-// Patterns to remove from track title
-const PATTERNS_TO_REMOVE = [
-  // Camelot Wheel keys: 1A-12A, 1B-12B with separators
-  /\d{1,2}[AB]\s*[-–—]\s*/gi,
-  // Energy levels: Energy 1-10 with separators
-  /Energy\s*\d{1,2}\s*[-–—]\s*/gi,
-  /Energy\s*\d{1,2}/gi,
-  // BPM info
-  /\d+\s*BPM\s*[-–—]\s*/gi,
-  /\d+\s*BPM/gi,
-  // Key info variations
-  /Key[:\s]*[A-G][#b]?\s*(min|maj|minor|major)?\s*[-–—]\s*/gi,
-  // Website URLs - www.domain.com, domain.com, etc.
-  /www\.[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}/gi,
-  /https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}/gi,
-  // Common music download sites
-  /livingelectro\.com/gi,
-  /beatport\.com/gi,
-  /junodownload\.com/gi,
-  /bandcamp\.com/gi,
-  /soundcloud\.com/gi,
-  /spotify\.com/gi,
-  /apple\.music/gi,
-  /music\.apple\.com/gi,
-  /youtube\.com/gi,
-  /youtu\.be/gi,
-  /audiio\.com/gi,
-  /artlist\.io/gi,
-  /epidemicsound\.com/gi,
-  // Site names without TLD (common patterns)
-  /\blivingelectro\b/gi,
-  /\bbeatport\b/gi,
-  /\bjunodownload\b/gi,
-]
-
 function cleanTrackTitle(title: string): string {
   if (!title) return ''
   
   let cleaned = title
   
-  // Apply all patterns
-  for (const pattern of PATTERNS_TO_REMOVE) {
-    cleaned = cleaned.replace(pattern, ' ')
+  // 1. Remove file extensions (.mp3, .wav, .flac, etc.) with optional BPM number before
+  cleaned = cleaned.replace(/\s*[-–—]?\s*\d+\.mp3$/gi, '')
+  cleaned = cleaned.replace(/\.(mp3|wav|flac|aac|ogg|m4a)$/gi, '')
+  
+  // 2. Remove Camelot Wheel keys (1A-12A, 1B-12B) with separator after
+  cleaned = cleaned.replace(/\s*[-–—]\s*\d{1,2}[AB](\s*[-–—]\s*)?/gi, ' ')
+  
+  // 3. Remove Energy levels (Energy 1-10) with separator
+  cleaned = cleaned.replace(/\s*[-–—]?\s*Energy\s*\d{1,2}(\s*[-–—]\s*)?/gi, ' ')
+  
+  // 4. Remove BPM info (with or without "BPM" label)
+  cleaned = cleaned.replace(/\s*[-–—]\s*\d+\s*BPM/gi, '')
+  cleaned = cleaned.replace(/\s*[-–—]\s*\d+\s*$/gi, '')  // Just number at end
+  
+  // 5. Remove websites in parentheses: (megapesni.com), (site.ru), etc.
+  cleaned = cleaned.replace(/\s*\([^)]*\.(com|ru|net|org|io|info|biz|me)[^)]*\)\s*/gi, ' ')
+  
+  // 6. Remove www.domain.com patterns
+  cleaned = cleaned.replace(/www\.[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}/gi, '')
+  
+  // 7. Remove https:// and http:// URLs
+  cleaned = cleaned.replace(/https?:\/\/[^\s]+/gi, '')
+  
+  // 8. Remove common music site names (standalone or in text)
+  const sitePatterns = [
+    'livingelectro', 'beatport', 'junodownload', 'megapesni',
+    'zaycev', 'mp3store', 'mp3poisk', 'muzofan', 'primemusic',
+    'hitmos', 'hotplayer', 'pumpitupparty'
+  ]
+  for (const site of sitePatterns) {
+    cleaned = cleaned.replace(new RegExp(`\\b${site}\\b`, 'gi'), '')
   }
+  
+  // 9. Remove Key info
+  cleaned = cleaned.replace(/Key[:\s]*[A-G][#b]?\s*(min|maj|minor|major)?/gi, '')
   
   // Final cleanup
   cleaned = cleaned
     .replace(/\s{2,}/g, ' ')  // Multiple spaces to single
-    .replace(/^[\s\-–—:,]+|[\s\-–—:,]+$/g, '')  // Trim separators
+    .replace(/\s*[-–—]\s*$/g, '')  // Trailing separator
+    .replace(/^[\s\-–—:,]+|[\s\-–—:,]+$/g, '')  // Trim separators from ends
     .trim()
   
   return cleaned || title  // Return original if cleaning resulted in empty string
