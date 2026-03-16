@@ -3,10 +3,6 @@ import { NextResponse } from 'next/server'
 const ICECAST_STATUS_URL = 'http://s0.radioheart.ru:8000/status.xsl'
 const MOUNT_POINT = 'RH84200'
 
-// Cache for track info (update every 5 seconds)
-let cachedTrack: { title: string; timestamp: number } | null = null
-const CACHE_DURATION = 5000 // 5 seconds
-
 // Patterns to remove from track title
 const PATTERNS_TO_REMOVE = [
   // Camelot Wheel keys: 1A-12A, 1B-12B with separators
@@ -44,6 +40,7 @@ async function fetchCurrentTrack(): Promise<string> {
   try {
     const response = await fetch(ICECAST_STATUS_URL, {
       signal: AbortSignal.timeout(5000), // 5 second timeout
+      cache: 'no-store', // Always fetch fresh data
     })
     
     if (!response.ok) {
@@ -80,26 +77,16 @@ async function fetchCurrentTrack(): Promise<string> {
 }
 
 export async function GET() {
-  const now = Date.now()
-  
-  // Return cached value if still valid
-  if (cachedTrack && (now - cachedTrack.timestamp) < CACHE_DURATION) {
-    return NextResponse.json({
-      title: cachedTrack.title,
-      cached: true
-    })
-  }
-  
-  // Fetch fresh data
+  // Fetch fresh data every time (no cache on serverless)
   const title = await fetchCurrentTrack()
-  
-  cachedTrack = {
-    title,
-    timestamp: now
-  }
   
   return NextResponse.json({
     title,
-    cached: false
+    timestamp: Date.now()
+  }, {
+    headers: {
+      // Prevent caching by Vercel CDN
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    }
   })
 }

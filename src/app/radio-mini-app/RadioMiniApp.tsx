@@ -125,15 +125,21 @@ export default function RadioMiniApp() {
   // Fetch current track
   const fetchCurrentTrack = useCallback(async () => {
     try {
-      const res = await fetch(NOW_PLAYING_API)
+      const res = await fetch(NOW_PLAYING_API, { 
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      })
       if (res.ok) {
         const data = await res.json()
-        if (data.title) {
+        console.log('Now playing:', data.title)
+        if (data.title && data.title !== currentTrack) {
           setCurrentTrack(data.title)
         }
       }
-    } catch (e) {}
-  }, [])
+    } catch (e) {
+      console.error('Error fetching track:', e)
+    }
+  }, [currentTrack])
 
   // Register listener
   const registerListener = useCallback(async (action: 'open' | 'close') => {
@@ -240,7 +246,7 @@ export default function RadioMiniApp() {
   // Fetch track periodically
   useEffect(() => {
     fetchCurrentTrack() // Initial fetch
-    const interval = setInterval(fetchCurrentTrack, 10000) // Every 10 seconds
+    const interval = setInterval(fetchCurrentTrack, 5000) // Every 5 seconds
     return () => clearInterval(interval)
   }, [fetchCurrentTrack])
 
