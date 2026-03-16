@@ -60,7 +60,7 @@ export default function RadioMiniApp() {
   const [isLoading, setIsLoading] = useState(false)
   const [volume, setVolume] = useState(100)
   const [isMuted, setIsMuted] = useState(false)
-  const [currentTrack, setCurrentTrack] = useState('Нажмите ▶')
+  const [currentTrack, setCurrentTrack] = useState('Загрузка...')
   const [listeners, setListeners] = useState(0)
   const [audioData, setAudioData] = useState<number[]>(new Array(BAR_COUNT).fill(0))
   const [isTgReady, setIsTgReady] = useState(false)
@@ -670,7 +670,10 @@ export default function RadioMiniApp() {
               </span>
             </div>
             <h1 className="text-base font-bold text-white">{STATION_NAME}</h1>
-            <p style={{ color: COLORS.text }} className="text-xs">{currentTrack}</p>
+            <p className="text-xs" style={{ color: COLORS.text }}>
+              <span style={{ color: COLORS.secondary }}>Сейчас в эфире:</span>{' '}
+              <span style={{ color: '#fff' }}>{currentTrack}</span>
+            </p>
             <p className="text-xs mt-0.5" style={{ color: COLORS.accent }}>
               👥 {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
             </p>

@@ -3,9 +3,9 @@ import { NextResponse } from 'next/server'
 const ICECAST_STATUS_URL = 'http://s0.radioheart.ru:8000/status.xsl'
 const MOUNT_POINT = 'RH84200'
 
-// Cache for track info (update every 10 seconds)
+// Cache for track info (update every 5 seconds)
 let cachedTrack: { title: string; timestamp: number } | null = null
-const CACHE_DURATION = 10000 // 10 seconds
+const CACHE_DURATION = 5000 // 5 seconds
 
 // Patterns to remove from track title
 const PATTERNS_TO_REMOVE = [
@@ -53,17 +53,25 @@ async function fetchCurrentTrack(): Promise<string> {
     
     const html = await response.text()
     
-    // Find the RH84200 mount point section - look for "Сейчас играет:" in that section
-    const mountPattern = new RegExp(`<h3>Канал /${MOUNT_POINT}</h3>[\\s\\S]*?Сейчас играет:</td>\\s*<td class="streamdata">([^<]*)</td>`, 'i')
-    const match = html.match(mountPattern)
+    // Find the mount point section - look for the mount point header first
+    const mountStart = html.indexOf(`<h3>Канал /${MOUNT_POINT}</h3>`)
+    if (mountStart === -1) {
+      console.log('Mount point not found')
+      return ''
+    }
     
-    if (match && match[1]) {
-      const rawTitle = match[1].trim()
+    // Find "Сейчас играет:" after the mount point header
+    const searchArea = html.substring(mountStart, mountStart + 5000)
+    const playMatch = searchArea.match(/Сейчас играет:<\/td>\s*<td class="streamdata">([^<]*)<\/td>/i)
+    
+    if (playMatch && playMatch[1]) {
+      const rawTitle = playMatch[1].trim()
       const cleanTitle = cleanTrackTitle(rawTitle)
       console.log('Track fetched:', { raw: rawTitle, clean: cleanTitle })
       return cleanTitle
     }
     
+    console.log('Play info not found in section')
     return ''
   } catch (error) {
     console.error('Error fetching track:', error)
