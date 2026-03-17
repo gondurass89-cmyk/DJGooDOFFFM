@@ -82,9 +82,6 @@ export default function RadioMiniApp() {
   })
   
   const audioRef = useRef<HTMLAudioElement>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const analyserRef = useRef<AnalyserNode | null>(null)
-  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const bufferTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   
@@ -258,114 +255,7 @@ export default function RadioMiniApp() {
     return () => clearInterval(interval)
   }, [fetchCurrentTrack])
 
-  // Real audio visualization with equalizer (for desktop/Android)
-  const startRealVisualization = useCallback(() => {
-    if (!audioRef.current) return false
-    
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext
-      
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioCtx()
-      }
-      
-      const ctx = audioContextRef.current
-      
-      if (ctx.state === 'suspended') {
-        ctx.resume()
-      }
-      
-      // Create analyser
-      if (!analyserRef.current) {
-        analyserRef.current = ctx.createAnalyser()
-        analyserRef.current.fftSize = 256
-        analyserRef.current.smoothingTimeConstant = 0.75
-      }
-      
-      // Create equalizer filters
-      if (!bassFilterRef.current) {
-        bassFilterRef.current = ctx.createBiquadFilter()
-        bassFilterRef.current.type = 'lowshelf'
-        bassFilterRef.current.frequency.value = 200
-        bassFilterRef.current.gain.value = eqValues.bass
-      }
-      
-      if (!midFilterRef.current) {
-        midFilterRef.current = ctx.createBiquadFilter()
-        midFilterRef.current.type = 'peaking'
-        midFilterRef.current.frequency.value = 1000
-        midFilterRef.current.Q.value = 1
-        midFilterRef.current.gain.value = eqValues.mid
-      }
-      
-      if (!highFilterRef.current) {
-        highFilterRef.current = ctx.createBiquadFilter()
-        highFilterRef.current.type = 'highshelf'
-        highFilterRef.current.frequency.value = 4000
-        highFilterRef.current.gain.value = eqValues.high
-      }
-      
-      // Connect: source -> bass -> mid -> high -> analyser -> destination
-      if (!sourceRef.current && audioRef.current) {
-        sourceRef.current = ctx.createMediaElementSource(audioRef.current)
-        sourceRef.current.connect(bassFilterRef.current)
-        bassFilterRef.current.connect(midFilterRef.current)
-        midFilterRef.current.connect(highFilterRef.current)
-        highFilterRef.current.connect(analyserRef.current)
-        analyserRef.current.connect(ctx.destination)
-      }
-      
-      const analyser = analyserRef.current
-      const bufferLength = analyser.frequencyBinCount // 128 bins with fftSize=256
-      const dataArray = new Uint8Array(bufferLength)
-      
-      const update = () => {
-        analyser.getByteFrequencyData(dataArray)
-        const mapped = []
-        
-        for (let i = 0; i < BAR_COUNT; i++) {
-          // Better frequency distribution:
-          // BASS (bars 0-7): use bins 0-15 (concentrated low frequencies)
-          // MID (bars 8-15): use bins 16-63 (spread mid frequencies)  
-          // HIGH (bars 16-23): use bins 64-100 (concentrated high frequencies)
-          let idx
-          if (i < 8) {
-            // BASS - bins 0-15 (16 bins for 8 bars)
-            idx = Math.floor(i * 2)
-          } else if (i < 16) {
-            // MID - bins 16-63 (48 bins for 8 bars)
-            idx = 16 + Math.floor((i - 8) * 6)
-          } else {
-            // HIGH - bins 64-100 (36 bins for 8 bars)
-            idx = 64 + Math.floor((i - 16) * 4.5)
-          }
-          
-          // Clamp index
-          idx = Math.min(idx, bufferLength - 1)
-          mapped.push(dataArray[idx] / 255)
-        }
-        
-        setAudioData(mapped)
-        animationFrameRef.current = requestAnimationFrame(update)
-      }
-      
-      update()
-      return true
-    } catch (e) {
-      console.error('Real visualization error:', e)
-      return false
-    }
-  }, [])
-
-  const stopVisualization = useCallback(() => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current)
-      animationFrameRef.current = null
-    }
-    setAudioData(new Array(BAR_COUNT).fill(0))
-  }, [])
-
-  // Audio setup - use HTML5 audio element
+  // Audio setup
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
@@ -380,65 +270,16 @@ export default function RadioMiniApp() {
       setIsLoading(false)
       setBuffering(false)
       setError(null)
-
-      // Start visualization for desktop/Android
-      if (!useCSSAnimation) {
-        try {
-          const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
-          if (!audioContextRef.current) {
-            audioContextRef.current = new AudioCtx()
-          }
-          const ctx = audioContextRef.current
-          if (ctx.state === 'suspended') {
-            ctx.resume()
-          }
-
-          if (!analyserRef.current) {
-            analyserRef.current = ctx.createAnalyser()
-            analyserRef.current.fftSize = 256
-            analyserRef.current.smoothingTimeConstant = 0.75
-          }
-
-          if (!sourceRef.current) {
-            sourceRef.current = ctx.createMediaElementSource(audio)
-            sourceRef.current.connect(analyserRef.current)
-            analyserRef.current.connect(ctx.destination)
-          }
-
-          const analyser = analyserRef.current
-          const bufferLength = analyser.frequencyBinCount
-          const dataArray = new Uint8Array(bufferLength)
-
-          const update = () => {
-            analyser.getByteFrequencyData(dataArray)
-            const mapped = []
-            for (let i = 0; i < BAR_COUNT; i++) {
-              let idx
-              if (i < 8) {
-                idx = Math.floor(i * 2)
-              } else if (i < 16) {
-                idx = 16 + Math.floor((i - 8) * 6)
-              } else {
-                idx = 64 + Math.floor((i - 16) * 4.5)
-              }
-              idx = Math.min(idx, bufferLength - 1)
-              mapped.push(dataArray[idx] / 255)
-            }
-            setAudioData(mapped)
-            animationFrameRef.current = requestAnimationFrame(update)
-          }
-          update()
-        } catch (e) {
-          console.log('Visualization error, using CSS fallback:', e)
-          setUseCSSAnimation(true)
-        }
-      }
     }
 
     const onPause = () => {
       console.log('Audio PAUSE')
       setIsPlaying(false)
-      stopVisualization()
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+      setAudioData(new Array(BAR_COUNT).fill(0))
     }
 
     const onWaiting = () => {
@@ -477,27 +318,23 @@ export default function RadioMiniApp() {
             errorMsg = 'Отменено'
             break
           case 2:
-            errorMsg = 'Ошибка сети. Проверьте интернет'
+            errorMsg = 'Ошибка сети'
             break
           case 3:
-            // Decode error - offer to open in external player
-            errorMsg = 'Открыть во внешнем плеере?'
-            setError(errorMsg)
-            // Auto-open external link on decode error
-            setTimeout(() => {
-              if (window.Telegram?.WebApp) {
-                window.open(STREAM_URL, '_blank')
-              }
-            }, 1500)
-            return
+            errorMsg = 'Ошибка декодирования'
+            break
           case 4:
-            errorMsg = 'Не поддерживается браузером'
+            errorMsg = 'Не поддерживается'
             break
         }
       }
 
       setError(errorMsg)
-      stopVisualization()
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+      setAudioData(new Array(BAR_COUNT).fill(0))
     }
 
     audio.addEventListener('playing', onPlaying)
@@ -517,9 +354,11 @@ export default function RadioMiniApp() {
       if (bufferTimeoutRef.current) {
         clearTimeout(bufferTimeoutRef.current)
       }
-      stopVisualization()
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
     }
-  }, [stopVisualization])
+  }, [])
 
   useEffect(() => {
     if (audioRef.current) {
