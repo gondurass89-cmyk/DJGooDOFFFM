@@ -4,10 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Sliders, ChevronDown, ChevronUp } from 'lucide-react'
 
-const STREAM_URLS = [
-  'https://radio-stream.gondurass89.workers.dev',
-  'https://stream.zeno.fm/your_station', // fallback
-]
+const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
 const LISTENERS_API = 'https://listeners.gondurass89.workers.dev'
@@ -90,7 +87,6 @@ export default function RadioMiniApp() {
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const animationRef = useRef<number | null>(null)
   const bufferTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const streamIndexRef = useRef(0)
   
   // Equalizer filters
   const bassFilterRef = useRef<BiquadFilterNode | null>(null)
@@ -369,64 +365,51 @@ export default function RadioMiniApp() {
     setAudioData(new Array(BAR_COUNT).fill(0))
   }, [])
 
-  // Audio setup
+  // Audio setup - simplified for iOS compatibility
   useEffect(() => {
     const audio = new Audio()
-    audio.preload = 'auto'
-    // Don't set crossOrigin for iOS - it causes decode errors
-    // crossOrigin will be set only when needed for visualization
+    audio.preload = 'none'
     audioRef.current = audio
 
     audio.addEventListener('playing', () => {
-      // Clear buffer timeout
+      console.log('Audio PLAYING event')
       if (bufferTimeoutRef.current) {
         clearTimeout(bufferTimeoutRef.current)
         bufferTimeoutRef.current = null
       }
-
       setIsPlaying(true)
       setIsLoading(false)
       setBuffering(false)
       setError(null)
-
-      // Only try real visualization if NOT using CSS animation
-      if (!useCSSAnimation) {
-        // Set crossOrigin before connecting to AudioContext
-        if (!audio.crossOrigin) {
-          audio.crossOrigin = 'anonymous'
-        }
-        const success = startRealVisualization()
-        if (!success) {
-          console.log('Falling back to CSS animation')
-          setUseCSSAnimation(true)
-        }
-      }
     })
 
     audio.addEventListener('pause', () => {
+      console.log('Audio PAUSE event')
       setIsPlaying(false)
       stopVisualization()
     })
 
     audio.addEventListener('waiting', () => {
+      console.log('Audio WAITING event')
       setBuffering(true)
       setIsLoading(true)
     })
 
     audio.addEventListener('canplay', () => {
+      console.log('Audio CANPLAY event')
       setBuffering(false)
       setIsLoading(false)
     })
 
     audio.addEventListener('stalled', () => {
-      console.log('Audio stalled')
+      console.log('Audio STALLED event')
       setBuffering(true)
     })
 
     audio.addEventListener('error', (e) => {
-      console.error('Audio error:', e)
+      console.error('Audio ERROR event:', e)
+      console.log('Audio error code:', audio.error?.code, 'message:', audio.error?.message)
 
-      // Clear buffer timeout
       if (bufferTimeoutRef.current) {
         clearTimeout(bufferTimeoutRef.current)
         bufferTimeoutRef.current = null
@@ -437,21 +420,20 @@ export default function RadioMiniApp() {
       setBuffering(false)
 
       const error = audio.error
-      console.log('Audio error code:', error?.code)
       let errorMsg = 'Ошибка воспроизведения'
 
       if (error) {
         switch (error.code) {
-          case MediaError.MEDIA_ERR_ABORTED:
+          case 1:
             errorMsg = 'Воспроизведение отменено'
             break
-          case MediaError.MEDIA_ERR_NETWORK:
-            errorMsg = 'Ошибка сети. Проверьте интернет'
+          case 2:
+            errorMsg = 'Ошибка сети'
             break
-          case MediaError.MEDIA_ERR_DECODE:
-            errorMsg = 'Ошибка декодирования аудио'
+          case 3:
+            errorMsg = 'Ошибка декодирования'
             break
-          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+          case 4:
             errorMsg = 'Формат не поддерживается'
             break
         }
@@ -469,7 +451,7 @@ export default function RadioMiniApp() {
       audio.src = ''
       stopVisualization()
     }
-  }, [useCSSAnimation, startRealVisualization, stopVisualization])
+  }, [stopVisualization])
 
   useEffect(() => {
     if (audioRef.current) {
@@ -509,9 +491,8 @@ export default function RadioMiniApp() {
 
     try {
       audio.volume = isMuted ? 0 : volume / 100
-      const streamUrl = STREAM_URLS[streamIndexRef.current]
-      console.log('Playing stream:', streamUrl)
-      audio.src = streamUrl
+      console.log('Playing stream:', STREAM_URL)
+      audio.src = STREAM_URL
       audio.load()
 
       await audio.play()
