@@ -566,15 +566,22 @@ export default function RadioMiniApp() {
       userId = user.id
       firstName = user.first_name
     } else {
-      // Fallback: генерируем session ID
-      let sessionId = sessionStorage.getItem('radio_session_id')
+      // Fallback: используем localStorage для постоянного ID
+      let sessionId = localStorage.getItem('radio_guest_id')
       if (!sessionId) {
+        // Генерируем постоянный ID один раз
         sessionId = 'guest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
-        sessionStorage.setItem('radio_session_id', sessionId)
+        localStorage.setItem('radio_guest_id', sessionId)
       }
-      userId = parseInt(sessionId.replace(/\D/g, '').slice(0, 10) || Date.now().toString())
+      // Используем хеш от sessionId для стабильного числового ID
+      let hash = 0
+      for (let i = 0; i < sessionId.length; i++) {
+        hash = ((hash << 5) - hash) + sessionId.charCodeAt(i)
+        hash = hash & hash
+      }
+      userId = Math.abs(hash)
       firstName = 'Гость'
-      console.log('[LISTENER] Using fallback session:', sessionId)
+      console.log('[LISTENER] Using fallback session:', sessionId, 'userId:', userId)
     }
     
     try {
@@ -644,9 +651,14 @@ export default function RadioMiniApp() {
         userId = user.id
         firstName = user.first_name
       } else {
-        const sessionId = sessionStorage.getItem('radio_session_id')
+        const sessionId = localStorage.getItem('radio_guest_id')
         if (sessionId) {
-          userId = parseInt(sessionId.replace(/\D/g, '').slice(0, 10) || Date.now().toString())
+          let hash = 0
+          for (let i = 0; i < sessionId.length; i++) {
+            hash = ((hash << 5) - hash) + sessionId.charCodeAt(i)
+            hash = hash & hash
+          }
+          userId = Math.abs(hash)
           firstName = 'Гость'
         } else {
           return // Нет сессии - нечего отправлять
