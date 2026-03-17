@@ -86,6 +86,7 @@ export default function RadioMiniApp() {
   const analyserRef = useRef<AnalyserNode | null>(null)
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const animationRef = useRef<number | null>(null)
+  const bufferTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // Equalizer filters
   const bassFilterRef = useRef<BiquadFilterNode | null>(null)
@@ -365,11 +366,17 @@ export default function RadioMiniApp() {
     audioRef.current = audio
 
     audio.addEventListener('playing', () => {
+      // Clear buffer timeout
+      if (bufferTimeoutRef.current) {
+        clearTimeout(bufferTimeoutRef.current)
+        bufferTimeoutRef.current = null
+      }
+
       setIsPlaying(true)
       setIsLoading(false)
       setBuffering(false)
       setError(null)
-      
+
       // Only try real visualization if NOT using CSS animation
       if (!useCSSAnimation) {
         const success = startRealVisualization()
@@ -379,31 +386,69 @@ export default function RadioMiniApp() {
         }
       }
     })
-    
+
     audio.addEventListener('pause', () => {
       setIsPlaying(false)
       stopVisualization()
     })
-    
+
     audio.addEventListener('waiting', () => {
       setBuffering(true)
       setIsLoading(true)
     })
-    
+
     audio.addEventListener('canplay', () => {
       setBuffering(false)
       setIsLoading(false)
     })
-    
-    audio.addEventListener('error', () => {
+
+    audio.addEventListener('stalled', () => {
+      console.log('Audio stalled')
+      setBuffering(true)
+    })
+
+    audio.addEventListener('error', (e) => {
+      console.error('Audio error:', e)
+      
+      // Clear buffer timeout
+      if (bufferTimeoutRef.current) {
+        clearTimeout(bufferTimeoutRef.current)
+        bufferTimeoutRef.current = null
+      }
+      
       setIsLoading(false)
       setIsPlaying(false)
       setBuffering(false)
-      setError('Ошибка воспроизведения')
+
+      // More detailed error message
+      const error = audio.error
+      let errorMsg = 'Ошибка воспроизведения'
+
+      if (error) {
+        switch (error.code) {
+          case MediaError.MEDIA_ERR_ABORTED:
+            errorMsg = 'Воспроизведение отменено'
+            break
+          case MediaError.MEDIA_ERR_NETWORK:
+            errorMsg = 'Ошибка сети. Проверьте интернет'
+            break
+          case MediaError.MEDIA_ERR_DECODE:
+            errorMsg = 'Ошибка декодирования аудио'
+            break
+          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+            errorMsg = 'Формат не поддерживается'
+            break
+        }
+      }
+
+      setError(errorMsg)
       stopVisualization()
     })
 
     return () => {
+      if (bufferTimeoutRef.current) {
+        clearTimeout(bufferTimeoutRef.current)
+      }
       audio.pause()
       audio.src = ''
       stopVisualization()
@@ -424,19 +469,49 @@ export default function RadioMiniApp() {
 
     if (isPlaying) {
       audio.pause()
+      // Clear buffer timeout
+      if (bufferTimeoutRef.current) {
+        clearTimeout(bufferTimeoutRef.current)
+        bufferTimeoutRef.current = null
+      }
       return
     }
 
     setIsLoading(true)
-    
+
+    // Set buffer timeout (15 seconds for iOS)
+    bufferTimeoutRef.current = setTimeout(() => {
+      if (isLoading && !isPlaying) {
+        setError('Таймаут подключения. Попробуйте ещё раз')
+        setIsLoading(false)
+        setBuffering(false)
+        audio.pause()
+        audio.src = ''
+      }
+    }, 15000)
+
     try {
       audio.volume = isMuted ? 0 : volume / 100
       audio.src = STREAM_URL
       audio.load()
+
+      // iOS sometimes needs a small delay before play
+      await new Promise(resolve => setTimeout(resolve, 100))
       await audio.play()
     } catch (err: any) {
+      if (bufferTimeoutRef.current) {
+        clearTimeout(bufferTimeoutRef.current)
+        bufferTimeoutRef.current = null
+      }
       setIsLoading(false)
-      setError(err.name === 'NotAllowedError' ? 'Нажмите ещё раз' : 'Ошибка воспроизведения')
+
+      if (err.name === 'NotAllowedError') {
+        setError('Нажмите ещё раз')
+      } else if (err.name === 'NotSupportedError') {
+        setError('Формат не поддерживается')
+      } else {
+        setError('Ошибка воспроизведения')
+      }
     }
   }
 
