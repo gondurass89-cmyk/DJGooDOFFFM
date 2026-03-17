@@ -3,7 +3,10 @@ import { NextResponse } from 'next/server'
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
 
-// Icecast status page (primary source)
+// RadioBoss nowplaying.txt via Tunnelmole (primary source - has Cyrillic support)
+const RADIOBOSS_NOWPLAYING_URL = 'https://q5u9in-ip-178-49-69-37.tunnelmole.net/nowplaying.txt'
+
+// Icecast fallback (secondary source - limited Cyrillic support)
 const ICECAST_STATUS_URL = 'http://s0.radioheart.ru:8000/status.xsl'
 const MOUNT_POINT = 'RH84200'
 
@@ -56,7 +59,37 @@ function cleanTrackTitle(title: string): string {
   return cleaned || title
 }
 
-async function fetchCurrentTrack(): Promise<string> {
+// Fetch from RadioBoss nowplaying.txt (via Tunnelmole)
+async function fetchFromRadioBoss(): Promise<string | null> {
+  try {
+    const response = await fetch(RADIOBOSS_NOWPLAYING_URL, {
+      signal: AbortSignal.timeout(5000),
+      cache: 'no-store',
+    })
+    
+    if (!response.ok) {
+      console.log('RadioBoss nowplaying.txt not available:', response.status)
+      return null
+    }
+    
+    const text = await response.text()
+    const title = text.trim()
+    
+    if (title) {
+      const cleaned = cleanTrackTitle(title)
+      console.log('RadioBoss track:', { raw: title, clean: cleaned })
+      return cleaned
+    }
+    
+    return null
+  } catch (error) {
+    console.log('RadioBoss fetch error (tunnel may be down):', error)
+    return null
+  }
+}
+
+// Fetch from Icecast (fallback)
+async function fetchFromIcecast(): Promise<string> {
   try {
     const response = await fetch(ICECAST_STATUS_URL, {
       signal: AbortSignal.timeout(5000),
@@ -82,15 +115,27 @@ async function fetchCurrentTrack(): Promise<string> {
     if (playMatch && playMatch[1]) {
       const rawTitle = playMatch[1].trim()
       const cleanTitle = cleanTrackTitle(rawTitle)
-      console.log('Track:', { raw: rawTitle, clean: cleanTitle })
+      console.log('Icecast track:', { raw: rawTitle, clean: cleanTitle })
       return cleanTitle
     }
     
     return ''
   } catch (error) {
-    console.error('Fetch error:', error)
+    console.error('Icecast fetch error:', error)
     return ''
   }
+}
+
+async function fetchCurrentTrack(): Promise<string> {
+  // Try RadioBoss first (has full track info with Cyrillic support)
+  const radioBossTrack = await fetchFromRadioBoss()
+  if (radioBossTrack) {
+    return radioBossTrack
+  }
+  
+  // Fallback to Icecast if tunnel is down
+  console.log('Falling back to Icecast...')
+  return await fetchFromIcecast()
 }
 
 export async function GET() {
