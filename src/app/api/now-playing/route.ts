@@ -3,6 +3,11 @@ import { NextResponse } from 'next/server'
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
 
+// RadioBoss API via Cloudflare tunnel (primary source)
+const RADIOBOSS_API_URL = 'https://radioboss.volfrings.ru/'
+const RADIOBOSS_PASSWORD = 'bG0SNPLXIl'
+
+// Icecast fallback (secondary source)
 const ICECAST_STATUS_URL = 'http://s0.radioheart.ru:8000/status.xsl'
 const MOUNT_POINT = 'RH84200'
 
@@ -55,11 +60,78 @@ function cleanTrackTitle(title: string): string {
   return cleaned || title
 }
 
-async function fetchCurrentTrack(): Promise<string> {
+// Parse XML from RadioBoss playbackinfo
+function parseRadioBossXML(xml: string): string {
+  try {
+    // Extract CurrentTrack TRACK element
+    const trackMatch = xml.match(/<CurrentTrack>[\s\S]*?<TRACK\s+([^>]*)\/>/i)
+    if (!trackMatch) {
+      console.log('No CurrentTrack found in XML')
+      return ''
+    }
+    
+    const trackAttrs = trackMatch[1]
+    
+    // Extract ARTIST and TITLE attributes
+    const artistMatch = trackAttrs.match(/ARTIST="([^"]*)"/i)
+    const titleMatch = trackAttrs.match(/TITLE="([^"]*)"/i)
+    
+    const artist = artistMatch ? artistMatch[1].replace(/&#39;/g, "'").trim() : ''
+    const title = titleMatch ? titleMatch[1].replace(/&#39;/g, "'").trim() : ''
+    
+    if (artist && title) {
+      return `${artist} - ${title}`
+    } else if (title) {
+      return title
+    } else if (artist) {
+      return artist
+    }
+    
+    return ''
+  } catch (error) {
+    console.error('Error parsing RadioBoss XML:', error)
+    return ''
+  }
+}
+
+// Fetch from RadioBoss API (via Cloudflare tunnel)
+async function fetchFromRadioBoss(): Promise<string | null> {
+  try {
+    const url = `${RADIOBOSS_API_URL}?pass=${RADIOBOSS_PASSWORD}&action=playbackinfo`
+    
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(5000),
+      cache: 'no-store',
+    })
+    
+    if (!response.ok) {
+      console.log('RadioBoss API not available:', response.status)
+      return null
+    }
+    
+    const xml = await response.text()
+    console.log('RadioBoss XML received, length:', xml.length)
+    
+    const trackInfo = parseRadioBossXML(xml)
+    if (trackInfo) {
+      const cleaned = cleanTrackTitle(trackInfo)
+      console.log('RadioBoss track:', { raw: trackInfo, clean: cleaned })
+      return cleaned
+    }
+    
+    return null
+  } catch (error) {
+    console.log('RadioBoss API error (tunnel may be down):', error)
+    return null
+  }
+}
+
+// Fetch from Icecast (fallback)
+async function fetchFromIcecast(): Promise<string> {
   try {
     const response = await fetch(ICECAST_STATUS_URL, {
-      signal: AbortSignal.timeout(5000), // 5 second timeout
-      cache: 'no-store', // Always fetch fresh data
+      signal: AbortSignal.timeout(5000),
+      cache: 'no-store',
     })
     
     if (!response.ok) {
@@ -69,34 +141,42 @@ async function fetchCurrentTrack(): Promise<string> {
     
     const html = await response.text()
     
-    // Find the mount point section - look for the mount point header first
     const mountStart = html.indexOf(`<h3>Канал /${MOUNT_POINT}</h3>`)
     if (mountStart === -1) {
       console.log('Mount point not found')
       return ''
     }
     
-    // Find "Сейчас играет:" after the mount point header
     const searchArea = html.substring(mountStart, mountStart + 5000)
     const playMatch = searchArea.match(/Сейчас играет:<\/td>\s*<td class="streamdata">([^<]*)<\/td>/i)
     
     if (playMatch && playMatch[1]) {
       const rawTitle = playMatch[1].trim()
       const cleanTitle = cleanTrackTitle(rawTitle)
-      console.log('Track fetched:', { raw: rawTitle, clean: cleanTitle })
+      console.log('Icecast track:', { raw: rawTitle, clean: cleanTitle })
       return cleanTitle
     }
     
-    console.log('Play info not found in section')
     return ''
   } catch (error) {
-    console.error('Error fetching track:', error)
+    console.error('Icecast fetch error:', error)
     return ''
   }
 }
 
+async function fetchCurrentTrack(): Promise<string> {
+  // Try RadioBoss API first (has full track info with Cyrillic support)
+  const radioBossTrack = await fetchFromRadioBoss()
+  if (radioBossTrack) {
+    return radioBossTrack
+  }
+  
+  // Fallback to Icecast if RadioBoss tunnel is down
+  console.log('Falling back to Icecast...')
+  return await fetchFromIcecast()
+}
+
 export async function GET() {
-  // Fetch fresh data every time (no cache on serverless)
   const title = await fetchCurrentTrack()
   
   return NextResponse.json({
@@ -104,7 +184,6 @@ export async function GET() {
     timestamp: Date.now()
   }, {
     headers: {
-      // Prevent caching by Vercel CDN
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
     }
   })
