@@ -74,12 +74,16 @@ function cleanTrackTitle(title: string): string {
 // Fetch from Cloudflare Worker (RadioBoss sends track there)
 async function fetchFromWorker(): Promise<string | null> {
   try {
-    const response = await fetch(WORKER_URL, {
+    // Add timestamp to prevent any caching
+    const url = `${WORKER_URL}?_t=${Date.now()}`
+    
+    const response = await fetch(url, {
       signal: AbortSignal.timeout(10000),
       cache: 'no-store',
       headers: {
         'Accept': 'text/plain',
         'User-Agent': 'DJGooDOFF-FM/1.0',
+        'Cache-Control': 'no-cache',
       },
     })
 
