@@ -461,6 +461,10 @@ export default function RadioMiniApp() {
       audio.load()
 
       await audio.play()
+      // Start real visualization for desktop after successful play
+      if (!useCSSAnimation) {
+        startVisualization()
+      }
     } catch (err: any) {
       console.error('Play error:', err.name, err.message)
       if (bufferTimeoutRef.current) {
