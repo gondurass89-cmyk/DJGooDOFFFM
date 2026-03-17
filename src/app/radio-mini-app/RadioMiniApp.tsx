@@ -1350,7 +1350,7 @@ export default function RadioMiniApp() {
           {!isIOSDevice && !isFallbackActive && (
             <div className="skeuo-card rounded-xl p-2 mb-3">
               <div className="text-xs text-center mb-2" style={{ color: COLORS.secondary }}>
-                Эквалайзер {isRealModeActive ? '✓ REAL' : ''}
+                Эквалайзер • настрой звук под себя
               </div>
               
               {/* Bass slider */}
