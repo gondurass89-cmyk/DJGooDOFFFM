@@ -72,22 +72,22 @@ function parseRadioBossXML(xml: string): string {
     
     const trackAttrs = trackMatch[1]
     
-    // Extract TITLE attribute (ARTIST often contains Camelot/Energy info, so use TITLE only)
-    const titleMatch = trackAttrs.match(/TITLE="([^"]*)"/i)
-    
-    // Also try CASTTITLE which may have full info
+    // Try CASTTITLE first (has full Artist - Title info)
     const castTitleMatch = trackAttrs.match(/CASTTITLE="([^"]*)"/i)
     
-    // Prefer TITLE as it's usually cleaner (Artist - Track format without tech info)
-    if (titleMatch) {
-      const title = titleMatch[1].replace(/&#39;/g, "'").trim()
-      if (title) return title
-    }
+    // Also try TITLE as fallback
+    const titleMatch = trackAttrs.match(/TITLE="([^"]*)"/i)
     
-    // Fallback to CASTTITLE
+    // Prefer CASTTITLE as it has complete info
     if (castTitleMatch) {
       const castTitle = castTitleMatch[1].replace(/&#39;/g, "'").trim()
       if (castTitle) return castTitle
+    }
+    
+    // Fallback to TITLE
+    if (titleMatch) {
+      const title = titleMatch[1].replace(/&#39;/g, "'").trim()
+      if (title) return title
     }
     
     return ''
