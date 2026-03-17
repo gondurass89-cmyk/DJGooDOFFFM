@@ -43,7 +43,14 @@ function cleanTrackTitle(title: string): string {
   // Remove URLs
   cleaned = cleaned.replace(/www\.\S+\.\S+/gi, '')
   cleaned = cleaned.replace(/https?:\/\/\S+/gi, '')
-  
+
+  // Remove [by ...] tags (e.g., "[by DragoN_Sky]")
+  cleaned = cleaned.replace(/\s*\[by[^\]]*\]/gi, '')
+
+  // Remove curly braces but keep text inside
+  cleaned = cleaned.replace(/\{\s*/g, '')
+  cleaned = cleaned.replace(/\s*\}/g, '')
+
   // Final cleanup
   cleaned = cleaned
     .replace(/\s{2,}/g, ' ')
@@ -61,20 +68,21 @@ async function fetchFromWorker(): Promise<string | null> {
       signal: AbortSignal.timeout(5000),
       cache: 'no-store',
     })
-    
+
     if (!response.ok) {
       console.log('Worker not available:', response.status)
       return null
     }
-    
-    const data = await response.json()
-    
-    if (data && data.title) {
-      const cleaned = cleanTrackTitle(data.title)
-      console.log('Worker track:', { raw: data.title, clean: cleaned })
+
+    // Worker returns plain text, not JSON
+    const title = await response.text()
+
+    if (title && title.trim()) {
+      const cleaned = cleanTrackTitle(title.trim())
+      console.log('Worker track:', { raw: title, clean: cleaned })
       return cleaned
     }
-    
+
     return null
   } catch (error) {
     console.log('Worker fetch error:', error)
