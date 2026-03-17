@@ -11,29 +11,34 @@ function cleanTrackTitle(title: string): string {
   
   let cleaned = title
   
-  // 1. Remove file extension at the end (.mp3, .wav, etc.)
+  // 1. Remove file extension at the end
   cleaned = cleaned.replace(/\.(mp3|wav|flac|aac|ogg|m4a)$/i, '')
   
-  // 2. Remove Camelot Wheel keys at START: "5A Artist" or "11B - Artist"
-  cleaned = cleaned.replace(/^\d{1,2}[AB]\s*[-–—]?\s*/gi, '')
+  // 2. Remove Camelot key at START: "5A - " or "5A " or "11B-"
+  cleaned = cleaned.replace(/^\d{1,2}[AB]\s*[-–—]\s*/gi, '')
+  cleaned = cleaned.replace(/^\d{1,2}[AB]\s+/gi, '')
   
-  // 3. Remove Camelot Wheel keys in middle/end: " - 5A" or " - 11B"
+  // 3. Remove Energy level at START: "Energy 6 - " or "Energy 8 "
+  cleaned = cleaned.replace(/^Energy\s*\d{1,2}\s*[-–—]\s*/gi, '')
+  cleaned = cleaned.replace(/^Energy\s*\d{1,2}\s+/gi, '')
+  
+  // 4. Remove Camelot key in middle/end: " - 5A" or "- 11B - "
   cleaned = cleaned.replace(/\s*[-–—]\s*\d{1,2}[AB]\s*/gi, ' ')
   
-  // 4. Remove trailing " - NUMBER" pattern (BPM like " - 115")
+  // 5. Remove Energy level in middle/end: " - Energy 6 - " or "- Energy 8"
+  cleaned = cleaned.replace(/\s*[-–—]?\s*Energy\s*\d{1,2}\s*[-–—]?\s*/gi, ' ')
+  
+  // 6. Remove trailing BPM number: " - 115"
   cleaned = cleaned.replace(/\s*[-–—]\s*\d+\s*$/g, '')
   
-  // 5. Remove Energy levels: "Energy 8" or " - Energy 5"
-  cleaned = cleaned.replace(/\s*[-–—]?\s*Energy\s*\d{1,2}(\s*[-–—]\s*)?/gi, ' ')
-  
-  // 6. Remove websites in parentheses: (megapesni.com), (site.ru)
+  // 7. Remove websites in parentheses: (megapesni.com)
   cleaned = cleaned.replace(/\s*\([^)]*\.(com|ru|net|org|io|info|biz|me)[^)]*\)\s*/gi, ' ')
   
-  // 7. Remove www.domain.com and http(s):// URLs
+  // 8. Remove URLs
   cleaned = cleaned.replace(/www\.\S+\.\S+/gi, '')
   cleaned = cleaned.replace(/https?:\/\/\S+/gi, '')
   
-  // 8. Remove common music site names
+  // 9. Remove site names
   const sites = ['livingelectro', 'beatport', 'junodownload', 'megapesni', 'zaycev', 
                  'mp3store', 'mp3poisk', 'muzofan', 'primemusic', 'hitmos', 'hotplayer']
   for (const site of sites) {
@@ -42,9 +47,9 @@ function cleanTrackTitle(title: string): string {
   
   // Final cleanup
   cleaned = cleaned
-    .replace(/\s{2,}/g, ' ')           // Multiple spaces to single
-    .replace(/\s*[-–—]\s*$/g, '')       // Trailing separator
-    .replace(/^[\s\-–—:]+/, '')         // Leading separators
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s*[-–—]\s*$/g, '')
+    .replace(/^[\s\-–—:]+/, '')
     .trim()
   
   return cleaned || title
