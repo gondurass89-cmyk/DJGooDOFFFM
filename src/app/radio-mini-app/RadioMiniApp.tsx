@@ -679,15 +679,7 @@ export default function RadioMiniApp() {
             <p className="text-xs text-center" style={{ color: COLORS.secondary, marginTop: '4px' }}>
               Сейчас в эфире:
             </p>
-            <p
-              className="text-xs text-center"
-              style={{
-                color: '#fff',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
+            <p className="text-xs text-center" style={{ color: '#fff' }}>
               {currentTrack}
             </p>
             <p className="text-xs mt-0.5" style={{ color: COLORS.accent }}>
