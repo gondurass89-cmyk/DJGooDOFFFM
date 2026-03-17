@@ -416,19 +416,19 @@ export default function RadioMiniApp() {
 
     audio.addEventListener('error', (e) => {
       console.error('Audio error:', e)
-      
+
       // Clear buffer timeout
       if (bufferTimeoutRef.current) {
         clearTimeout(bufferTimeoutRef.current)
         bufferTimeoutRef.current = null
       }
-      
+
       setIsLoading(false)
       setIsPlaying(false)
       setBuffering(false)
 
-      // More detailed error message
       const error = audio.error
+      console.log('Audio error code:', error?.code)
       let errorMsg = 'Ошибка воспроизведения'
 
       if (error) {
@@ -486,19 +486,21 @@ export default function RadioMiniApp() {
 
     setIsLoading(true)
 
-    // Set buffer timeout (15 seconds for iOS)
+    // Set buffer timeout (25 seconds for iOS)
     bufferTimeoutRef.current = setTimeout(() => {
       if (isLoading && !isPlaying) {
+        console.log('Buffer timeout')
         setError('Таймаут подключения. Попробуйте ещё раз')
         setIsLoading(false)
         setBuffering(false)
         audio.pause()
         audio.src = ''
       }
-    }, 15000)
+    }, 25000)
 
     try {
       audio.volume = isMuted ? 0 : volume / 100
+      console.log('Playing stream:', STREAM_URL)
       audio.src = STREAM_URL
       audio.load()
 
@@ -506,6 +508,7 @@ export default function RadioMiniApp() {
       await new Promise(resolve => setTimeout(resolve, 100))
       await audio.play()
     } catch (err: any) {
+      console.error('Play error:', err.name, err.message)
       if (bufferTimeoutRef.current) {
         clearTimeout(bufferTimeoutRef.current)
         bufferTimeoutRef.current = null
