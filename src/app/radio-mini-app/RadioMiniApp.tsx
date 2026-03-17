@@ -176,11 +176,16 @@ export default function RadioMiniApp() {
 
   // Handle close
   useEffect(() => {
+    let isClosing = false
+
     const sendClose = () => {
+      if (isClosing) return
+      isClosing = true
+
       const tg = window.Telegram?.WebApp
       const user = tg?.initDataUnsafe?.user
       if (!user) return
-      
+
       const data = JSON.stringify({
         user_id: user.id,
         first_name: user.first_name,
@@ -189,16 +194,14 @@ export default function RadioMiniApp() {
         action: 'close',
         isAdmin: user.id === ADMIN_USER_ID,
       })
-      
+
       navigator.sendBeacon(LISTENERS_API, new Blob([data], { type: 'application/json' }))
     }
 
+    // Only send close on actual page unload, not on visibility change
     window.addEventListener('beforeunload', sendClose)
     window.addEventListener('pagehide', sendClose)
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') sendClose()
-    })
-    
+
     return () => {
       window.removeEventListener('beforeunload', sendClose)
       window.removeEventListener('pagehide', sendClose)
