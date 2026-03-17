@@ -676,20 +676,19 @@ export default function RadioMiniApp() {
               </span>
             </div>
             <h1 className="text-base font-bold text-white">{STATION_NAME}</h1>
-            <p className="text-xs flex items-center" style={{ color: COLORS.text }}>
-              <span style={{ color: COLORS.secondary }}>Сейчас в эфире:</span>{' '}
-              <span
-                style={{
-                  color: '#fff',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  flex: 1,
-                  marginLeft: '4px',
-                }}
-              >
-                {currentTrack}
-              </span>
+            <p className="text-xs text-center" style={{ color: COLORS.secondary, marginTop: '4px' }}>
+              Сейчас в эфире:
+            </p>
+            <p
+              className="text-xs text-center"
+              style={{
+                color: '#fff',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {currentTrack}
             </p>
             <p className="text-xs mt-0.5" style={{ color: COLORS.accent }}>
               👥 {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
