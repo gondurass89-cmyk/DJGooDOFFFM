@@ -16,6 +16,16 @@ function cleanTrackTitle(title: string): string {
   
   let cleaned = title
   
+  // Decode HTML entities (e.g., &amp; -> &)
+  cleaned = cleaned
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/gi, ' ')
+  
   // Remove BOM and zero-width characters
   cleaned = cleaned.replace(/^[\uFEFF\u200B\u200C\u200D]/g, '')
   
