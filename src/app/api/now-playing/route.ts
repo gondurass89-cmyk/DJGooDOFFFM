@@ -75,9 +75,15 @@ function cleanTrackTitle(title: string): string {
 async function fetchFromWorker(): Promise<string | null> {
   try {
     const response = await fetch(WORKER_URL, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(10000),
       cache: 'no-store',
+      headers: {
+        'Accept': 'text/plain',
+        'User-Agent': 'DJGooDOFF-FM/1.0',
+      },
     })
+
+    console.log('Worker response status:', response.status)
 
     if (!response.ok) {
       console.log('Worker not available:', response.status)
@@ -86,8 +92,9 @@ async function fetchFromWorker(): Promise<string | null> {
 
     // Worker returns plain text, not JSON
     const title = await response.text()
+    console.log('Worker raw response:', title)
 
-    if (title && title.trim()) {
+    if (title && title.trim() && !title.includes('Загрузка')) {
       const cleaned = cleanTrackTitle(title.trim())
       console.log('Worker track:', { raw: title, clean: cleaned })
       return cleaned
