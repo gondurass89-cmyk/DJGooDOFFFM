@@ -3,8 +3,8 @@ import { NextResponse } from 'next/server'
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
 
-// RadioBoss API via Cloudflare tunnel (primary source)
-const RADIOBOSS_API_URL = 'https://radioboss.volfrings.ru/'
+// RadioBoss API via LocalTunnel (primary source)
+const RADIOBOSS_API_URL = 'https://wide-cobras-brush.loca.lt/'
 const RADIOBOSS_PASSWORD = 'bG0SNPLXIl'
 
 // Icecast fallback (secondary source)
@@ -72,19 +72,22 @@ function parseRadioBossXML(xml: string): string {
     
     const trackAttrs = trackMatch[1]
     
-    // Extract ARTIST and TITLE attributes
-    const artistMatch = trackAttrs.match(/ARTIST="([^"]*)"/i)
+    // Extract TITLE attribute (ARTIST often contains Camelot/Energy info, so use TITLE only)
     const titleMatch = trackAttrs.match(/TITLE="([^"]*)"/i)
     
-    const artist = artistMatch ? artistMatch[1].replace(/&#39;/g, "'").trim() : ''
-    const title = titleMatch ? titleMatch[1].replace(/&#39;/g, "'").trim() : ''
+    // Also try CASTTITLE which may have full info
+    const castTitleMatch = trackAttrs.match(/CASTTITLE="([^"]*)"/i)
     
-    if (artist && title) {
-      return `${artist} - ${title}`
-    } else if (title) {
-      return title
-    } else if (artist) {
-      return artist
+    // Prefer TITLE as it's usually cleaner (Artist - Track format without tech info)
+    if (titleMatch) {
+      const title = titleMatch[1].replace(/&#39;/g, "'").trim()
+      if (title) return title
+    }
+    
+    // Fallback to CASTTITLE
+    if (castTitleMatch) {
+      const castTitle = castTitleMatch[1].replace(/&#39;/g, "'").trim()
+      if (castTitle) return castTitle
     }
     
     return ''
