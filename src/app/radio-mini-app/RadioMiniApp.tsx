@@ -598,13 +598,20 @@ export default function RadioMiniApp() {
     }
   }, [])
 
+  // Регистрация слушателя - запускаем сразу, не ждём Telegram
   useEffect(() => {
-    if (isTgReady) {
-      registerListener('open')
-      heartbeatIntervalRef.current = setInterval(() => registerListener('heartbeat'), HEARTBEAT_INTERVAL)
+    console.log('[LISTENER] Effect triggered, isTgReady:', isTgReady)
+
+    // Регистрируем сразу при загрузке компонента
+    registerListener('open')
+
+    // Запускаем heartbeat
+    heartbeatIntervalRef.current = setInterval(() => registerListener('heartbeat'), HEARTBEAT_INTERVAL)
+
+    return () => {
+      if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current)
     }
-    return () => { if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current) }
-  }, [isTgReady, registerListener])
+  }, [registerListener]) // Убрал isTgReady - регистрируем в любом случае
 
   const fetchListenersCount = useCallback(async () => {
     try {
@@ -628,11 +635,34 @@ export default function RadioMiniApp() {
     const sendClose = () => {
       const tg = window.Telegram?.WebApp
       const user = tg?.initDataUnsafe?.user
-      if (!user) return
+
+      // Получаем userId и firstName так же как в registerListener
+      let userId: number
+      let firstName: string
+
+      if (user) {
+        userId = user.id
+        firstName = user.first_name
+      } else {
+        const sessionId = sessionStorage.getItem('radio_session_id')
+        if (sessionId) {
+          userId = parseInt(sessionId.replace(/\D/g, '').slice(0, 10) || Date.now().toString())
+          firstName = 'Гость'
+        } else {
+          return // Нет сессии - нечего отправлять
+        }
+      }
+
       navigator.sendBeacon(LISTENERS_API, new Blob([JSON.stringify({
-        user_id: user.id, first_name: user.first_name, last_name: user.last_name,
-        username: user.username, action: 'close', isAdmin: user.id === ADMIN_USER_ID,
+        user_id: userId,
+        first_name: firstName,
+        last_name: user?.last_name || null,
+        username: user?.username || null,
+        action: 'close',
+        isAdmin: user?.id === ADMIN_USER_ID,
       })], { type: 'application/json' }))
+
+      console.log('[LISTENER] Sent close beacon for user:', userId)
     }
     window.addEventListener('beforeunload', sendClose)
     window.addEventListener('pagehide', sendClose)
