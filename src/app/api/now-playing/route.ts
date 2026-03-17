@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 
 // RadioBoss nowplaying.txt via Tunnelmole (primary source - has Cyrillic support)
-const RADIOBOSS_NOWPLAYING_URL = 'https://q5u9in-ip-178-49-69-37.tunnelmole.net/nowplaying.txt'
+const RADIOBOSS_NOWPLAYING_URL = 'https://h3z0sp-ip-178-49-69-37.tunnelmole.net/nowplaying.txt'
 
 // Icecast fallback (secondary source - limited Cyrillic support)
 const ICECAST_STATUS_URL = 'http://s0.radioheart.ru:8000/status.xsl'
