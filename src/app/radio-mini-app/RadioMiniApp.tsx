@@ -417,14 +417,32 @@ export default function RadioMiniApp() {
 
       const error = audio.error
       let errorMsg = 'Ошибка воспроизведения'
+
       if (error) {
         switch (error.code) {
-          case 1: errorMsg = 'Отменено'; break
-          case 2: errorMsg = 'Ошибка сети'; break
-          case 3: errorMsg = 'Ошибка декодирования'; break
-          case 4: errorMsg = 'Не поддерживается'; break
+          case 1:
+            errorMsg = 'Отменено'
+            break
+          case 2:
+            errorMsg = 'Ошибка сети. Проверьте интернет'
+            break
+          case 3:
+            // Decode error - offer to open in external player
+            errorMsg = 'Открыть во внешнем плеере?'
+            setError(errorMsg)
+            // Auto-open external link on decode error
+            setTimeout(() => {
+              if (window.Telegram?.WebApp) {
+                window.open(STREAM_URL, '_blank')
+              }
+            }, 1500)
+            return
+          case 4:
+            errorMsg = 'Не поддерживается браузером'
+            break
         }
       }
+
       setError(errorMsg)
       stopVisualization()
     }
@@ -478,11 +496,10 @@ export default function RadioMiniApp() {
     bufferTimeoutRef.current = setTimeout(() => {
       if (isLoading && !isPlaying) {
         console.log('Buffer timeout')
-        setError('Таймаут подключения. Попробуйте ещё раз')
+        setError('Таймаут подключения')
         setIsLoading(false)
         setBuffering(false)
         audio.pause()
-        audio.src = ''
       }
     }, 30000)
 
@@ -504,9 +521,18 @@ export default function RadioMiniApp() {
       if (err.name === 'NotAllowedError') {
         setError('Нажмите ещё раз')
       } else if (err.name === 'NotSupportedError') {
-        setError('Формат не поддерживается')
+        // Try opening in external player on iOS
+        const tg = window.Telegram?.WebApp
+        if (tg?.openTelegramLink) {
+          setError('Открываем во внешнем плеере...')
+          setTimeout(() => {
+            window.open(STREAM_URL, '_blank')
+          }, 1000)
+        } else {
+          setError('Формат не поддерживается')
+        }
       } else {
-        setError('Ошибка воспроизведения')
+        setError('Ошибка: ' + (err.message || 'воспроизведения'))
       }
     }
   }
