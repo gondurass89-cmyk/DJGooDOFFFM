@@ -85,8 +85,8 @@ export default function RadioMiniApp() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
-  const animationRef = useRef<number | null>(null)
   const bufferTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
   
   // Equalizer filters
   const bassFilterRef = useRef<BiquadFilterNode | null>(null)
@@ -346,7 +346,7 @@ export default function RadioMiniApp() {
         }
         
         setAudioData(mapped)
-        animationRef.current = requestAnimationFrame(update)
+        animationFrameRef.current = requestAnimationFrame(update)
       }
       
       update()
@@ -358,9 +358,9 @@ export default function RadioMiniApp() {
   }, [])
 
   const stopVisualization = useCallback(() => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current)
-      animationRef.current = null
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
     }
     setAudioData(new Array(BAR_COUNT).fill(0))
   }, [])
@@ -380,6 +380,59 @@ export default function RadioMiniApp() {
       setIsLoading(false)
       setBuffering(false)
       setError(null)
+
+      // Start visualization for desktop/Android
+      if (!useCSSAnimation) {
+        try {
+          const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+          if (!audioContextRef.current) {
+            audioContextRef.current = new AudioCtx()
+          }
+          const ctx = audioContextRef.current
+          if (ctx.state === 'suspended') {
+            ctx.resume()
+          }
+
+          if (!analyserRef.current) {
+            analyserRef.current = ctx.createAnalyser()
+            analyserRef.current.fftSize = 256
+            analyserRef.current.smoothingTimeConstant = 0.75
+          }
+
+          if (!sourceRef.current) {
+            sourceRef.current = ctx.createMediaElementSource(audio)
+            sourceRef.current.connect(analyserRef.current)
+            analyserRef.current.connect(ctx.destination)
+          }
+
+          const analyser = analyserRef.current
+          const bufferLength = analyser.frequencyBinCount
+          const dataArray = new Uint8Array(bufferLength)
+
+          const update = () => {
+            analyser.getByteFrequencyData(dataArray)
+            const mapped = []
+            for (let i = 0; i < BAR_COUNT; i++) {
+              let idx
+              if (i < 8) {
+                idx = Math.floor(i * 2)
+              } else if (i < 16) {
+                idx = 16 + Math.floor((i - 8) * 6)
+              } else {
+                idx = 64 + Math.floor((i - 16) * 4.5)
+              }
+              idx = Math.min(idx, bufferLength - 1)
+              mapped.push(dataArray[idx] / 255)
+            }
+            setAudioData(mapped)
+            animationFrameRef.current = requestAnimationFrame(update)
+          }
+          update()
+        } catch (e) {
+          console.log('Visualization error, using CSS fallback:', e)
+          setUseCSSAnimation(true)
+        }
+      }
     }
 
     const onPause = () => {
