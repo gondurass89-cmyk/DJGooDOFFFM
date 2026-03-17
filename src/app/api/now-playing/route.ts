@@ -3,11 +3,7 @@ import { NextResponse } from 'next/server'
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
 
-// RadioBoss API via LocalTunnel (primary source)
-const RADIOBOSS_API_URL = 'https://wide-cobras-brush.loca.lt/'
-const RADIOBOSS_PASSWORD = 'bG0SNPLXIl'
-
-// Icecast fallback (secondary source)
+// Icecast status page (primary source)
 const ICECAST_STATUS_URL = 'http://s0.radioheart.ru:8000/status.xsl'
 const MOUNT_POINT = 'RH84200'
 
@@ -60,77 +56,7 @@ function cleanTrackTitle(title: string): string {
   return cleaned || title
 }
 
-// Parse XML from RadioBoss playbackinfo
-function parseRadioBossXML(xml: string): string {
-  try {
-    // Extract CurrentTrack TRACK element
-    const trackMatch = xml.match(/<CurrentTrack>[\s\S]*?<TRACK\s+([^>]*)\/>/i)
-    if (!trackMatch) {
-      console.log('No CurrentTrack found in XML')
-      return ''
-    }
-    
-    const trackAttrs = trackMatch[1]
-    
-    // Try CASTTITLE first (has full Artist - Title info)
-    const castTitleMatch = trackAttrs.match(/CASTTITLE="([^"]*)"/i)
-    
-    // Also try TITLE as fallback
-    const titleMatch = trackAttrs.match(/TITLE="([^"]*)"/i)
-    
-    // Prefer CASTTITLE as it has complete info
-    if (castTitleMatch) {
-      const castTitle = castTitleMatch[1].replace(/&#39;/g, "'").trim()
-      if (castTitle) return castTitle
-    }
-    
-    // Fallback to TITLE
-    if (titleMatch) {
-      const title = titleMatch[1].replace(/&#39;/g, "'").trim()
-      if (title) return title
-    }
-    
-    return ''
-  } catch (error) {
-    console.error('Error parsing RadioBoss XML:', error)
-    return ''
-  }
-}
-
-// Fetch from RadioBoss API (via Cloudflare tunnel)
-async function fetchFromRadioBoss(): Promise<string | null> {
-  try {
-    const url = `${RADIOBOSS_API_URL}?pass=${RADIOBOSS_PASSWORD}&action=playbackinfo`
-    
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(5000),
-      cache: 'no-store',
-    })
-    
-    if (!response.ok) {
-      console.log('RadioBoss API not available:', response.status)
-      return null
-    }
-    
-    const xml = await response.text()
-    console.log('RadioBoss XML received, length:', xml.length)
-    
-    const trackInfo = parseRadioBossXML(xml)
-    if (trackInfo) {
-      const cleaned = cleanTrackTitle(trackInfo)
-      console.log('RadioBoss track:', { raw: trackInfo, clean: cleaned })
-      return cleaned
-    }
-    
-    return null
-  } catch (error) {
-    console.log('RadioBoss API error (tunnel may be down):', error)
-    return null
-  }
-}
-
-// Fetch from Icecast (fallback)
-async function fetchFromIcecast(): Promise<string> {
+async function fetchCurrentTrack(): Promise<string> {
   try {
     const response = await fetch(ICECAST_STATUS_URL, {
       signal: AbortSignal.timeout(5000),
@@ -156,27 +82,15 @@ async function fetchFromIcecast(): Promise<string> {
     if (playMatch && playMatch[1]) {
       const rawTitle = playMatch[1].trim()
       const cleanTitle = cleanTrackTitle(rawTitle)
-      console.log('Icecast track:', { raw: rawTitle, clean: cleanTitle })
+      console.log('Track:', { raw: rawTitle, clean: cleanTitle })
       return cleanTitle
     }
     
     return ''
   } catch (error) {
-    console.error('Icecast fetch error:', error)
+    console.error('Fetch error:', error)
     return ''
   }
-}
-
-async function fetchCurrentTrack(): Promise<string> {
-  // Try RadioBoss API first (has full track info with Cyrillic support)
-  const radioBossTrack = await fetchFromRadioBoss()
-  if (radioBossTrack) {
-    return radioBossTrack
-  }
-  
-  // Fallback to Icecast if RadioBoss tunnel is down
-  console.log('Falling back to Icecast...')
-  return await fetchFromIcecast()
 }
 
 export async function GET() {
