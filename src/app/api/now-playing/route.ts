@@ -10,6 +10,50 @@ const WORKER_URL = 'https://nowplaying.gondurass89.workers.dev'
 const ICECAST_STATUS_URL = 'http://s0.radioheart.ru:8000/status.xsl'
 const MOUNT_POINT = 'RH84200'
 
+// Clean track title from technical info
+function cleanTrackTitle(title: string): string {
+  if (!title) return ''
+  
+  let cleaned = title
+  
+  // Remove BOM and zero-width characters
+  cleaned = cleaned.replace(/^[\uFEFF\u200B\u200C\u200D]/g, '')
+  
+  // Remove Camelot key at START: "4A - " or "11B-"
+  cleaned = cleaned.replace(/^\d{1,2}[AB]\s*[-–—]\s*/gi, '')
+  
+  // Remove Energy level at START: "Energy 6 - " or "Energy 8 "
+  cleaned = cleaned.replace(/^Energy\s*\d{1,2}\s*[-–—]\s*/gi, '')
+  
+  // Remove Camelot key in middle/end: " - 5A" or "- 11B - "
+  cleaned = cleaned.replace(/\s*[-–—]\s*\d{1,2}[AB]\s*/gi, ' ')
+  
+  // Remove Energy level in middle/end
+  cleaned = cleaned.replace(/\s*[-–—]?\s*Energy\s*\d{1,2}\s*/gi, ' ')
+  
+  // Remove trailing BPM number: " - 115"
+  cleaned = cleaned.replace(/\s*[-–—]\s*\d+\s*$/g, '')
+  
+  // Remove "File" suffix (from RadioBoss recovery)
+  cleaned = cleaned.replace(/\s+File$/gi, '')
+  
+  // Remove websites in parentheses
+  cleaned = cleaned.replace(/\s*\([^)]*\.(com|ru|net|org|io)[^)]*\)\s*/gi, ' ')
+  
+  // Remove URLs
+  cleaned = cleaned.replace(/www\.\S+\.\S+/gi, '')
+  cleaned = cleaned.replace(/https?:\/\/\S+/gi, '')
+  
+  // Final cleanup
+  cleaned = cleaned
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s*[-–—]\s*$/g, '')
+    .replace(/^[\s\-–—:]+/, '')
+    .trim()
+  
+  return cleaned || title
+}
+
 // Fetch from Cloudflare Worker (RadioBoss sends track there)
 async function fetchFromWorker(): Promise<string | null> {
   try {
@@ -26,8 +70,9 @@ async function fetchFromWorker(): Promise<string | null> {
     const data = await response.json()
     
     if (data && data.title) {
-      console.log('Worker track:', data.title)
-      return data.title
+      const cleaned = cleanTrackTitle(data.title)
+      console.log('Worker track:', { raw: data.title, clean: cleaned })
+      return cleaned
     }
     
     return null
@@ -63,8 +108,9 @@ async function fetchFromIcecast(): Promise<string> {
     
     if (playMatch && playMatch[1]) {
       const title = playMatch[1].trim()
-      console.log('Icecast track:', title)
-      return title
+      const cleaned = cleanTrackTitle(title)
+      console.log('Icecast track:', { raw: title, clean: cleaned })
+      return cleaned
     }
     
     return ''
