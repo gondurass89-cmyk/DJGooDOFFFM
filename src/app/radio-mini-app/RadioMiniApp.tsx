@@ -242,6 +242,7 @@ export default function RadioMiniApp() {
   const realModeCheckRef = useRef<boolean>(false)             // Флаг: проверка REAL MODE выполнена
   const fallbackModeRef = useRef<boolean>(false)              // Флаг: активен FALLBACK MODE
   const realModeCheckCountRef = useRef<number>(0)             // Счётчик кадров для проверки
+  const isPlayingRef = useRef<boolean>(false)                 // Флаг воспроизведения (для анимации)
   
   // Константа сглаживания для визуализатора
   const SMOOTHING_FACTOR = 0.25
@@ -292,6 +293,24 @@ export default function RadioMiniApp() {
     updateDiagnostics({ audioContextState: ctx.state })
     return ctx
   }, [updateDiagnostics])
+
+  // =====================================================
+  // ОСТАНОВКА ВИЗУАЛИЗАЦИИ
+  // =====================================================
+  
+  /**
+   * Останавливает визуализацию
+   */
+  const stopVisualization = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)         // Отменяем кадр
+      animationFrameRef.current = null
+    }
+    smoothedBarsRef.current = new Array(24).fill(0)          // Сбрасываем сглаживание
+    const canvas = canvasRef.current
+    const ctx = canvas?.getContext('2d')
+    if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height) // Очищаем canvas
+  }, [])
 
   // =====================================================
   // ВИЗУАЛИЗАТОР - REAL MODE (частотный анализ)
@@ -468,17 +487,23 @@ export default function RadioMiniApp() {
 
   /**
    * Визуализация FALLBACK MODE - декоративная анимация
-   * Используется ТОЛЬКО если REAL MODE не работает
+   * Используется на iOS и если REAL MODE не работает
    */
   const visualizeFallback = useCallback(() => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
-    if (!canvas || !ctx) return
+    if (!canvas || !ctx) {
+      console.log('[VISUALIZER] FALLBACK: canvas или ctx недоступны')
+      return
+    }
+    
+    console.log('[VISUALIZER] FALLBACK: Запуск анимации')
     
     // Функция анимации
     const animate = () => {
-      // Проверяем, что воспроизведение активно
-      if (!isPlaying) {
+      // Проверяем, что воспроизведение активно через ref (не state!)
+      if (!isPlayingRef.current) {
+        console.log('[VISUALIZER] FALLBACK: Остановка - isPlayingRef = false')
         stopVisualization()
         return
       }
@@ -525,17 +550,23 @@ export default function RadioMiniApp() {
       animationFrameRef.current = requestAnimationFrame(animate)
     }
     
+    // Запускаем анимацию
     animate()
-  }, [isPlaying])
+  }, [stopVisualization])
 
   /**
    * Запускает визуализацию в зависимости от режима
    */
   const startVisualization = useCallback(() => {
-    if (animationFrameRef.current) return                    // Уже запущена
+    if (animationFrameRef.current) {
+      console.log('[VISUALIZER] Уже запущен, пропуск')
+      return                    // Уже запущена
+    }
+    
+    console.log('[VISUALIZER] startVisualization вызван, fallbackMode:', fallbackModeRef.current)
     
     if (fallbackModeRef.current) {
-      // FALLBACK MODE - декоративная анимация
+      // FALLBACK MODE - декоративная анимация (iOS и др.)
       console.log('[VISUALIZER] Запуск FALLBACK режима')
       visualizeFallback()
     } else {
@@ -544,20 +575,6 @@ export default function RadioMiniApp() {
       visualizeReal()
     }
   }, [visualizeReal, visualizeFallback])
-
-  /**
-   * Останавливает визуализацию
-   */
-  const stopVisualization = useCallback(() => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current)         // Отменяем кадр
-      animationFrameRef.current = null
-    }
-    smoothedBarsRef.current = new Array(24).fill(0)          // Сбрасываем сглаживание
-    const canvas = canvasRef.current
-    const ctx = canvas?.getContext('2d')
-    if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height) // Очищаем canvas
-  }, [])
 
   // =====================================================
   // ЭКВАЛАЙЗЕР - REAL MODE
@@ -678,10 +695,15 @@ export default function RadioMiniApp() {
       addEventToHistory('playing')
       updateDiagnostics({ audioState: 'playing', lastError: '', errorCode: null })
       setIsPlaying(true)
+      isPlayingRef.current = true                                // Обновляем ref для анимации
       setIsLoading(false)
       setBuffering(false)
       setError(null)
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
+      // Запускаем визуализацию после того как воспроизведение началось
+      // Это гарантирует что isPlayingRef.current = true
+      console.log('[AUDIO] onPlaying: запуск визуализатора')
+      startVisualization()
     }
     
     // Событие: воспроизведение на паузе
@@ -689,6 +711,7 @@ export default function RadioMiniApp() {
       addEventToHistory('pause')
       updateDiagnostics({ audioState: 'paused' })
       setIsPlaying(false)
+      isPlayingRef.current = false                               // Обновляем ref для анимации
       stopVisualization()
     }
     
@@ -797,7 +820,7 @@ export default function RadioMiniApp() {
       stopVisualization()
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
-  }, [stopVisualization, updateDiagnostics, addEventToHistory])
+  }, [stopVisualization, updateDiagnostics, addEventToHistory, startVisualization])
 
   // =====================================================
   // УПРАВЛЕНИЕ ГРОМКОСТЬЮ
@@ -1047,6 +1070,7 @@ export default function RadioMiniApp() {
     // Если уже играем - ставим на паузу
     if (isPlaying) {
       audio.pause()
+      isPlayingRef.current = false                            // Обновляем ref
       registerListener('close')
       return
     }
@@ -1114,8 +1138,7 @@ export default function RadioMiniApp() {
             console.log('[PLAY] WebAudio цепь создана успешно')
             updateDiagnostics({ webAudioMode: 'real' })
             
-            // Запускаем визуализацию REAL MODE
-            startVisualization()
+            // Визуализатор запустится в событии 'playing'
             
             // Запускаем проверку REAL MODE после небольшой задержки
             setTimeout(() => {
@@ -1153,14 +1176,15 @@ export default function RadioMiniApp() {
           updateDiagnostics({ webAudioMode: 'fallback' })
         }
       } else {
-        console.log('[PLAY] Уже в FALLBACK режиме - запуск декоративной визуализации')
+        console.log('[PLAY] Уже в FALLBACK режиме - визуализатор запустится в событии playing')
         updateDiagnostics({ webAudioMode: 'fallback' })
-        startVisualization()                                  // Запускаем fallback визуализацию
+        // Визуализатор запустится в событии 'playing' через onPlaying
       }
       
       // Запускаем воспроизведение
       console.log('[PLAY] Calling audio.play()')
       await audio.play()
+      isPlayingRef.current = true                             // Устанавливаем ref до события 'playing'
       console.log('[PLAY] audio.play() resolved successfully!')
       
     } catch (err: any) {
