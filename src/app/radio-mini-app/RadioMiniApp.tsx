@@ -1057,6 +1057,16 @@ export default function RadioMiniApp() {
     const isIOS = isIOSRef.current
     console.log('[PLAY] === START === iOS:', isIOS, 'Fallback mode:', fallbackModeRef.current)
     
+    // =====================================================
+    // НА IOS СРАЗУ ИСПОЛЬЗУЕМ FALLBACK РЕЖИМ
+    // WebAudio + бесконечный MP3 поток + WKWebView = проблемы
+    // =====================================================
+    if (isIOS) {
+      console.log('[PLAY] iOS detected - using FALLBACK mode immediately')
+      fallbackModeRef.current = true
+      updateDiagnostics({ webAudioMode: 'fallback', eqActive: false, realModeConfirmed: false })
+    }
+    
     // Устанавливаем таймаут загрузки
     timeoutRef.current = setTimeout(() => {
       if (isLoading && !isPlaying) {
@@ -1080,18 +1090,18 @@ export default function RadioMiniApp() {
       }
       
       // =====================================================
-      // REAL-FIRST ARCHITECTURE
-      // Всегда пытаемся создать WebAudio граф первым делом
+      // REAL-FIRST ARCHITECTURE (только для НЕ iOS)
+      // На iOS уже установлен fallback mode
       // =====================================================
       
-      // Проверяем, не находимся ли мы уже в fallback режиме
+      // Проверяем, не находимся ли мы уже в fallback режиме (или iOS)
       if (!fallbackModeRef.current) {
-        console.log('[PLAY] Попытка REAL MODE')
+        console.log('[PLAY] Попытка REAL MODE (не iOS)')
         
         // Создаём AudioContext если нужно
         const ctx = getAudioContext()
         if (ctx) {
-          // Resume если suspended (требуется user gesture на iOS)
+          // Resume если suspended (требуется user gesture)
           if (ctx.state === 'suspended') {
             await ctx.resume()
             updateDiagnostics({ audioContextState: ctx.state })
@@ -1143,8 +1153,9 @@ export default function RadioMiniApp() {
           updateDiagnostics({ webAudioMode: 'fallback' })
         }
       } else {
-        console.log('[PLAY] Уже в FALLBACK режиме')
+        console.log('[PLAY] Уже в FALLBACK режиме - запуск декоративной визуализации')
         updateDiagnostics({ webAudioMode: 'fallback' })
+        startVisualization()                                  // Запускаем fallback визуализацию
       }
       
       // Запускаем воспроизведение
@@ -1269,8 +1280,8 @@ export default function RadioMiniApp() {
             transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
           />
           
-          {/* Визуализатор */}
-          <div className="skeuo-card rounded-xl p-2 mb-3">
+          {/* Визуализатор - на iOS показываем декоративную анимацию, на других платформах - реальный анализ частот */}
+          <div className="skeuo-card rounded-xl p-2 mb-3 relative">
             {/* Индикатор LIVE */}
             <AnimatePresence>
               {isPlaying && (
@@ -1290,19 +1301,29 @@ export default function RadioMiniApp() {
               )}
             </AnimatePresence>
             
-            {/* Canvas визуализатора */}
+            {/* Canvas визуализатора - работает везде, но на iOS это декоративная анимация */}
             <canvas ref={canvasRef} width={280} height={60} className="w-full rounded" style={{ background: 'transparent' }} />
             
-            {/* Подписи секций */}
-            <div className="flex justify-between mt-1.5 px-1">
-              <span className="text-xs font-medium" style={{ color: COLORS.bass }}>BASS</span>
-              <span className="text-xs font-medium" style={{ color: COLORS.mid }}>MID</span>
-              <span className="text-xs font-medium" style={{ color: COLORS.high }}>TREBLE</span>
-            </div>
+            {/* Подписи секций - скрываем на iOS так как визуализатор декоративный */}
+            {!isIOSDevice && (
+              <div className="flex justify-between mt-1.5 px-1">
+                <span className="text-xs font-medium" style={{ color: COLORS.bass }}>BASS</span>
+                <span className="text-xs font-medium" style={{ color: COLORS.mid }}>MID</span>
+                <span className="text-xs font-medium" style={{ color: COLORS.high }}>TREBLE</span>
+              </div>
+            )}
+            
+            {/* На iOS показываем что визуализатор декоративный */}
+            {isIOSDevice && isPlaying && (
+              <div className="text-xs text-center mt-1" style={{ color: COLORS.text, opacity: 0.7 }}>
+                🎵 Визуализация
+              </div>
+            )}
           </div>
           
-          {/* Эквалайзер - показываем если (не iOS) ИЛИ (iOS но REAL MODE работает) */}
-          {(!isIOSDevice || isRealModeActive) && !isFallbackActive && (
+          {/* Эквалайзер - ПОКАЗЫВАЕМ ТОЛЬКО НА НЕ-iOS ИЛИ ЕСЛИ REAL MODE ПОДТВЕРЖДЁН */}
+          {/* На iOS EQ недоступен из-за ограничений WebAudio с бесконечным потоком */}
+          {!isIOSDevice && !isFallbackActive && (
             <div className="skeuo-card rounded-xl p-2 mb-3">
               <div className="text-xs text-center mb-2" style={{ color: COLORS.secondary }}>
                 Эквалайзер {isRealModeActive ? '✓ REAL' : ''}
@@ -1419,35 +1440,43 @@ export default function RadioMiniApp() {
             </motion.button>
           </div>
           
-          {/* Регулятор громкости */}
-          <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-xl skeuo-card">
-            <button
-              onClick={() => setIsMuted(!isMuted)}
-              className="p-1.5 rounded-lg"
-              style={{ background: 'rgba(255,255,255,0.05)' }}
-            >
-              {isMuted ? (
-                <VolumeX className="w-4 h-4" style={{ color: '#666' }} />
-              ) : (
-                <Volume2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
-              )}
-            </button>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={isMuted ? 0 : volume}
-              onChange={(e) => {
-                const v = parseInt(e.target.value, 10)
-                setVolume(v)
-                if (v > 0) setIsMuted(false)
-              }}
-              className="volume-slider flex-1 cursor-pointer"
-            />
-            <span className="text-xs w-8 text-right" style={{ color: COLORS.secondary }}>
-              {isMuted ? 0 : volume}%
-            </span>
-          </div>
+          {/* Регулятор громкости - только для НЕ iOS */}
+          {/* На iOS управление громкостью осуществляется кнопками телефона */}
+          {!isIOSDevice ? (
+            <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-xl skeuo-card">
+              <button
+                onClick={() => setIsMuted(!isMuted)}
+                className="p-1.5 rounded-lg"
+                style={{ background: 'rgba(255,255,255,0.05)' }}
+              >
+                {isMuted ? (
+                  <VolumeX className="w-4 h-4" style={{ color: '#666' }} />
+                ) : (
+                  <Volume2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
+                )}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={isMuted ? 0 : volume}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10)
+                  setVolume(v)
+                  if (v > 0) setIsMuted(false)
+                }}
+                className="volume-slider flex-1 cursor-pointer"
+              />
+              <span className="text-xs w-8 text-right" style={{ color: COLORS.secondary }}>
+                {isMuted ? 0 : volume}%
+              </span>
+            </div>
+          ) : (
+            /* На iOS показываем подсказку об управлении громкостью */
+            <div className="text-xs text-center mb-3 p-2 rounded-xl skeuo-card" style={{ color: COLORS.text }}>
+              🍎 Управляйте громкостью кнопками телефона
+            </div>
+          )}
           
           {/* Панель диагностики */}
           <div className="mb-3">
