@@ -7,7 +7,7 @@ import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Slide
 const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
-const LISTENERS_API = '/api/listener'
+const LISTENERS_API = 'https://listeners.gondurass89.workers.dev'
 const NOW_PLAYING_API = '/api/now-playing'
 
 const COLORS = {
