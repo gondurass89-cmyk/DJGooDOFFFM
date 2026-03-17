@@ -6,22 +6,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi } from 'lucide-react'
+import Hls from 'hls.js'
 
 // =====================================================
 // КОНСТАНТЫ ПОТОКОВ
 // =====================================================
-// Основной URL потока для ПК и Android
-const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
 
-// Отдельный URL потока для iOS (можно заменить на HLS .m3u8 при необходимости)
-// Для HLS: 'https://ваш-сервер/stream.m3u8'
-const IOS_STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
+// Основной MP3 поток для ПК и Android
+const MP3_STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
 
-// Альтернативный HLS поток для iOS (если понадобится)
-// const IOS_HLS_URL = 'https://ваш-сервер/stream.m3u8'
+// HLS поток для iOS (RadioHeart обычно предоставляет HLS)
+// Формат: https://s0.radioheart.ru:8000/RH84200.m3u8
+// Или через listen.myrh.ru: https://listen.myrh.ru/id084868.m3u8
+const HLS_STREAM_URL = 'https://s0.radioheart.ru:8000/RH84200.m3u8'
 
-// Включить ли использование HLS для iOS (true = использовать HLS, false = использовать IOS_STREAM_URL)
-const USE_HLS_FOR_IOS = false
+// Альтернативные HLS URL (можно переключать)
+// const HLS_STREAM_URL_ALT = 'https://listen.myrh.ru/id084868.m3u8'
 
 // =====================================================
 // ДРУГИЕ КОНСТАНТЫ
@@ -48,28 +48,20 @@ const ADMIN_USER_ID = 55068554
 // ТИПЫ ДЛЯ ДИАГНОСТИКИ
 // =====================================================
 interface DiagnosticInfo {
-  // Статус аудио элемента
-  audioState: string // 'idle' | 'loading' | 'playing' | 'paused' | 'error'
-  // Состояние AudioContext
-  audioContextState: string // 'suspended' | 'running' | 'closed'
-  // Текущий URL потока
+  audioState: string
+  audioContextState: string
   currentStreamUrl: string
-  // Последняя ошибка
   lastError: string
-  // Код ошибки (если есть)
   errorCode: number | null
-  // Платформа
   platform: string
-  // Является ли iOS
   isIOS: boolean
-  // networkState аудио
   networkState: string
-  // readyState аудио
   readyState: string
-  // Время последнего события
   lastEvent: string
-  // История событий (последние 10)
   eventHistory: string[]
+  streamType: string // 'MP3' или 'HLS'
+  hlsSupported: boolean
+  hlsState: string
 }
 
 // =====================================================
@@ -106,19 +98,13 @@ declare global {
 
 // Функция определения iOS
 function detectIOS(): boolean {
-  // Проверка через userAgent
   const ua = navigator.userAgent
   const isIPad = /iPad/i.test(ua)
   const isIPhone = /iPhone/i.test(ua)
   const isIPod = /iPod/i.test(ua)
-  
-  // Дополнительная проверка для iPad на iOS 13+ (они представляются как Mac)
   const isIPadModern = /Macintosh/i.test(ua) && navigator.maxTouchPoints && navigator.maxTouchPoints > 1
-  
-  // Проверка через Telegram WebApp platform
   const tgPlatform = window.Telegram?.WebApp?.platform || ''
   const isTgIOS = tgPlatform === 'ios'
-  
   return isIPad || isIPhone || isIPod || isIPadModern || isTgIOS
 }
 
@@ -126,33 +112,26 @@ function detectIOS(): boolean {
 function getPlatformName(): string {
   const ua = navigator.userAgent
   const tgPlatform = window.Telegram?.WebApp?.platform || ''
-  
-  if (tgPlatform) {
-    // Возвращаем платформу Telegram
-    return `Telegram/${tgPlatform}`
-  }
-  
+  if (tgPlatform) return `Telegram/${tgPlatform}`
   if (/iPhone/i.test(ua)) return 'iPhone'
   if (/iPad/i.test(ua)) return 'iPad'
   if (/Android/i.test(ua)) return 'Android'
   if (/Mac/i.test(ua)) return 'Mac'
   if (/Win/i.test(ua)) return 'Windows'
   if (/Linux/i.test(ua)) return 'Linux'
-  
   return 'Unknown'
 }
 
 // Функция расшифровки кода ошибки аудио
 function getAudioErrorMessage(error: MediaError | null): string {
   if (!error) return 'Нет ошибки'
-  
   switch (error.code) {
     case MediaError.MEDIA_ERR_ABORTED:
-      return 'MEDIA_ERR_ABORTED (1): Воспроизведение отменено пользователем'
+      return 'MEDIA_ERR_ABORTED (1): Воспроизведение отменено'
     case MediaError.MEDIA_ERR_NETWORK:
-      return 'MEDIA_ERR_NETWORK (2): Ошибка сети при загрузке'
+      return 'MEDIA_ERR_NETWORK (2): Ошибка сети'
     case MediaError.MEDIA_ERR_DECODE:
-      return 'MEDIA_ERR_DECODE (3): Ошибка декодирования аудио'
+      return 'MEDIA_ERR_DECODE (3): Ошибка декодирования - iOS требует HLS!'
     case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
       return 'MEDIA_ERR_SRC_NOT_SUPPORTED (4): Формат не поддерживается'
     default:
@@ -190,18 +169,18 @@ export default function RadioMiniApp() {
   // =====================================================
   // СОСТОЯНИЯ КОМПОНЕНТА
   // =====================================================
-  const [isPlaying, setIsPlaying] = useState(false) // Играет ли радио
-  const [isLoading, setIsLoading] = useState(false) // Идёт ли загрузка
-  const [volume, setVolume] = useState(100) // Громкость (0-100)
-  const [isMuted, setIsMuted] = useState(false) // Приглушён ли звук
-  const [currentTrack, setCurrentTrack] = useState('Загрузка...') // Текущий трек
-  const [listeners, setListeners] = useState(0) // Количество слушателей
-  const [isTgReady, setIsTgReady] = useState(false) // Инициализирован ли Telegram
-  const [error, setError] = useState<string | null>(null) // Ошибка для отображения
-  const [buffering, setBuffering] = useState(false) // Идёт ли буферизация
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [volume, setVolume] = useState(100)
+  const [isMuted, setIsMuted] = useState(false)
+  const [currentTrack, setCurrentTrack] = useState('Загрузка...')
+  const [listeners, setListeners] = useState(0)
+  const [isTgReady, setIsTgReady] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [buffering, setBuffering] = useState(false)
   
-  // Состояние для диагностической панели
-  const [showDiagnostics, setShowDiagnostics] = useState(true) // Показывать панель диагностики
+  // Диагностика
+  const [showDiagnostics, setShowDiagnostics] = useState(true)
   const [diagnostics, setDiagnostics] = useState<DiagnosticInfo>({
     audioState: 'idle',
     audioContextState: 'none',
@@ -214,167 +193,123 @@ export default function RadioMiniApp() {
     readyState: '',
     lastEvent: '',
     eventHistory: [],
+    streamType: 'none',
+    hlsSupported: false,
+    hlsState: 'none',
   })
 
   // =====================================================
-  // REFS (ССЫЛКИ НА ЭЛЕМЕНТЫ)
+  // REFS
   // =====================================================
-  const audioRef = useRef<HTMLAudioElement | null>(null) // Аудио элемент
-  const audioContextRef = useRef<AudioContext | null>(null) // AudioContext
-  const analyserRef = useRef<AnalyserNode | null>(null) // Анализатор частот
-  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null) // Источник аудио
-  const canvasRef = useRef<HTMLCanvasElement | null>(null) // Canvas для визуализатора
-  const animationFrameRef = useRef<number | null>(null) // ID кадра анимации
-  const isSourceConnectedRef = useRef(false) // Подключён ли источник
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null) // Таймаут загрузки
-  const smoothedValuesRef = useRef({ bass: 0, mid: 0, high: 0 }) // Сглаженные значения
-  const isIOSRef = useRef(false) // Кэш определения iOS
-  const eventHistoryRef = useRef<string[]>([]) // История событий
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
+  const isSourceConnectedRef = useRef(false)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const smoothedValuesRef = useRef({ bass: 0, mid: 0, high: 0 })
+  const isIOSRef = useRef(false)
+  const eventHistoryRef = useRef<string[]>([])
+  const hlsRef = useRef<Hls | null>(null)
   
-  // Константа сглаживания для визуализатора
   const SMOOTHING_FACTOR = 0.3
 
   // =====================================================
-  // ФУНКЦИЯ ОБНОВЛЕНИЯ ДИАГНОСТИКИ
+  // ФУНКЦИИ ДИАГНОСТИКИ
   // =====================================================
   const updateDiagnostics = useCallback((update: Partial<DiagnosticInfo>) => {
     setDiagnostics(prev => ({ ...prev, ...update }))
   }, [])
 
-  // =====================================================
-  // ФУНКЦИЯ ДОБАВЛЕНИЯ СОБЫТИЯ В ИСТОРИЮ
-  // =====================================================
   const addEventToHistory = useCallback((event: string) => {
     const timestamp = new Date().toLocaleTimeString()
     const entry = `[${timestamp}] ${event}`
-    
-    // Добавляем в локальный ref
     eventHistoryRef.current = [...eventHistoryRef.current.slice(-9), entry]
-    
-    // Обновляем состояние
     updateDiagnostics({
       lastEvent: entry,
       eventHistory: eventHistoryRef.current,
     })
-    
-    // Также выводим в консоль
     console.log(`[AUDIO EVENT] ${entry}`)
   }, [updateDiagnostics])
 
   // =====================================================
-  // ФУНКЦИЯ ПОЛУЧЕНИЯ/СОЗДАНИЯ AUDIOCONTEXT
+  // AUDIOCONTEXT
   // =====================================================
   const getAudioContext = useCallback(() => {
-    // Если уже создан - возвращаем существующий
-    if (audioContextRef.current) {
-      return audioContextRef.current
-    }
-    
-    // Получаем класс AudioContext (с префиксом webkit для старых Safari)
+    if (audioContextRef.current) return audioContextRef.current
     const AudioContextClass = window.AudioContext || window.webkitAudioContext
-    
     if (!AudioContextClass) {
-      console.error('[AUDIO] AudioContext не поддерживается браузером')
+      console.error('[AUDIO] AudioContext не поддерживается')
       return null
     }
-    
-    // Создаём новый AudioContext
     const ctx = new AudioContextClass()
     audioContextRef.current = ctx
-    
-    console.log('[AUDIO] AudioContext создан, начальное состояние:', ctx.state)
-    
-    // Обновляем диагностику
+    console.log('[AUDIO] AudioContext создан, состояние:', ctx.state)
     updateDiagnostics({ audioContextState: ctx.state })
-    
     return ctx
   }, [updateDiagnostics])
 
   // =====================================================
-  // ФУНКЦИЯ РАСЧЁТА ЭНЕРГИИ ЧАСТОТНОГО ДИАПАЗОНА
+  // ВИЗУАЛИЗАТОР
   // =====================================================
   const getFrequencyEnergy = useCallback((
-    dataArray: Uint8Array,      // Массив частотных данных
-    sampleRate: number,          // Частота дискретизации
-    fftSize: number,             // Размер FFT
-    lowFreq: number,             // Нижняя частота диапазона
-    highFreq: number             // Верхняя частота диапазона
+    dataArray: Uint8Array,
+    sampleRate: number,
+    fftSize: number,
+    lowFreq: number,
+    highFreq: number
   ): number => {
-    // Количество бинов = fftSize / 2
     const binCount = fftSize / 2
-    
-    // Частота на один бин
     const frequencyPerBin = sampleRate / fftSize
-    
-    // Вычисляем индексы бинов для диапазона
     const lowBin = Math.floor(lowFreq / frequencyPerBin)
     const highBin = Math.min(Math.floor(highFreq / frequencyPerBin), binCount - 1)
-    
-    // Суммируем значения в диапазоне
-    let sum = 0
-    let count = 0
-    
+    let sum = 0, count = 0
     for (let i = lowBin; i <= highBin; i++) {
       sum += dataArray[i]
       count++
     }
-    
-    // Возвращаем нормализованное значение (0-1)
     return count > 0 ? (sum / count) / 255 : 0
   }, [])
 
-  // =====================================================
-  // ФУНКЦИЯ СГЛАЖИВАНИЯ ЗНАЧЕНИЙ
-  // =====================================================
   const smoothValue = useCallback((current: number, previous: number): number => {
     return previous + (current - previous) * SMOOTHING_FACTOR
   }, [])
 
-  // =====================================================
-  // ФУНКЦИЯ ВИЗУАЛИЗАЦИИ (ОСНОВНОЙ ЦИКЛ)
-  // =====================================================
   const visualize = useCallback(() => {
     const analyser = analyserRef.current
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
     
-    // Если нет анализатора или canvas - пропускаем кадр
     if (!analyser || !canvas || !ctx) {
       animationFrameRef.current = requestAnimationFrame(visualize)
       return
     }
     
-    // Получаем частотные данные
     const bufferLength = analyser.frequencyBinCount
     const dataArray = new Uint8Array(bufferLength)
     analyser.getByteFrequencyData(dataArray)
     
-    // Параметры анализатора
     const sampleRate = analyser.context.sampleRate
     const fftSize = analyser.fftSize
     
-    // Вычисляем энергию для трёх диапазонов
     const bassEnergy = getFrequencyEnergy(dataArray, sampleRate, fftSize, 20, 250)
     const midEnergy = getFrequencyEnergy(dataArray, sampleRate, fftSize, 250, 4000)
     const highEnergy = getFrequencyEnergy(dataArray, sampleRate, fftSize, 4000, 16000)
     
-    // Сглаживаем значения
     smoothedValuesRef.current.bass = smoothValue(bassEnergy, smoothedValuesRef.current.bass)
     smoothedValuesRef.current.mid = smoothValue(midEnergy, smoothedValuesRef.current.mid)
     smoothedValuesRef.current.high = smoothValue(highEnergy, smoothedValuesRef.current.high)
     
-    // Рисуем на canvas
     const width = canvas.width
     const height = canvas.height
-    
-    // Очищаем canvas
     ctx.clearRect(0, 0, width, height)
     
-    // Параметры столбцов
     const barWidth = width / 3 - 8
     const gap = 12
     
-    // === BASS столбец ===
+    // BASS
     const bassHeight = smoothedValuesRef.current.bass * (height - 10) + 4
     const bassGradient = ctx.createLinearGradient(0, height, 0, height - bassHeight)
     bassGradient.addColorStop(0, COLORS.bass)
@@ -384,7 +319,7 @@ export default function RadioMiniApp() {
     ctx.roundRect(gap, height - bassHeight, barWidth, bassHeight, 4)
     ctx.fill()
     
-    // === MID столбец ===
+    // MID
     const midHeight = smoothedValuesRef.current.mid * (height - 10) + 4
     const midGradient = ctx.createLinearGradient(0, height, 0, height - midHeight)
     midGradient.addColorStop(0, COLORS.mid)
@@ -394,7 +329,7 @@ export default function RadioMiniApp() {
     ctx.roundRect(barWidth + gap * 2, height - midHeight, barWidth, midHeight, 4)
     ctx.fill()
     
-    // === HIGH столбец ===
+    // HIGH
     const highHeight = smoothedValuesRef.current.high * (height - 10) + 4
     const highGradient = ctx.createLinearGradient(0, height, 0, height - highHeight)
     highGradient.addColorStop(0, COLORS.high)
@@ -404,87 +339,53 @@ export default function RadioMiniApp() {
     ctx.roundRect(barWidth * 2 + gap * 3, height - highHeight, barWidth, highHeight, 4)
     ctx.fill()
     
-    // Запрашиваем следующий кадр
     animationFrameRef.current = requestAnimationFrame(visualize)
   }, [getFrequencyEnergy, smoothValue])
 
-  // =====================================================
-  // ФУНКЦИЯ ЗАПУСКА ВИЗУАЛИЗАТОРА
-  // =====================================================
   const startVisualization = useCallback(() => {
-    // Если уже запущен - не перезапускаем
-    if (animationFrameRef.current) {
-      return
-    }
-    
+    if (animationFrameRef.current) return
     console.log('[VIS] Запуск визуализатора')
     visualize()
   }, [visualize])
 
-  // =====================================================
-  // ФУНКЦИЯ ОСТАНОВКИ ВИЗУАЛИЗАТОРА
-  // =====================================================
   const stopVisualization = useCallback(() => {
-    // Отменяем анимацию
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current)
       animationFrameRef.current = null
       console.log('[VIS] Визуализатор остановлен')
     }
-    
-    // Сбрасываем сглаженные значения
     smoothedValuesRef.current = { bass: 0, mid: 0, high: 0 }
-    
-    // Очищаем canvas
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
-    if (canvas && ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-    }
+    if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
   }, [])
 
   // =====================================================
-  // ФУНКЦИЯ ПОДКЛЮЧЕНИЯ АУДИО К АНАЛИЗАТОРУ
+  // ПОДКЛЮЧЕНИЕ АНАЛИЗАТОРА
   // =====================================================
   const connectAudioToAnalyser = useCallback((): boolean => {
-    // Если уже подключено - не делаем повторно
     if (isSourceConnectedRef.current) {
-      console.log('[AUDIO] Source уже подключен к анализатору')
+      console.log('[AUDIO] Source уже подключен')
       return true
     }
-    
     const audio = audioRef.current
-    if (!audio) {
-      console.error('[AUDIO] Нет аудио элемента для подключения')
-      return false
-    }
-    
+    if (!audio) return false
     const ctx = getAudioContext()
-    if (!ctx) {
-      console.error('[AUDIO] Нет AudioContext для подключения')
-      return false
-    }
+    if (!ctx) return false
     
     try {
-      // Создаём анализатор
       const analyser = ctx.createAnalyser()
-      analyser.fftSize = 256 // Меньший размер для iOS совместимости
+      analyser.fftSize = 256
       analyser.smoothingTimeConstant = 0.8
-      
       analyserRef.current = analyser
       
-      // Создаём источник из аудио элемента (ТОЛЬКО ОДИН РАЗ!)
       const source = ctx.createMediaElementSource(audio)
       sourceNodeRef.current = source
-      
-      // Подключаем: source -> analyser -> destination
       source.connect(analyser)
       analyser.connect(ctx.destination)
-      
       isSourceConnectedRef.current = true
       
-      console.log('[AUDIO] Аудио подключено к анализатору, fftSize:', analyser.fftSize)
-      
+      console.log('[AUDIO] Аудио подключено к анализатору')
       return true
     } catch (e) {
       console.error('[AUDIO] Ошибка подключения анализатора:', e)
@@ -493,45 +394,41 @@ export default function RadioMiniApp() {
   }, [getAudioContext])
 
   // =====================================================
-  // ИНИЦИАЛИЗАЦИЯ АУДИО ЭЛЕМЕНТА (ОСНОВНОЙ USE EFFECT)
+  // ИНИЦИАЛИЗАЦИЯ АУДИО ЭЛЕМЕНТА
   // =====================================================
   useEffect(() => {
-    console.log('[AUDIO] === ИНИЦИАЛИЗАЦИЯ АУДИО ЭЛЕМЕНТА ===')
+    console.log('[AUDIO] === ИНИЦИАЛИЗАЦИЯ ===')
     
-    // Определяем iOS при первой загрузке
+    // Определяем iOS
     isIOSRef.current = detectIOS()
     const platformName = getPlatformName()
     
-    console.log('[AUDIO] Платформа:', platformName)
-    console.log('[AUDIO] iOS обнаружен:', isIOSRef.current)
+    console.log('[AUDIO] Platform:', platformName)
+    console.log('[AUDIO] iOS:', isIOSRef.current)
+    console.log('[AUDIO] HLS.js поддерживается:', Hls.isSupported())
     
-    // Обновляем диагностику
     updateDiagnostics({
       platform: platformName,
       isIOS: isIOSRef.current,
+      hlsSupported: Hls.isSupported(),
       audioState: 'idle',
       audioContextState: 'none',
+      streamType: 'none',
+      hlsState: 'none',
     })
     
     // Создаём аудио элемент
     const audio = new Audio()
-    audio.preload = 'none' // Не загружаем автоматически
-    audio.crossOrigin = 'anonymous' // Для CORS
+    audio.preload = 'none'
+    audio.crossOrigin = 'anonymous'
     audioRef.current = audio
     
-    console.log('[AUDIO] Аудио элемент создан')
-    
     // =====================================================
-    // ВСЕ ОБРАБОТЧИКИ СОБЫТИЙ АУДИО (ДЛЯ ДИАГНОСТИКИ)
+    // ОБРАБОТЧИКИ СОБЫТИЙ АУДИО
     // =====================================================
     
-    // --- loadstart ---
     const onLoadStart = () => {
-      console.log('[AUDIO EVENT] loadstart - Начало загрузки')
-      console.log('  -> currentSrc:', audio.currentSrc)
-      console.log('  -> networkState:', getNetworkStateName(audio.networkState))
-      console.log('  -> readyState:', getReadyStateName(audio.readyState))
-      
+      console.log('[AUDIO] loadstart')
       addEventToHistory('loadstart')
       updateDiagnostics({
         audioState: 'loading',
@@ -539,152 +436,98 @@ export default function RadioMiniApp() {
         networkState: getNetworkStateName(audio.networkState),
         readyState: getReadyStateName(audio.readyState),
       })
-      
       setIsLoading(true)
       setBuffering(true)
     }
     
-    // --- loadedmetadata ---
     const onLoadedMetadata = () => {
-      console.log('[AUDIO EVENT] loadedmetadata - Метаданные загружены')
-      console.log('  -> duration:', audio.duration)
-      console.log('  -> readyState:', getReadyStateName(audio.readyState))
-      
+      console.log('[AUDIO] loadedmetadata')
       addEventToHistory('loadedmetadata')
       updateDiagnostics({
         readyState: getReadyStateName(audio.readyState),
       })
     }
     
-    // --- loadeddata ---
     const onLoadedData = () => {
-      console.log('[AUDIO EVENT] loadeddata - Данные загружены')
-      console.log('  -> readyState:', getReadyStateName(audio.readyState))
-      
+      console.log('[AUDIO] loadeddata')
       addEventToHistory('loadeddata')
-      updateDiagnostics({
-        readyState: getReadyStateName(audio.readyState),
-      })
     }
     
-    // --- canplay ---
     const onCanPlay = () => {
-      console.log('[AUDIO EVENT] canplay - Можно воспроизводить')
-      console.log('  -> readyState:', getReadyStateName(audio.readyState))
-      console.log('  -> networkState:', getNetworkStateName(audio.networkState))
-      
+      console.log('[AUDIO] canplay')
       addEventToHistory('canplay')
       updateDiagnostics({
         audioState: 'ready',
         readyState: getReadyStateName(audio.readyState),
         networkState: getNetworkStateName(audio.networkState),
       })
-      
       setBuffering(false)
       setIsLoading(false)
     }
     
-    // --- canplaythrough ---
     const onCanPlayThrough = () => {
-      console.log('[AUDIO EVENT] canplaythrough - Можно воспроизводить без буферизации')
-      console.log('  -> readyState:', getReadyStateName(audio.readyState))
-      
+      console.log('[AUDIO] canplaythrough')
       addEventToHistory('canplaythrough')
     }
     
-    // --- play ---
     const onPlay = () => {
-      console.log('[AUDIO EVENT] play - Воспроизведение начато')
-      console.log('  -> currentTime:', audio.currentTime)
-      console.log('  -> paused:', audio.paused)
-      
+      console.log('[AUDIO] play')
       addEventToHistory('play')
     }
     
-    // --- playing ---
     const onPlaying = () => {
-      console.log('[AUDIO EVENT] playing - Аудио играет')
-      console.log('  -> currentTime:', audio.currentTime)
-      console.log('  -> readyState:', getReadyStateName(audio.readyState))
-      
+      console.log('[AUDIO] playing')
       addEventToHistory('playing')
       updateDiagnostics({
         audioState: 'playing',
         lastError: '',
         errorCode: null,
       })
-      
       setIsPlaying(true)
       setIsLoading(false)
       setBuffering(false)
       setError(null)
-      
-      // Очищаем таймаут
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
         timeoutRef.current = null
       }
     }
     
-    // --- pause ---
     const onPause = () => {
-      console.log('[AUDIO EVENT] pause - Воспроизведение приостановлено')
-      console.log('  -> currentTime:', audio.currentTime)
-      console.log('  -> ended:', audio.ended)
-      
+      console.log('[AUDIO] pause')
       addEventToHistory('pause')
-      updateDiagnostics({
-        audioState: 'paused',
-      })
-      
+      updateDiagnostics({ audioState: 'paused' })
       setIsPlaying(false)
       stopVisualization()
     }
     
-    // --- stalled ---
     const onStalled = () => {
-      console.log('[AUDIO EVENT] stalled - Загрузка остановлена')
-      console.log('  -> networkState:', getNetworkStateName(audio.networkState))
-      console.log('  -> readyState:', getReadyStateName(audio.readyState))
-      
+      console.log('[AUDIO] stalled')
       addEventToHistory('stalled')
       updateDiagnostics({
         networkState: getNetworkStateName(audio.networkState),
         readyState: getReadyStateName(audio.readyState),
       })
-      
       setBuffering(true)
     }
     
-    // --- waiting ---
     const onWaiting = () => {
-      console.log('[AUDIO EVENT] waiting - Ожидание данных')
-      console.log('  -> readyState:', getReadyStateName(audio.readyState))
-      console.log('  -> currentTime:', audio.currentTime)
-      
+      console.log('[AUDIO] waiting')
       addEventToHistory('waiting')
-      
       setBuffering(true)
       setIsLoading(true)
     }
     
-    // --- suspend ---
     const onSuspend = () => {
-      console.log('[AUDIO EVENT] suspend - Загрузка приостановлена браузером')
-      console.log('  -> networkState:', getNetworkStateName(audio.networkState))
-      
+      console.log('[AUDIO] suspend')
       addEventToHistory('suspend')
       updateDiagnostics({
         networkState: getNetworkStateName(audio.networkState),
       })
     }
     
-    // --- abort ---
     const onAbort = () => {
-      console.log('[AUDIO EVENT] abort - Загрузка отменена')
-      console.log('  -> networkState:', getNetworkStateName(audio.networkState))
-      console.log('  -> readyState:', getReadyStateName(audio.readyState))
-      
+      console.log('[AUDIO] abort')
       addEventToHistory('abort')
       updateDiagnostics({
         networkState: getNetworkStateName(audio.networkState),
@@ -692,13 +535,8 @@ export default function RadioMiniApp() {
       })
     }
     
-    // --- emptied ---
     const onEmptied = () => {
-      console.log('[AUDIO EVENT] emptied - Источник очищен')
-      console.log('  -> networkState:', getNetworkStateName(audio.networkState))
-      console.log('  -> readyState:', getReadyStateName(audio.readyState))
-      console.log('  -> currentSrc:', audio.currentSrc)
-      
+      console.log('[AUDIO] emptied')
       addEventToHistory('emptied')
       updateDiagnostics({
         networkState: getNetworkStateName(audio.networkState),
@@ -707,32 +545,24 @@ export default function RadioMiniApp() {
       })
     }
     
-    // --- error (КРИТИЧЕСКИ ВАЖНО) ---
     const onError = () => {
       const mediaError = audio.error
       const errorDetails = mediaError ? getAudioErrorMessage(mediaError) : 'Неизвестная ошибка'
       
-      console.error('[AUDIO EVENT] error - ОШИБКА ВОСПРОИЗВЕДЕНИЯ')
-      console.error('  -> error.code:', mediaError?.code)
-      console.error('  -> error.message:', mediaError?.message)
+      console.error('[AUDIO] ERROR')
+      console.error('  -> code:', mediaError?.code)
+      console.error('  -> message:', mediaError?.message)
       console.error('  -> Расшифровка:', errorDetails)
       console.error('  -> currentSrc:', audio.currentSrc)
       console.error('  -> networkState:', getNetworkStateName(audio.networkState))
       console.error('  -> readyState:', getReadyStateName(audio.readyState))
-      console.error('  -> src:', audio.src)
       
-      // Дополнительная информация для iOS
-      if (isIOSRef.current) {
-        console.error('  -> [iOS] Возможные причины:')
-        console.error('     1. Формат потока не поддерживается iOS Safari')
-        console.error('     2. Проблема с CORS заголовками сервера')
-        console.error('     3. Поток требует HLS (.m3u8) для iOS')
-        console.error('     4. Проблема с кодеком (iOS поддерживает только AAC/MP3)')
+      if (isIOSRef.current && mediaError?.code === MediaError.MEDIA_ERR_DECODE) {
+        console.error('  -> [iOS] MP3 поток НЕ поддерживается! Нужен HLS (.m3u8)')
       }
       
       addEventToHistory(`ERROR: ${errorDetails}`)
       
-      // Определяем сообщение об ошибке для пользователя
       let errorMsg = 'Ошибка воспроизведения'
       if (mediaError) {
         switch (mediaError.code) {
@@ -743,7 +573,7 @@ export default function RadioMiniApp() {
             errorMsg = 'Ошибка сети'
             break
           case MediaError.MEDIA_ERR_DECODE:
-            errorMsg = 'Ошибка декодирования аудио'
+            errorMsg = 'Ошибка декодирования (для iOS нужен HLS)'
             break
           case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
             errorMsg = 'Формат не поддерживается'
@@ -766,16 +596,13 @@ export default function RadioMiniApp() {
       setError(errorMsg)
       stopVisualization()
       
-      // Очищаем таймаут
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
         timeoutRef.current = null
       }
     }
     
-    // =====================================================
-    // ПОДПИСЫВАЕМСЯ НА ВСЕ СОБЫТИЯ
-    // =====================================================
+    // Подписываемся на события
     audio.addEventListener('loadstart', onLoadStart)
     audio.addEventListener('loadedmetadata', onLoadedMetadata)
     audio.addEventListener('loadeddata', onLoadedData)
@@ -791,38 +618,25 @@ export default function RadioMiniApp() {
     audio.addEventListener('emptied', onEmptied)
     audio.addEventListener('error', onError)
     
-    // =====================================================
-    // ОБРАБОТЧИК ИЗМЕНЕНИЯ ВИДИМОСТИ (ДЛЯ AUDIOCONTEXT)
-    // =====================================================
+    // Visibility change для AudioContext
     const onVisibilityChange = async () => {
       const ctx = audioContextRef.current
-      
-      console.log('[VISIBILITY] Состояние изменилось:', document.visibilityState)
-      
-      if (document.visibilityState === 'visible' && ctx) {
-        console.log('[VISIBILITY] Страница видима, состояние AudioContext:', ctx.state)
-        
-        if (ctx.state === 'suspended') {
-          try {
-            await ctx.resume()
-            console.log('[VISIBILITY] AudioContext возобновлён, состояние:', ctx.state)
-            updateDiagnostics({ audioContextState: ctx.state })
-          } catch (e) {
-            console.error('[VISIBILITY] Ошибка при resume AudioContext:', e)
-          }
+      console.log('[VISIBILITY]', document.visibilityState)
+      if (document.visibilityState === 'visible' && ctx && ctx.state === 'suspended') {
+        try {
+          await ctx.resume()
+          console.log('[VISIBILITY] AudioContext resumed')
+          updateDiagnostics({ audioContextState: ctx.state })
+        } catch (e) {
+          console.error('[VISIBILITY] Resume error:', e)
         }
       }
     }
-    
     document.addEventListener('visibilitychange', onVisibilityChange)
     
-    // =====================================================
-    // ФУНКЦИЯ ОЧИСТКИ ПРИ РАЗМОНТИРОВАНИИ
-    // =====================================================
+    // Очистка
     return () => {
-      console.log('[AUDIO] Размонтирование компонента, очистка...')
-      
-      // Удаляем все обработчики
+      console.log('[AUDIO] Размонтирование')
       audio.removeEventListener('loadstart', onLoadStart)
       audio.removeEventListener('loadedmetadata', onLoadedMetadata)
       audio.removeEventListener('loadeddata', onLoadedData)
@@ -837,22 +651,18 @@ export default function RadioMiniApp() {
       audio.removeEventListener('abort', onAbort)
       audio.removeEventListener('emptied', onEmptied)
       audio.removeEventListener('error', onError)
-      
       document.removeEventListener('visibilitychange', onVisibilityChange)
       
-      // Останавливаем и очищаем аудио
-      audio.pause()
-      audio.src = ''
-      
-      // Останавливаем визуализацию
-      stopVisualization()
-      
-      // Очищаем таймаут
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
+      // Уничтожаем HLS instance
+      if (hlsRef.current) {
+        hlsRef.current.destroy()
+        hlsRef.current = null
       }
       
-      console.log('[AUDIO] Очистка завершена')
+      audio.pause()
+      audio.src = ''
+      stopVisualization()
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
   }, [stopVisualization, updateDiagnostics, addEventToHistory])
 
@@ -866,22 +676,17 @@ export default function RadioMiniApp() {
   }, [volume, isMuted])
 
   // =====================================================
-  // ИНИЦИАЛИЗАЦИЯ TELEGRAM WEBAPP
+  // ИНИЦИАЛИЗАЦИЯ TELEGRAM
   // =====================================================
   useEffect(() => {
     const initTelegram = () => {
       const tg = window.Telegram?.WebApp
-      
       if (tg) {
         tg.ready()
         tg.expand()
         setIsTgReady(true)
+        console.log('[TG] Telegram WebApp ready, platform:', tg.platform)
         
-        console.log('[TG] Telegram WebApp инициализирован')
-        console.log('[TG] Platform:', tg.platform)
-        console.log('[TG] initData:', tg.initData ? '(есть)' : '(нет)')
-        
-        // Обновляем платформу с учётом Telegram
         const isIOSFromTG = tg.platform === 'ios'
         if (isIOSFromTG) {
           isIOSRef.current = true
@@ -891,25 +696,17 @@ export default function RadioMiniApp() {
           platform: `Telegram/${tg.platform}`,
           isIOS: isIOSFromTG || isIOSRef.current,
         })
-        
         return true
       }
-      
       return false
     }
     
-    // Пробуем инициализировать сразу
-    if (initTelegram()) {
-      return
-    }
+    if (initTelegram()) return
     
-    // Если не удалось - пробуем с интервалом
     let attempts = 0
     const interval = setInterval(() => {
       attempts++
-      if (initTelegram() || attempts >= 20) {
-        clearInterval(interval)
-      }
+      if (initTelegram() || attempts >= 20) clearInterval(interval)
     }, 100)
     
     return () => clearInterval(interval)
@@ -921,11 +718,7 @@ export default function RadioMiniApp() {
   const registerListener = useCallback(async (action: 'open' | 'close') => {
     const tg = window.Telegram?.WebApp
     const user = tg?.initDataUnsafe?.user
-    
-    if (!user) {
-      console.log('[LISTENER] Нет данных пользователя')
-      return
-    }
+    if (!user) return
     
     try {
       await fetch(LISTENERS_API, {
@@ -941,22 +734,18 @@ export default function RadioMiniApp() {
           isAdmin: user.id === ADMIN_USER_ID,
         }),
       })
-      
-      console.log('[LISTENER] Зарегистрирован:', action)
+      console.log('[LISTENER]', action)
     } catch (e) {
-      console.error('[LISTENER] Ошибка регистрации:', e)
+      console.error('[LISTENER] Error:', e)
     }
   }, [])
 
-  // Регистрируем при готовности Telegram
   useEffect(() => {
-    if (isTgReady) {
-      registerListener('open')
-    }
+    if (isTgReady) registerListener('open')
   }, [isTgReady, registerListener])
 
   // =====================================================
-  // ПОЛУЧЕНИЕ КОЛИЧЕСТВА СЛУШАТЕЛЕЙ
+  // ПОЛУЧЕНИЕ ДАННЫХ
   // =====================================================
   const fetchListenersCount = useCallback(async () => {
     try {
@@ -965,9 +754,7 @@ export default function RadioMiniApp() {
         const data = await res.json()
         setListeners(data.total || 0)
       }
-    } catch (e) {
-      // Игнорируем ошибки
-    }
+    } catch (e) {}
   }, [])
 
   useEffect(() => {
@@ -976,25 +763,19 @@ export default function RadioMiniApp() {
     return () => clearInterval(interval)
   }, [fetchListenersCount])
 
-  // =====================================================
-  // ПОЛУЧЕНИЕ ТЕКУЩЕГО ТРЕКА
-  // =====================================================
   const fetchCurrentTrack = useCallback(async () => {
     try {
       const res = await fetch(NOW_PLAYING_API, {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' },
       })
-      
       if (res.ok) {
         const data = await res.json()
         if (data.title && data.title !== currentTrack) {
           setCurrentTrack(data.title)
         }
       }
-    } catch (e) {
-      // Игнорируем ошибки
-    }
+    } catch (e) {}
   }, [currentTrack])
 
   useEffect(() => {
@@ -1004,13 +785,12 @@ export default function RadioMiniApp() {
   }, [fetchCurrentTrack])
 
   // =====================================================
-  // ОТПРАВКА ЗАКРЫТИЯ ПРИ ВЫХОДЕ
+  // ОТПРАВКА ЗАКРЫТИЯ
   // =====================================================
   useEffect(() => {
     const sendClose = () => {
       const tg = window.Telegram?.WebApp
       const user = tg?.initDataUnsafe?.user
-      
       if (!user) return
       
       const data = JSON.stringify({
@@ -1021,7 +801,6 @@ export default function RadioMiniApp() {
         action: 'close',
         isAdmin: user.id === ADMIN_USER_ID,
       })
-      
       navigator.sendBeacon(LISTENERS_API, new Blob([data], { type: 'application/json' }))
     }
     
@@ -1040,28 +819,28 @@ export default function RadioMiniApp() {
   const handlePlay = async () => {
     const audio = audioRef.current
     if (!audio) {
-      console.error('[PLAY] Аудио элемент не инициализирован')
+      console.error('[PLAY] Нет аудио элемента')
       return
     }
     
-    // Если уже играет - ставим на паузу
+    // Если играет - пауза
     if (isPlaying) {
-      console.log('[PLAY] Ставим на паузу')
+      console.log('[PLAY] Пауза')
       audio.pause()
       return
     }
     
-    // Сбрасываем ошибку
     setError(null)
     setIsLoading(true)
     
     console.log('[PLAY] === НАЧАЛО ВОСПРОИЗВЕДЕНИЯ ===')
     console.log('[PLAY] iOS:', isIOSRef.current)
+    console.log('[PLAY] HLS.js поддерживается:', Hls.isSupported())
     
-    // Устанавливаем таймаут на случай зависания
+    // Таймаут
     timeoutRef.current = setTimeout(() => {
       if (isLoading && !isPlaying) {
-        console.error('[PLAY] Таймаут загрузки (25 сек)')
+        console.error('[PLAY] Таймаут')
         setError('Таймаут подключения')
         setIsLoading(false)
         setBuffering(false)
@@ -1070,63 +849,133 @@ export default function RadioMiniApp() {
     }, 25000)
     
     try {
-      // Устанавливаем громкость
       audio.volume = isMuted ? 0 : volume / 100
       
-      // Определяем URL потока в зависимости от платформы
-      let streamUrl = STREAM_URL
+      // =====================================================
+      // ВЫБОР МЕТОДА ВОСПРОИЗВЕДЕНИЯ
+      // =====================================================
       
-      if (isIOSRef.current && USE_HLS_FOR_IOS) {
-        // Если включён HLS для iOS - используем HLS URL
-        // streamUrl = IOS_HLS_URL // Раскомментировать при наличии HLS
-        console.log('[PLAY] iOS: планируется HLS (но пока используется стандартный URL)')
-      } else if (isIOSRef.current) {
-        // iOS без HLS - используем специальный URL для iOS
-        streamUrl = IOS_STREAM_URL
-        console.log('[PLAY] iOS: используем IOS_STREAM_URL')
-      }
+      const isIOS = isIOSRef.current
+      const hlsSupported = Hls.isSupported()
       
-      // Устанавливаем источник, если ещё не установлен или изменился
-      if (!audio.src || audio.src !== streamUrl) {
-        console.log('[PLAY] Устанавливаем источник:', streamUrl)
-        audio.src = streamUrl
-        audio.load() // Важно: вызываем load() после установки src
+      // Для iOS используем HLS если поддерживается
+      if (isIOS && hlsSupported) {
+        console.log('[PLAY] iOS: используем HLS.js')
+        updateDiagnostics({ streamType: 'HLS' })
         
-        updateDiagnostics({ currentStreamUrl: streamUrl })
-      }
-      
-      // Получаем/создаём AudioContext
-      const ctx = getAudioContext()
-      
-      if (ctx) {
-        // Восстанавливаем AudioContext если приостановлен
-        if (ctx.state === 'suspended') {
-          console.log('[PLAY] AudioContext suspended, вызываем resume()')
-          await ctx.resume()
-          console.log('[PLAY] AudioContext после resume:', ctx.state)
-          updateDiagnostics({ audioContextState: ctx.state })
+        // Уничтожаем старый HLS instance если есть
+        if (hlsRef.current) {
+          hlsRef.current.destroy()
+          hlsRef.current = null
         }
         
-        // Подключаем аудио к анализатору (только один раз)
-        connectAudioToAnalyser()
+        // Создаём новый HLS instance
+        const hls = new Hls({
+          debug: true, // Включаем debug логи
+          enableWorker: true,
+          lowLatencyMode: true,
+          backBufferLength: 90,
+        })
+        
+        hlsRef.current = hls
+        
+        // Привязываем к аудио элементу
+        hls.attachMedia(audio)
+        
+        // События HLS
+        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+          console.log('[HLS] MEDIA_ATTACHED')
+          addEventToHistory('HLS: MEDIA_ATTACHED')
+          updateDiagnostics({ hlsState: 'attached' })
+          
+          // Загружаем HLS плейлист
+          hls.loadSource(HLS_STREAM_URL)
+        })
+        
+        hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+          console.log('[HLS] MANIFEST_PARSED, уровней:', data.levels.length)
+          addEventToHistory('HLS: MANIFEST_PARSED')
+          updateDiagnostics({
+            hlsState: 'manifest_parsed',
+            currentStreamUrl: HLS_STREAM_URL,
+          })
+          
+          // Запускаем воспроизведение
+          audio.play().then(() => {
+            console.log('[HLS] Воспроизведение запущено')
+            startVisualization()
+          }).catch((err) => {
+            console.error('[HLS] Ошибка play():', err)
+            setError('Ошибка запуска воспроизведения')
+          })
+        })
+        
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          console.error('[HLS] ERROR:', data.type, data.details, data.fatal)
+          addEventToHistory(`HLS ERROR: ${data.type} - ${data.details}`)
+          updateDiagnostics({
+            hlsState: `error: ${data.details}`,
+            lastError: `HLS ${data.type}: ${data.details}`,
+          })
+          
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.error('[HLS] Сетевая ошибка, пробуем восстановить')
+                hls.startLoad()
+                break
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.error('[HLS] Ошибка медиа, пробуем восстановить')
+                hls.recoverMediaError()
+                break
+              default:
+                console.error('[HLS] Фатальная ошибка, уничтожаем')
+                setError('Ошибка HLS потока')
+                hls.destroy()
+                break
+            }
+          }
+        })
+        
+        hls.on(Hls.Events.FRAG_LOADED, () => {
+          console.log('[HLS] FRAG_LOADED')
+        })
+        
+        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+          console.log('[HLS] AUDIO_TRACKS_UPDATED')
+        })
+        
+      } else {
+        // Для не-iOS или если HLS не поддерживается - используем MP3
+        console.log('[PLAY] Используем MP3 поток')
+        updateDiagnostics({ streamType: 'MP3' })
+        
+        if (!audio.src || audio.src !== MP3_STREAM_URL) {
+          console.log('[PLAY] Устанавливаем источник:', MP3_STREAM_URL)
+          audio.src = MP3_STREAM_URL
+          audio.load()
+          updateDiagnostics({ currentStreamUrl: MP3_STREAM_URL })
+        }
+        
+        // AudioContext
+        const ctx = getAudioContext()
+        if (ctx) {
+          if (ctx.state === 'suspended') {
+            console.log('[PLAY] AudioContext suspended, resume')
+            await ctx.resume()
+            updateDiagnostics({ audioContextState: ctx.state })
+          }
+          connectAudioToAnalyser()
+        }
+        
+        await audio.play()
+        console.log('[PLAY] Воспроизведение запущено')
+        startVisualization()
       }
       
-      // Запускаем воспроизведение
-      console.log('[PLAY] Вызываем audio.play()')
-      await audio.play()
-      
-      console.log('[PLAY] Воспроизведение запущено успешно')
-      
-      // Запускаем визуализацию
-      startVisualization()
-      
     } catch (err: any) {
-      console.error('[PLAY] Ошибка при запуске воспроизведения:')
-      console.error('  -> name:', err.name)
-      console.error('  -> message:', err.message)
-      console.error('  -> stack:', err.stack)
+      console.error('[PLAY] Ошибка:', err.name, err.message)
       
-      // Очищаем таймаут
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
         timeoutRef.current = null
@@ -1134,17 +983,14 @@ export default function RadioMiniApp() {
       
       setIsLoading(false)
       
-      // Определяем сообщение об ошибке
       let errorMsg = 'Ошибка воспроизведения'
-      
       if (err.name === 'NotAllowedError') {
-        errorMsg = 'Нажмите ещё раз для воспроизведения'
+        errorMsg = 'Нажмите ещё раз'
       } else if (err.name === 'NotSupportedError') {
         errorMsg = 'Формат не поддерживается'
       }
       
       setError(errorMsg)
-      
       updateDiagnostics({
         lastError: `${err.name}: ${err.message}`,
         audioState: 'error',
@@ -1153,11 +999,10 @@ export default function RadioMiniApp() {
   }
 
   // =====================================================
-  // РЕНДЕР КОМПОНЕНТА
+  // РЕНДЕР
   // =====================================================
   return (
     <>
-      {/* Глобальные стили */}
       <style jsx global>{`
         .volume-slider {
           -webkit-appearance: none;
@@ -1190,7 +1035,7 @@ export default function RadioMiniApp() {
           font-family: monospace;
           font-size: 10px;
           line-height: 1.4;
-          max-height: 200px;
+          max-height: 250px;
           overflow-y: auto;
         }
         .diagnostic-panel::-webkit-scrollbar {
@@ -1202,14 +1047,12 @@ export default function RadioMiniApp() {
         }
       `}</style>
       
-      {/* Основной контейнер */}
       <div
         className="min-h-screen flex flex-col items-center justify-center p-4"
         style={{
           background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.dark} 100%)`,
         }}
       >
-        {/* Декоративный фон */}
         <div
           className="fixed inset-0 pointer-events-none"
           style={{
@@ -1217,10 +1060,8 @@ export default function RadioMiniApp() {
           }}
         />
         
-        {/* Основной контент */}
         <div className="relative z-10 w-full max-w-xs">
           
-          {/* Логотип станции */}
           <motion.img
             src={STATION_LOGO}
             alt={STATION_NAME}
@@ -1236,9 +1077,7 @@ export default function RadioMiniApp() {
             transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
           />
           
-          {/* Визуализатор / Эквалайзер */}
           <div className="skeuo-card rounded-xl p-2 mb-3">
-            {/* Бейдж LIVE */}
             <AnimatePresence>
               {isPlaying && (
                 <motion.div
@@ -1257,7 +1096,6 @@ export default function RadioMiniApp() {
               )}
             </AnimatePresence>
             
-            {/* Canvas для визуализатора */}
             <canvas
               ref={canvasRef}
               width={280}
@@ -1266,7 +1104,6 @@ export default function RadioMiniApp() {
               style={{ background: 'transparent' }}
             />
             
-            {/* Подписи частот */}
             <div className="flex justify-between mt-1.5 px-2">
               <span className="text-xs font-medium" style={{ color: COLORS.bass }}>BASS</span>
               <span className="text-xs font-medium" style={{ color: COLORS.mid }}>MID</span>
@@ -1274,7 +1111,6 @@ export default function RadioMiniApp() {
             </div>
           </div>
           
-          {/* Информация о станции */}
           <div className="skeuo-card rounded-xl p-2 text-center mb-3">
             <div className="flex items-center justify-center gap-1 mb-0.5">
               <Radio className="w-3 h-3" style={{ color: COLORS.secondary }} />
@@ -1298,7 +1134,6 @@ export default function RadioMiniApp() {
             </p>
           </div>
           
-          {/* Индикатор буферизации */}
           {buffering && (
             <div className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl skeuo-card">
               <Wifi className="w-3 h-3 animate-pulse" style={{ color: COLORS.secondary }} />
@@ -1306,7 +1141,6 @@ export default function RadioMiniApp() {
             </div>
           )}
           
-          {/* Индикатор ошибки */}
           {error && (
             <div
               className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl"
@@ -1317,7 +1151,6 @@ export default function RadioMiniApp() {
             </div>
           )}
           
-          {/* Кнопка Play/Pause */}
           <div className="flex justify-center mb-3">
             <motion.button
               onClick={handlePlay}
@@ -1341,7 +1174,6 @@ export default function RadioMiniApp() {
             </motion.button>
           </div>
           
-          {/* Регулятор громкости */}
           <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-xl skeuo-card">
             <button
               onClick={() => setIsMuted(!isMuted)}
@@ -1373,11 +1205,8 @@ export default function RadioMiniApp() {
             </span>
           </div>
           
-          {/* ===================================================== */}
-          {/* ДИАГНОСТИЧЕСКАЯ ПАНЕЛЬ (ВРЕМЕННАЯ ДЛЯ ОТЛАДКИ) */}
-          {/* ===================================================== */}
+          {/* ДИАГНОСТИЧЕСКАЯ ПАНЕЛЬ */}
           <div className="mb-3">
-            {/* Кнопка показа/скрытия панели */}
             <button
               onClick={() => setShowDiagnostics(!showDiagnostics)}
               className="text-xs mb-1 opacity-50 hover:opacity-100"
@@ -1386,68 +1215,68 @@ export default function RadioMiniApp() {
               {showDiagnostics ? '▼ Скрыть диагностику' : '▶ Показать диагностику'}
             </button>
             
-            {/* Панель диагностики */}
             {showDiagnostics && (
               <div
                 className="diagnostic-panel skeuo-card rounded-xl p-2"
                 style={{ background: 'rgba(0,0,0,0.5)' }}
               >
-                {/* Заголовок */}
                 <div className="font-bold mb-1" style={{ color: COLORS.secondary }}>
-                  🔧 ДИАГНОСТИКА (временно)
+                  🔧 ДИАГНОСТИКА
                 </div>
                 
-                {/* Платформа */}
                 <div style={{ color: diagnostics.isIOS ? COLORS.bass : COLORS.accent }}>
                   Platform: {diagnostics.platform}
                   {diagnostics.isIOS && ' 🍎 iOS'}
                 </div>
                 
-                {/* Статус аудио */}
+                <div style={{ color: COLORS.text }}>
+                  Stream: {diagnostics.streamType}
+                </div>
+                
+                <div style={{ color: diagnostics.hlsSupported ? COLORS.accent : COLORS.bass }}>
+                  HLS.js: {diagnostics.hlsSupported ? '✓' : '✗'}
+                </div>
+                
+                <div style={{ color: COLORS.text }}>
+                  HLS State: {diagnostics.hlsState}
+                </div>
+                
                 <div style={{ color: diagnostics.audioState === 'error' ? COLORS.bass : COLORS.text }}>
                   Audio State: {diagnostics.audioState}
                 </div>
                 
-                {/* AudioContext */}
                 <div style={{ color: diagnostics.audioContextState === 'suspended' ? COLORS.bass : COLORS.text }}>
                   AudioContext: {diagnostics.audioContextState}
                 </div>
                 
-                {/* URL потока */}
                 <div style={{ color: COLORS.text, wordBreak: 'break-all' }}>
-                  URL: {diagnostics.currentStreamUrl || '(не установлен)'}
+                  URL: {diagnostics.currentStreamUrl || '(нет)'}
                 </div>
                 
-                {/* Network State */}
                 <div style={{ color: COLORS.text }}>
                   Network: {diagnostics.networkState}
                 </div>
                 
-                {/* Ready State */}
                 <div style={{ color: COLORS.text }}>
                   Ready: {diagnostics.readyState}
                 </div>
                 
-                {/* Последняя ошибка */}
                 {diagnostics.lastError && (
                   <div style={{ color: COLORS.bass, wordBreak: 'break-all' }}>
                     ERROR: {diagnostics.lastError}
                   </div>
                 )}
                 
-                {/* Код ошибки */}
                 {diagnostics.errorCode !== null && (
                   <div style={{ color: COLORS.bass }}>
                     Error Code: {diagnostics.errorCode}
                   </div>
                 )}
                 
-                {/* Последнее событие */}
                 <div style={{ color: COLORS.mid }}>
                   Last Event: {diagnostics.lastEvent}
                 </div>
                 
-                {/* История событий */}
                 <div className="mt-1 pt-1" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                   <div style={{ color: COLORS.secondary }}>History:</div>
                   {diagnostics.eventHistory.map((event, i) => (
@@ -1460,7 +1289,6 @@ export default function RadioMiniApp() {
             )}
           </div>
           
-          {/* Подпись */}
           <p className="text-center text-xs mt-2" style={{ color: '#555' }}>
             Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
           </p>
