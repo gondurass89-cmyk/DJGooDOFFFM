@@ -115,12 +115,15 @@ export default function RadioMiniApp() {
   // Fetch listeners
   const fetchListenersCount = useCallback(async () => {
     try {
-      const res = await fetch(LISTENERS_API)
+      const res = await fetch(LISTENERS_API, { mode: 'cors' })
       if (res.ok) {
         const data = await res.json()
+        console.log('Listeners count:', data.total)
         setListeners(data.total || 0)
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('fetchListenersCount error:', e)
+    }
   }, [])
 
   // Fetch current track
@@ -155,6 +158,7 @@ export default function RadioMiniApp() {
     try {
       const response = await fetch(LISTENERS_API, {
         method: 'POST',
+        mode: 'cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: user.id,
