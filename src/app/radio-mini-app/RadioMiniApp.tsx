@@ -329,11 +329,6 @@ export default function RadioMiniApp() {
       setIsLoading(false)
       setBuffering(false)
       setError(null)
-
-      // Start visualization for desktop/Android (not iOS)
-      if (!useCSSAnimation) {
-        startVisualization()
-      }
     }
 
     const onPause = () => {
