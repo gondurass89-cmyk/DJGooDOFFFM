@@ -4,7 +4,10 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Sliders, ChevronDown, ChevronUp } from 'lucide-react'
 
-const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
+const STREAM_URLS = [
+  'https://radio-stream.gondurass89.workers.dev',
+  'https://stream.zeno.fm/your_station', // fallback
+]
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
 const LISTENERS_API = 'https://listeners.gondurass89.workers.dev'
@@ -87,6 +90,7 @@ export default function RadioMiniApp() {
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const animationRef = useRef<number | null>(null)
   const bufferTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const streamIndexRef = useRef(0)
   
   // Equalizer filters
   const bassFilterRef = useRef<BiquadFilterNode | null>(null)
@@ -368,8 +372,9 @@ export default function RadioMiniApp() {
   // Audio setup
   useEffect(() => {
     const audio = new Audio()
-    audio.preload = 'none'
-    audio.crossOrigin = 'anonymous'
+    audio.preload = 'auto'
+    // Don't set crossOrigin for iOS - it causes decode errors
+    // crossOrigin will be set only when needed for visualization
     audioRef.current = audio
 
     audio.addEventListener('playing', () => {
@@ -386,6 +391,10 @@ export default function RadioMiniApp() {
 
       // Only try real visualization if NOT using CSS animation
       if (!useCSSAnimation) {
+        // Set crossOrigin before connecting to AudioContext
+        if (!audio.crossOrigin) {
+          audio.crossOrigin = 'anonymous'
+        }
         const success = startRealVisualization()
         if (!success) {
           console.log('Falling back to CSS animation')
@@ -486,7 +495,7 @@ export default function RadioMiniApp() {
 
     setIsLoading(true)
 
-    // Set buffer timeout (25 seconds for iOS)
+    // Set buffer timeout (30 seconds for iOS)
     bufferTimeoutRef.current = setTimeout(() => {
       if (isLoading && !isPlaying) {
         console.log('Buffer timeout')
@@ -496,16 +505,15 @@ export default function RadioMiniApp() {
         audio.pause()
         audio.src = ''
       }
-    }, 25000)
+    }, 30000)
 
     try {
       audio.volume = isMuted ? 0 : volume / 100
-      console.log('Playing stream:', STREAM_URL)
-      audio.src = STREAM_URL
+      const streamUrl = STREAM_URLS[streamIndexRef.current]
+      console.log('Playing stream:', streamUrl)
+      audio.src = streamUrl
       audio.load()
 
-      // iOS sometimes needs a small delay before play
-      await new Promise(resolve => setTimeout(resolve, 100))
       await audio.play()
     } catch (err: any) {
       console.error('Play error:', err.name, err.message)
