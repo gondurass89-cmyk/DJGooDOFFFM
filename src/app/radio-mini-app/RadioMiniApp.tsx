@@ -553,22 +553,49 @@ export default function RadioMiniApp() {
   const registerListener = useCallback(async (action: 'open' | 'close' | 'heartbeat') => {
     const tg = window.Telegram?.WebApp
     const user = tg?.initDataUnsafe?.user
-    if (!user) return
+    
+    console.log('[LISTENER] registerListener called:', action)
+    console.log('[LISTENER] Telegram WebApp:', !!tg)
+    console.log('[LISTENER] User data:', user)
+    
+    // Если нет Telegram user - используем fallback
+    let userId: number
+    let firstName: string
+    
+    if (user) {
+      userId = user.id
+      firstName = user.first_name
+    } else {
+      // Fallback: генерируем session ID
+      let sessionId = sessionStorage.getItem('radio_session_id')
+      if (!sessionId) {
+        sessionId = 'guest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+        sessionStorage.setItem('radio_session_id', sessionId)
+      }
+      userId = parseInt(sessionId.replace(/\D/g, '').slice(0, 10) || Date.now().toString())
+      firstName = 'Гость'
+      console.log('[LISTENER] Using fallback session:', sessionId)
+    }
+    
     try {
-      await fetch(LISTENERS_API, {
+      const response = await fetch(LISTENERS_API, {
         method: 'POST',
         mode: 'cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: user.id,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          username: user.username,
+          user_id: userId,
+          first_name: firstName,
+          last_name: user?.last_name || null,
+          username: user?.username || null,
           action,
-          isAdmin: user.id === ADMIN_USER_ID,
+          isAdmin: user?.id === ADMIN_USER_ID,
         }),
       })
-    } catch (e) {}
+      const data = await response.json()
+      console.log('[LISTENER] Response:', data)
+    } catch (e) {
+      console.error('[LISTENER] Error:', e)
+    }
   }, [])
 
   useEffect(() => {
