@@ -605,20 +605,34 @@ export default function RadioMiniApp() {
     }
   }, [])
 
-  // Регистрация слушателя - запускаем сразу, не ждём Telegram
+  // Регистрация слушателя - ТОЛЬКО когда играет
+  // Heartbeat отправляем только при активном воспроизведении
   useEffect(() => {
-    console.log('[LISTENER] Effect triggered, isTgReady:', isTgReady)
-
-    // Регистрируем сразу при загрузке компонента
-    registerListener('open')
-
-    // Запускаем heartbeat
-    heartbeatIntervalRef.current = setInterval(() => registerListener('heartbeat'), HEARTBEAT_INTERVAL)
-
-    return () => {
-      if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current)
+    if (isPlaying) {
+      console.log('[LISTENER] Playback started - registering listener')
+      
+      // Регистрируем при старте воспроизведения
+      registerListener('open')
+      
+      // Запускаем heartbeat только когда играет
+      heartbeatIntervalRef.current = setInterval(() => {
+        registerListener('heartbeat')
+      }, HEARTBEAT_INTERVAL)
+    } else {
+      // При остановке - очищаем heartbeat
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current)
+        heartbeatIntervalRef.current = null
+        console.log('[LISTENER] Playback stopped - clearing heartbeat')
+      }
     }
-  }, [registerListener]) // Убрал isTgReady - регистрируем в любом случае
+    
+    return () => {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current)
+      }
+    }
+  }, [isPlaying, registerListener])
 
   const fetchListenersCount = useCallback(async () => {
     try {
@@ -688,7 +702,12 @@ export default function RadioMiniApp() {
     const audio = audioRef.current
     if (!audio) return
     
-    if (isPlaying) { audio.pause(); return }
+    if (isPlaying) { 
+      audio.pause()
+      // При паузе отправляем close - перестаём считаться слушателем
+      registerListener('close')
+      return
+    }
     
     setError(null)
     setIsLoading(true)
