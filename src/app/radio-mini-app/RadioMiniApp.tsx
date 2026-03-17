@@ -81,7 +81,7 @@ export default function RadioMiniApp() {
     return EQ_DEFAULTS
   })
   
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
@@ -365,14 +365,13 @@ export default function RadioMiniApp() {
     setAudioData(new Array(BAR_COUNT).fill(0))
   }, [])
 
-  // Audio setup - simplified for iOS compatibility
+  // Audio setup - use HTML5 audio element
   useEffect(() => {
-    const audio = new Audio()
-    audio.preload = 'none'
-    audioRef.current = audio
+    const audio = audioRef.current
+    if (!audio) return
 
-    audio.addEventListener('playing', () => {
-      console.log('Audio PLAYING event')
+    const onPlaying = () => {
+      console.log('Audio PLAYING')
       if (bufferTimeoutRef.current) {
         clearTimeout(bufferTimeoutRef.current)
         bufferTimeoutRef.current = null
@@ -381,74 +380,72 @@ export default function RadioMiniApp() {
       setIsLoading(false)
       setBuffering(false)
       setError(null)
-    })
+    }
 
-    audio.addEventListener('pause', () => {
-      console.log('Audio PAUSE event')
+    const onPause = () => {
+      console.log('Audio PAUSE')
       setIsPlaying(false)
       stopVisualization()
-    })
+    }
 
-    audio.addEventListener('waiting', () => {
-      console.log('Audio WAITING event')
+    const onWaiting = () => {
+      console.log('Audio WAITING')
       setBuffering(true)
       setIsLoading(true)
-    })
+    }
 
-    audio.addEventListener('canplay', () => {
-      console.log('Audio CANPLAY event')
+    const onCanPlay = () => {
+      console.log('Audio CANPLAY')
       setBuffering(false)
       setIsLoading(false)
-    })
+    }
 
-    audio.addEventListener('stalled', () => {
-      console.log('Audio STALLED event')
+    const onStalled = () => {
+      console.log('Audio STALLED')
       setBuffering(true)
-    })
+    }
 
-    audio.addEventListener('error', (e) => {
-      console.error('Audio ERROR event:', e)
-      console.log('Audio error code:', audio.error?.code, 'message:', audio.error?.message)
-
+    const onError = () => {
+      console.log('Audio ERROR, code:', audio.error?.code)
       if (bufferTimeoutRef.current) {
         clearTimeout(bufferTimeoutRef.current)
         bufferTimeoutRef.current = null
       }
-
       setIsLoading(false)
       setIsPlaying(false)
       setBuffering(false)
 
       const error = audio.error
       let errorMsg = 'Ошибка воспроизведения'
-
       if (error) {
         switch (error.code) {
-          case 1:
-            errorMsg = 'Воспроизведение отменено'
-            break
-          case 2:
-            errorMsg = 'Ошибка сети'
-            break
-          case 3:
-            errorMsg = 'Ошибка декодирования'
-            break
-          case 4:
-            errorMsg = 'Формат не поддерживается'
-            break
+          case 1: errorMsg = 'Отменено'; break
+          case 2: errorMsg = 'Ошибка сети'; break
+          case 3: errorMsg = 'Ошибка декодирования'; break
+          case 4: errorMsg = 'Не поддерживается'; break
         }
       }
-
       setError(errorMsg)
       stopVisualization()
-    })
+    }
+
+    audio.addEventListener('playing', onPlaying)
+    audio.addEventListener('pause', onPause)
+    audio.addEventListener('waiting', onWaiting)
+    audio.addEventListener('canplay', onCanPlay)
+    audio.addEventListener('stalled', onStalled)
+    audio.addEventListener('error', onError)
 
     return () => {
+      audio.removeEventListener('playing', onPlaying)
+      audio.removeEventListener('pause', onPause)
+      audio.removeEventListener('waiting', onWaiting)
+      audio.removeEventListener('canplay', onCanPlay)
+      audio.removeEventListener('stalled', onStalled)
+      audio.removeEventListener('error', onError)
       if (bufferTimeoutRef.current) {
         clearTimeout(bufferTimeoutRef.current)
       }
-      audio.pause()
-      audio.src = ''
       stopVisualization()
     }
   }, [stopVisualization])
@@ -551,6 +548,13 @@ export default function RadioMiniApp() {
 
   return (
     <>
+      {/* Hidden audio element */}
+      <audio
+        ref={audioRef}
+        preload="none"
+        style={{ display: 'none' }}
+      />
+
       <style jsx global>{`
         .volume-slider {
           -webkit-appearance: none;
