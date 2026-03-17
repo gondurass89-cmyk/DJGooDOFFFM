@@ -82,8 +82,12 @@ export default function RadioMiniApp() {
   })
   
   const audioRef = useRef<HTMLAudioElement>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const bufferTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const animationFrameRef = useRef<number | null>(null)
+  const sourceConnectedRef = useRef(false)
   
   // Equalizer filters
   const bassFilterRef = useRef<BiquadFilterNode | null>(null)
@@ -255,6 +259,61 @@ export default function RadioMiniApp() {
     return () => clearInterval(interval)
   }, [fetchCurrentTrack])
 
+  // Start real audio visualization
+  const startVisualization = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio || sourceConnectedRef.current) return
+
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext
+      const ctx = new AudioContext()
+      audioContextRef.current = ctx
+
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.75
+      analyserRef.current = analyser
+
+      const source = ctx.createMediaElementSource(audio)
+      sourceRef.current = source
+      sourceConnectedRef.current = true
+
+      source.connect(analyser)
+      analyser.connect(ctx.destination)
+
+      const bufferLength = analyser.frequencyBinCount
+      const dataArray = new Uint8Array(bufferLength)
+
+      const update = () => {
+        analyser.getByteFrequencyData(dataArray)
+        const mapped = []
+        for (let i = 0; i < BAR_COUNT; i++) {
+          let idx
+          if (i < 8) idx = Math.floor(i * 2)
+          else if (i < 16) idx = 16 + Math.floor((i - 8) * 6)
+          else idx = 64 + Math.floor((i - 16) * 4.5)
+          idx = Math.min(idx, bufferLength - 1)
+          mapped.push(dataArray[idx] / 255)
+        }
+        setAudioData(mapped)
+        animationFrameRef.current = requestAnimationFrame(update)
+      }
+      update()
+      console.log('Visualization started')
+    } catch (e) {
+      console.error('Visualization error:', e)
+      setUseCSSAnimation(true)
+    }
+  }, [])
+
+  const stopVisualization = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+    setAudioData(new Array(BAR_COUNT).fill(0))
+  }, [])
+
   // Audio setup
   useEffect(() => {
     const audio = audioRef.current
@@ -270,6 +329,11 @@ export default function RadioMiniApp() {
       setIsLoading(false)
       setBuffering(false)
       setError(null)
+
+      // Start visualization for desktop/Android (not iOS)
+      if (!useCSSAnimation) {
+        startVisualization()
+      }
     }
 
     const onPause = () => {
