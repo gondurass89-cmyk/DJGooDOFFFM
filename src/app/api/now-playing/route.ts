@@ -13,9 +13,9 @@ const MOUNT_POINT = 'RH84200'
 // Clean track title from technical info
 function cleanTrackTitle(title: string): string {
   if (!title) return ''
-  
+
   let cleaned = title
-  
+
   // Decode HTML entities (e.g., &amp; -> &)
   cleaned = cleaned
     .replace(/&amp;/gi, '&')
@@ -24,7 +24,16 @@ function cleanTrackTitle(title: string): string {
     .replace(/&quot;/gi, '"')
     .replace(/&apos;/gi, "'")
     .replace(/&#39;/g, "'")
+    .replace(/&#180;/g, "'")       // ACUTE ACCENT entity
+    .replace(/&#x2019;/g, "'")     // RIGHT SINGLE QUOTATION MARK entity
+    .replace(/&#x2018;/g, "'")     // LEFT SINGLE QUOTATION MARK entity
+    .replace(/&#8217;/g, "'")      // RIGHT SINGLE QUOTATION MARK decimal entity
+    .replace(/&#8216;/g, "'")      // LEFT SINGLE QUOTATION MARK decimal entity
     .replace(/&nbsp;/gi, ' ')
+
+  // Normalize various apostrophe-like characters to standard apostrophe
+  cleaned = cleaned
+    .replace(/[\u2018\u2019\u201A\u201B\u0060\u00B4]/g, "'")  // ' ' ‚ ‛ ` ´ -> '
   
   // Remove BOM and zero-width characters
   cleaned = cleaned.replace(/^[\uFEFF\u200B\u200C\u200D]/g, '')
