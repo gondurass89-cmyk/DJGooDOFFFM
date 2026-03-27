@@ -96,12 +96,13 @@ export default {
       // Некоторые сервера блокируют запросы без User-Agent
       upstreamHeaders.set('User-Agent', 'DJGooDOFF-FM-Radio-Proxy/1.0');
       
-      // Передаём Range заголовок для поддержки seek (если есть)
-      const rangeHeader = request.headers.get('Range');
-      if (rangeHeader) {
-        upstreamHeaders.set('Range', rangeHeader);
-        console.log(`[PROXY] Range request: ${rangeHeader}`);
-      }
+      // =====================================================
+      // ВАЖНО: НЕ передаём Range заголовок!
+      // =====================================================
+      // Live-радио — это бесконечный поток, seek невозможен
+      // Если передать Range, iOS Safari может попытаться сделать seek
+      // и получить ошибку декодирования
+      // Range заголовки игнорируем намеренно
       
       // =====================================================
       // ВЫПОЛНЕНИЕ ЗАПРОСА К UPSTREAM
@@ -151,7 +152,30 @@ export default {
       
       // --- Content-Type ---
       // Явно указываем что это MP3 аудио
+      // Критически важно для iOS Safari - он строг к MIME-типам
       responseHeaders.set('Content-Type', 'audio/mpeg');
+      
+      // =====================================================
+      // КРИТИЧЕСКИ ВАЖНО ДЛЯ iOS
+      // =====================================================
+      // Удаляем заголовки которые могут сломать воспроизведение:
+      
+      // Content-Encoding: если upstream случайно отдаст gzip/br,
+      // а тело - сырой MP3, браузер попытается распаковать и получит мусор
+      responseHeaders.delete('Content-Encoding');
+      
+      // Accept-Ranges: live stream не поддерживает seek
+      // Если оставить, iOS Safari может попытаться сделать range-запрос
+      responseHeaders.delete('Accept-Ranges');
+      
+      // Connection: бесполезен в HTTP/2, может вызывать конфликты
+      responseHeaders.delete('Connection');
+      
+      // =====================================================
+      // Access-Control-Expose-Headers
+      // =====================================================
+      // Позволяет клиенту читать эти заголовки через JS
+      responseHeaders.set('Access-Control-Expose-Headers', 'Content-Type, Content-Length, Cache-Control');
       
       // =====================================================
       // ВАЖНО: НЕ передаём icy-* заголовки клиенту
