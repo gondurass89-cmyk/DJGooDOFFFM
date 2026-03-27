@@ -34,31 +34,45 @@ function cleanTrackTitle(title: string): string {
   // Normalize various apostrophe-like characters to standard apostrophe
   cleaned = cleaned
     .replace(/[\u2018\u2019\u201A\u201B\u0060\u00B4]/g, "'")  // ' ' ‚ ‛ ` ´ -> '
-  
+
   // Remove BOM and zero-width characters
   cleaned = cleaned.replace(/^[\uFEFF\u200B\u200C\u200D]/g, '')
-  
-  // Remove Camelot key at START: "4A - " or "11B-"
-  cleaned = cleaned.replace(/^\d{1,2}[AB]\s*[-–—]\s*/gi, '')
-  
-  // Remove Energy level at START: "Energy 6 - " or "Energy 8 "
-  cleaned = cleaned.replace(/^Energy\s*\d{1,2}\s*[-–—]\s*/gi, '')
-  
-  // Remove Camelot key in middle/end: " - 5A" or "- 11B - "
-  cleaned = cleaned.replace(/\s*[-–—]\s*\d{1,2}[AB]\s*/gi, ' ')
-  
-  // Remove Energy level in middle/end
-  cleaned = cleaned.replace(/\s*[-–—]?\s*Energy\s*\d{1,2}\s*/gi, ' ')
-  
+
+  // Normalize all dash-like characters to regular dash for easier matching
+  cleaned = cleaned.replace(/[–—―‒–]/g, '-')
+
+  // =====================================================
+  // REMOVE CAMELOT KEY AND ENERGY LEVEL FROM BEGINNING
+  // Pattern: "8A - Energy 8 - Real Track Name"
+  // =====================================================
+  // Remove pattern like "8A - " at start (support both Latin and Cyrillic A/B)
+  cleaned = cleaned.replace(/^\d{1,2}[ABАВ]\s*-\s*/gi, '')
+
+  // Remove pattern like "Energy 8 - " at start
+  cleaned = cleaned.replace(/^Energy\s*\d{1,2}\s*-\s*/gi, '')
+
+  // Repeat in case there are multiple (e.g., "8A - Energy 8 - Track")
+  cleaned = cleaned.replace(/^\d{1,2}[ABАВ]\s*-\s*/gi, '')
+  cleaned = cleaned.replace(/^Energy\s*\d{1,2}\s*-\s*/gi, '')
+
+  // =====================================================
+  // REMOVE CAMELOT KEY AND ENERGY LEVEL FROM MIDDLE/END
+  // =====================================================
+  // Remove " - 5A" or " - 11B" in middle/end
+  cleaned = cleaned.replace(/\s*-\s*\d{1,2}[ABАВ]\s*/gi, ' ')
+
+  // Remove " - Energy 8" in middle/end
+  cleaned = cleaned.replace(/\s*-?\s*Energy\s*\d{1,2}\s*/gi, ' ')
+
   // Remove trailing BPM number: " - 115"
-  cleaned = cleaned.replace(/\s*[-–—]\s*\d+\s*$/g, '')
-  
+  cleaned = cleaned.replace(/\s*-\s*\d{2,3}\s*$/g, '')
+
   // Remove "File" suffix (from RadioBoss recovery)
   cleaned = cleaned.replace(/\s+File$/gi, '')
-  
+
   // Remove websites in parentheses
   cleaned = cleaned.replace(/\s*\([^)]*\.(com|ru|net|org|io)[^)]*\)\s*/gi, ' ')
-  
+
   // Remove URLs
   cleaned = cleaned.replace(/www\.\S+\.\S+/gi, '')
   cleaned = cleaned.replace(/https?:\/\/\S+/gi, '')
@@ -73,10 +87,10 @@ function cleanTrackTitle(title: string): string {
   // Final cleanup
   cleaned = cleaned
     .replace(/\s{2,}/g, ' ')
-    .replace(/\s*[-–—]\s*$/g, '')
-    .replace(/^[\s\-–—:]+/, '')
+    .replace(/\s*-\s*$/g, '')      // Remove trailing dash
+    .replace(/^[\s\-:]+/, '')      // Remove leading whitespace/dashes/colons
     .trim()
-  
+
   return cleaned || title
 }
 
