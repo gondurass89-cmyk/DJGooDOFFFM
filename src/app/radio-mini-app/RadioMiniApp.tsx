@@ -13,10 +13,10 @@ import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Chevr
 // =====================================================
 // КОНСТАНТЫ
 // =====================================================
-const STREAM_URL = 'https://dj-goo-dofffm.vercel.app/api/stream'
+const STREAM_URL = '/api/stream'
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
-const LISTENERS_API = 'https://listeners.gondurass89.workers.dev'
+const LISTENERS_API = process.env.NEXT_PUBLIC_LISTENERS_URL || 'https://listeners.gondurass89.workers.dev'
 const NOW_PLAYING_API = '/api/now-playing'
 const HEARTBEAT_INTERVAL = 30000
 const LOAD_TIMEOUT = 30000
@@ -42,7 +42,7 @@ const COLORS = {
   high: '#00ffcc',
 }
 
-const ADMIN_USER_ID = 55068554
+const ADMIN_USER_ID = Number(process.env.NEXT_PUBLIC_ADMIN_USER_ID || '55068554')
 
 // =====================================================
 // ТИПЫ

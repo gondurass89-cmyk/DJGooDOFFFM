@@ -4,11 +4,8 @@ import { NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 
 // Cloudflare Worker (primary source - has Cyrillic support)
-const WORKER_URL = 'https://nowplaying.gondurass89.workers.dev'
-
-// Icecast fallback (secondary source - limited Cyrillic support)
-const ICECAST_STATUS_URL = 'http://s0.radioheart.ru:8000/status.xsl'
-const MOUNT_POINT = 'RH84200'
+// Can be overridden via environment variable
+const WORKER_URL = process.env.NEXT_PUBLIC_NOWPLAYING_URL || 'https://nowplaying.gondurass89.workers.dev'
 
 // Clean track title from technical info
 function cleanTrackTitle(title: string): string {
@@ -110,7 +107,9 @@ async function fetchFromWorker(): Promise<string | null> {
       },
     })
 
-    console.log('Worker response status:', response.status)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Worker response status:', response.status)
+    }
 
     if (!response.ok) {
       console.log('Worker not available:', response.status)
@@ -119,11 +118,14 @@ async function fetchFromWorker(): Promise<string | null> {
 
     // Worker returns plain text, not JSON
     const title = await response.text()
-    console.log('Worker raw response:', title)
 
     if (title && title.trim() && !title.includes('Загрузка')) {
       const cleaned = cleanTrackTitle(title.trim())
-      console.log('Worker track:', { raw: title, clean: cleaned })
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Worker track:', { raw: title, clean: cleaned })
+      }
+      
       return cleaned
     }
 
@@ -134,61 +136,11 @@ async function fetchFromWorker(): Promise<string | null> {
   }
 }
 
-// Fetch from Icecast (fallback)
-async function fetchFromIcecast(): Promise<string> {
-  try {
-    const response = await fetch(ICECAST_STATUS_URL, {
-      signal: AbortSignal.timeout(5000),
-      cache: 'no-store',
-    })
-    
-    if (!response.ok) {
-      console.error('Icecast status fetch failed:', response.status)
-      return ''
-    }
-    
-    const html = await response.text()
-    
-    const mountStart = html.indexOf(`<h3>Канал /${MOUNT_POINT}</h3>`)
-    if (mountStart === -1) {
-      console.log('Mount point not found')
-      return ''
-    }
-    
-    const searchArea = html.substring(mountStart, mountStart + 5000)
-    const playMatch = searchArea.match(/Сейчас играет:<\/td>\s*<td class="streamdata">([^<]*)<\/td>/i)
-    
-    if (playMatch && playMatch[1]) {
-      const title = playMatch[1].trim()
-      const cleaned = cleanTrackTitle(title)
-      console.log('Icecast track:', { raw: title, clean: cleaned })
-      return cleaned
-    }
-    
-    return ''
-  } catch (error) {
-    console.error('Icecast fetch error:', error)
-    return ''
-  }
-}
-
-async function fetchCurrentTrack(): Promise<string> {
-  // Try Worker first (has full track info with Cyrillic)
-  const workerTrack = await fetchFromWorker()
-  if (workerTrack) {
-    return workerTrack
-  }
-  
-  // Fallback to Icecast
-  console.log('Falling back to Icecast...')
-  return await fetchFromIcecast()
-}
-
 export async function GET() {
-  const title = await fetchCurrentTrack()
+  const title = await fetchFromWorker()
   
   return NextResponse.json({
-    title,
+    title: title || 'Загрузка...',
     timestamp: Date.now()
   }, {
     headers: {

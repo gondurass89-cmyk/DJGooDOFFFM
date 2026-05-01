@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BOT_TOKEN = '8600657705:AAEn6pFmFKcLCPFm8FcF9UiAag404S1av00'
-const ADMIN_CHAT_ID = '55068554'
+// =====================================================
+// CONFIGURATION - Use environment variables
+// =====================================================
+const BOT_TOKEN = process.env.BOT_TOKEN || ''
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || ''
 
 declare global {
   var listenersStorage: Map<number, ListenerData> | undefined
@@ -26,6 +29,12 @@ const listeners = global.listenersStorage
 
 // Send notification - skip if user is admin
 function notifyAdmin(data: ListenerData, count: number, isAdmin: boolean) {
+  // Check if bot token is configured
+  if (!BOT_TOKEN || !ADMIN_CHAT_ID) {
+    console.warn('Telegram notifications disabled: BOT_TOKEN or ADMIN_CHAT_ID not set')
+    return
+  }
+
   // Don't notify for admin user
   if (isAdmin) {
     console.log('Skip notification for admin user:', data.user_id)
@@ -65,10 +74,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { user_id, first_name, last_name, username, language_code, action, isAdmin } = body
 
-    console.log('Listener API POST:', { user_id, first_name, action, isAdmin })
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Listener API POST:', { user_id, first_name, action, isAdmin })
+    }
 
     if (!user_id || !first_name) {
-      console.log('Missing user data')
       return NextResponse.json({ error: 'Missing user data' }, { status: 400 })
     }
 
@@ -89,7 +99,11 @@ export async function POST(request: NextRequest) {
         sessions: (existing?.sessions || 0) + 1
       }
       listeners.set(user_id, listenerData)
-      console.log('Added listener session, user:', user_id, 'sessions:', listenerData.sessions, 'total users:', listeners.size)
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Added listener session, user:', user_id, 'sessions:', listenerData.sessions, 'total users:', listeners.size)
+      }
+      
       notifyAdmin(listenerData, listeners.size, isAdmin || user_id === Number(ADMIN_CHAT_ID))
     } else if (action === 'close') {
       // Decrement session count, but don't remove user completely
@@ -97,7 +111,11 @@ export async function POST(request: NextRequest) {
       if (existing) {
         existing.sessions = Math.max(0, existing.sessions - 1)
         existing.lastSeen = new Date()
-        console.log('Removed listener session, user:', user_id, 'sessions:', existing.sessions, 'total users:', listeners.size)
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Removed listener session, user:', user_id, 'sessions:', existing.sessions, 'total users:', listeners.size)
+        }
+        
         notifyAdmin(existing, listeners.size, isAdmin || user_id === Number(ADMIN_CHAT_ID))
       }
     }
@@ -132,7 +150,9 @@ export async function GET() {
   const activeListeners = Array.from(listeners.values()).filter(l => l.sessions > 0)
   const count = activeListeners.length
 
-  console.log('Listener API GET, active users:', count, 'total in storage:', listeners.size)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Listener API GET, active users:', count, 'total in storage:', listeners.size)
+  }
 
   return NextResponse.json({
     total: count,
