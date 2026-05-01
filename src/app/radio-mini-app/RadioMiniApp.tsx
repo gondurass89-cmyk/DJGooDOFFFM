@@ -519,9 +519,15 @@ export default function RadioMiniApp() {
         if (!audio || !isPlayingRef.current) return
 
         console.log('[RECONNECT] Переподключение к потоку...')
+        // Cache-busting: добавляем уникальный параметр чтобы избежать кеша
+        const cacheBuster = `?t=${Date.now()}`
+        const streamUrlWithCache = STREAM_URL.includes('?')
+          ? `${STREAM_URL}&t=${Date.now()}`
+          : `${STREAM_URL}${cacheBuster}`
+
         audio.src = ''
         audio.load()
-        audio.src = STREAM_URL
+        audio.src = streamUrlWithCache
         audio.load()
         audio.play().catch(e => {
           console.error('[RECONNECT] Ошибка воспроизведения:', e)
@@ -622,9 +628,15 @@ export default function RadioMiniApp() {
       // Если больше 2 минут не было события playing - возможно поток завис
       if (timeSinceLastPlay > 120000) {
         console.log('[KEEPALIVE] Поток возможно завис, переподключение...')
+        // Cache-busting для предотвращения старого контента
+        const cacheBuster = `?t=${Date.now()}`
+        const streamUrlWithCache = STREAM_URL.includes('?')
+          ? `${STREAM_URL}&t=${Date.now()}`
+          : `${STREAM_URL}${cacheBuster}`
+
         audio.src = ''
         audio.load()
-        audio.src = STREAM_URL
+        audio.src = streamUrlWithCache
         audio.load()
         audio.play().catch(e => console.error('[KEEPALIVE] Ошибка:', e))
         lastPlayingTimeRef.current = Date.now()
@@ -875,11 +887,18 @@ export default function RadioMiniApp() {
     
     try {
       audio.volume = isMuted ? 0 : volume / 100
-      
-      if (!audio.src || audio.src !== STREAM_URL) {
-        audio.src = STREAM_URL
-        audio.load()
-      }
+
+      // Cache-busting: добавляем уникальный параметр к URL
+      const cacheBuster = `?t=${Date.now()}`
+      const streamUrlWithCache = STREAM_URL.includes('?')
+        ? `${STREAM_URL}&t=${Date.now()}`
+        : `${STREAM_URL}${cacheBuster}`
+
+      // Всегда обновляем src для получения свежего потока
+      audio.src = ''
+      audio.load()
+      audio.src = streamUrlWithCache
+      audio.load()
       
       if (!fallbackModeRef.current) {
         const ctx = getAudioContext()
