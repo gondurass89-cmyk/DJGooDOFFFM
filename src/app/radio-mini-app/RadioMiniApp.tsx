@@ -23,6 +23,11 @@ const LOAD_TIMEOUT = 30000
 const REAL_MODE_CHECK_FRAMES = 10
 const REAL_MODE_CHECK_DELAY = 500
 
+// Настройки автосоединения
+const RECONNECT_DELAY = 3000 // задержка перед переподключением (мс)
+const MAX_RECONNECT_ATTEMPTS = 10 // макс. попыток переподключения
+const KEEPALIVE_INTERVAL = 60000 // проверка состояния потока (мс)
+
 // =====================================================
 // ЦВЕТОВАЯ СХЕМА
 // =====================================================
@@ -132,7 +137,13 @@ export default function RadioMiniApp() {
   const fallbackModeRef = useRef<boolean>(false)
   const realModeCheckCountRef = useRef<number>(0)
   const isPlayingRef = useRef<boolean>(false)
-  
+
+  // Reconnect refs
+  const reconnectAttemptsRef = useRef<number>(0)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const keepaliveIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const lastPlayingTimeRef = useRef<number>(0)
+
   const SMOOTHING_FACTOR = 0.25
 
   // =====================================================
@@ -445,6 +456,9 @@ export default function RadioMiniApp() {
       setIsLoading(false)
       setBuffering(false)
       setError(null)
+      // Сброс счётчика reconnect при успешном воспроизведении
+      reconnectAttemptsRef.current = 0
+      lastPlayingTimeRef.current = Date.now()
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
       startVisualization()
     }
@@ -466,19 +480,74 @@ export default function RadioMiniApp() {
       setIsLoading(false)
     }
     
-    const onStalled = () => setBuffering(true)
-    
+    const onStalled = () => {
+      console.log('[AUDIO] Stalled - буферизация')
+      setBuffering(true)
+    }
+
+    const onEnded = () => {
+      console.log('[AUDIO] Stream ended - попытка переподключения')
+      attemptReconnect()
+    }
+
+    // Автоматическое переподключение при ошибках
+    const attemptReconnect = () => {
+      const attempts = reconnectAttemptsRef.current
+      console.log(`[RECONNECT] Попытка ${attempts + 1}/${MAX_RECONNECT_ATTEMPTS}`)
+
+      if (attempts >= MAX_RECONNECT_ATTEMPTS) {
+        console.error('[RECONNECT] Превышено макс. количество попыток')
+        setError('Не удалось восстановить соединение')
+        setIsPlaying(false)
+        isPlayingRef.current = false
+        stopVisualization()
+        return
+      }
+
+      reconnectAttemptsRef.current = attempts + 1
+      setIsLoading(true)
+      setError(null)
+
+      // Очищаем предыдущий таймаут
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
+
+      // Задержка перед переподключением
+      reconnectTimeoutRef.current = setTimeout(() => {
+        const audio = audioRef.current
+        if (!audio || !isPlayingRef.current) return
+
+        console.log('[RECONNECT] Переподключение к потоку...')
+        audio.src = ''
+        audio.load()
+        audio.src = STREAM_URL
+        audio.load()
+        audio.play().catch(e => {
+          console.error('[RECONNECT] Ошибка воспроизведения:', e)
+          attemptReconnect()
+        })
+      }, RECONNECT_DELAY)
+    }
+
     const onError = () => {
       const mediaError = audio.error
       console.error('[AUDIO] Error:', mediaError ? getAudioErrorMessage(mediaError) : 'Unknown')
-      
+
       if (mediaError?.code === MediaError.MEDIA_ERR_DECODE) {
         if (isIOSRef.current && !fallbackModeRef.current) {
           console.log('[AUDIO] Переключение в FALLBACK MODE')
           fallbackModeRef.current = true
         }
       }
-      
+
+      // Сетевая ошибка - пробуем переподключиться
+      if (mediaError?.code === MediaError.MEDIA_ERR_NETWORK) {
+        console.log('[AUDIO] Сетевая ошибка - автосоединение...')
+        attemptReconnect()
+        return
+      }
+
       let errorMsg = 'Ошибка воспроизведения'
       if (mediaError) {
         switch (mediaError.code) {
@@ -488,7 +557,7 @@ export default function RadioMiniApp() {
           case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED: errorMsg = 'Формат не поддерживается'; break
         }
       }
-      
+
       setIsLoading(false)
       setIsPlaying(false)
       setBuffering(false)
@@ -496,13 +565,14 @@ export default function RadioMiniApp() {
       stopVisualization()
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
     }
-    
+
     audio.addEventListener('playing', onPlaying)
     audio.addEventListener('pause', onPause)
     audio.addEventListener('waiting', onWaiting)
     audio.addEventListener('canplay', onCanPlay)
     audio.addEventListener('stalled', onStalled)
     audio.addEventListener('error', onError)
+    audio.addEventListener('ended', onEnded)
     
     const onVisibilityChange = async () => {
       const ctx = audioContextRef.current
@@ -511,7 +581,7 @@ export default function RadioMiniApp() {
       }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
-    
+
     return () => {
       audio.removeEventListener('playing', onPlaying)
       audio.removeEventListener('pause', onPause)
@@ -519,13 +589,54 @@ export default function RadioMiniApp() {
       audio.removeEventListener('canplay', onCanPlay)
       audio.removeEventListener('stalled', onStalled)
       audio.removeEventListener('error', onError)
+      audio.removeEventListener('ended', onEnded)
       document.removeEventListener('visibilitychange', onVisibilityChange)
       audio.pause()
       audio.src = ''
       stopVisualization()
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
+      if (keepaliveIntervalRef.current) clearInterval(keepaliveIntervalRef.current)
     }
   }, [stopVisualization, startVisualization])
+
+  // =====================================================
+  // KEEPALIVE - проверка состояния потока
+  // =====================================================
+  useEffect(() => {
+    if (!isPlaying) {
+      if (keepaliveIntervalRef.current) {
+        clearInterval(keepaliveIntervalRef.current)
+        keepaliveIntervalRef.current = null
+      }
+      return
+    }
+
+    keepaliveIntervalRef.current = setInterval(() => {
+      const audio = audioRef.current
+      if (!audio || !isPlayingRef.current) return
+
+      // Проверяем, было ли воспроизведение недавно
+      const timeSinceLastPlay = Date.now() - lastPlayingTimeRef.current
+
+      // Если больше 2 минут не было события playing - возможно поток завис
+      if (timeSinceLastPlay > 120000) {
+        console.log('[KEEPALIVE] Поток возможно завис, переподключение...')
+        audio.src = ''
+        audio.load()
+        audio.src = STREAM_URL
+        audio.load()
+        audio.play().catch(e => console.error('[KEEPALIVE] Ошибка:', e))
+        lastPlayingTimeRef.current = Date.now()
+      }
+    }, KEEPALIVE_INTERVAL)
+
+    return () => {
+      if (keepaliveIntervalRef.current) {
+        clearInterval(keepaliveIntervalRef.current)
+      }
+    }
+  }, [isPlaying])
 
   // =====================================================
   // ГРОМКОСТЬ
