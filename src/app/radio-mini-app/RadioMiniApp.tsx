@@ -28,6 +28,9 @@ const COLORS = {
 const ADMIN_USER_ID = 55068554
 const BAR_COUNT = 24
 const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'RadioGoodOFF_bot'
+const MINI_APP_NAME = process.env.NEXT_PUBLIC_MINI_APP_NAME || 'app'
+const MINI_APP_URL = `https://t.me/${BOT_USERNAME}/${MINI_APP_NAME}`
+const SUBSCRIBE_API = '/api/subscribe'
 const OFFLINE_CHECK_INTERVAL = 30000 // 30 seconds
 
 // Equalizer default values (in dB, -12 to +12)
@@ -498,7 +501,7 @@ export default function RadioMiniApp() {
 
   // Handle share button
   const handleShare = useCallback(() => {
-    const shareUrl = `https://t.me/${BOT_USERNAME}?startapp=play`
+    const shareUrl = MINI_APP_URL
     const shareText = `Слушаю DJ GooD OFF FM 🎵`
     
     const tg = window.Telegram?.WebApp
@@ -525,28 +528,70 @@ export default function RadioMiniApp() {
     }
   }, [])
 
-  // Handle notify me button
-  const handleNotifyMe = useCallback(() => {
+  // Handle notify me button - subscribe via API
+  const handleNotifyMe = useCallback(async () => {
     const tg = window.Telegram?.WebApp
+    const user = tg?.initDataUnsafe?.user
     
-    if (tg?.showPopup) {
-      tg.showPopup({
-        title: 'Уведомление о эфире',
-        message: 'Хотите получить уведомление, когда радио начнёт вещание?',
-        buttons: [
-          { type: 'cancel', label: 'Отмена' },
-          { type: 'ok', label: 'Подписаться', id: 'subscribe' }
-        ]
-      }, (buttonId) => {
-        if (buttonId === 'subscribe') {
-          // Open bot with subscribe command
-          tg.openTelegramLink?.(`https://t.me/${BOT_USERNAME}?start=subscribe_notify`)
-        }
+    if (!user) {
+      tg?.showPopup?.({
+        title: 'Ошибка',
+        message: 'Не удалось получить данные пользователя. Откройте приложение через Telegram.',
+        buttons: [{ type: 'ok' }]
       })
-    } else {
-      // Outside Telegram - open bot link
-      window.open(`https://t.me/${BOT_USERNAME}?start=subscribe_notify`, '_blank')
+      return
     }
+    
+    // Show confirmation popup
+    tg?.showPopup?.({
+      title: 'Уведомление о эфире',
+      message: 'Хотите получить уведомление, когда радио начнёт вещание?',
+      buttons: [
+        { type: 'cancel', label: 'Отмена' },
+        { type: 'ok', label: 'Подписаться', id: 'subscribe' }
+      ]
+    }, async (buttonId) => {
+      if (buttonId === 'subscribe') {
+        try {
+          // Subscribe via API
+          const response = await fetch(SUBSCRIBE_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: user.id,
+              first_name: user.first_name,
+              username: user.username,
+              action: 'subscribe'
+            })
+          })
+          
+          const data = await response.json()
+          
+          if (data.success) {
+            tg?.showPopup?.({
+              title: data.wasSubscribed ? 'Уже подписаны' : 'Подписка оформлена!',
+              message: data.wasSubscribed 
+                ? 'Вы уже подписаны на уведомления. Мы сообщим, когда радио начнёт вещание.'
+                : 'Мы отправим уведомление, когда радио начнёт вещание!',
+              buttons: [{ type: 'ok' }]
+            })
+          } else {
+            tg?.showPopup?.({
+              title: 'Ошибка',
+              message: 'Не удалось оформить подписку. Попробуйте позже.',
+              buttons: [{ type: 'ok' }]
+            })
+          }
+        } catch (error) {
+          console.error('Subscribe error:', error)
+          tg?.showPopup?.({
+            title: 'Ошибка',
+            message: 'Произошла ошибка. Попробуйте позже.',
+            buttons: [{ type: 'ok' }]
+          })
+        }
+      }
+    })
   }, [])
 
   // Get status message
