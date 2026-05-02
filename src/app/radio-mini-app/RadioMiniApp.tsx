@@ -4,14 +4,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Sliders, ChevronDown, ChevronUp } from 'lucide-react'
 
-// Stream URL - use Cloudflare Worker as HTTPS proxy for HTTP Icecast stream
-// Worker code is in /cloudflare-worker/radio-proxy.js
-const STREAM_URL = process.env.NEXT_PUBLIC_STREAM_URL || 'https://radio-stream.gondurass89.workers.dev'
+const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
 const LISTENERS_API = '/api/listener'
 const NOW_PLAYING_API = '/api/now-playing'
-const ALBUM_ART_API = '/api/album-art'
 
 const COLORS = {
   primary: '#2e0071',
@@ -71,8 +68,6 @@ export default function RadioMiniApp() {
   const [buffering, setBuffering] = useState(false)
   const [useCSSAnimation, setUseCSSAnimation] = useState(false)
   const [showEqualizer, setShowEqualizer] = useState(false)
-  const [albumArt, setAlbumArt] = useState<string | null>(null)
-  const [prevTrack, setPrevTrack] = useState<string>('')
   
   // Equalizer state (in dB)
   const [eqValues, setEqValues] = useState(() => {
@@ -254,24 +249,6 @@ export default function RadioMiniApp() {
     const interval = setInterval(fetchCurrentTrack, 5000) // Every 5 seconds
     return () => clearInterval(interval)
   }, [fetchCurrentTrack])
-
-  // Fetch album art when track changes
-  useEffect(() => {
-    if (currentTrack && currentTrack !== 'Загрузка...' && currentTrack !== prevTrack) {
-      setPrevTrack(currentTrack)
-      // Fetch album art from Last.fm
-      fetch(`${ALBUM_ART_API}?title=${encodeURIComponent(currentTrack)}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.albumArtLarge) {
-            setAlbumArt(data.albumArtLarge)
-          } else {
-            setAlbumArt(null)
-          }
-        })
-        .catch(() => setAlbumArt(null))
-    }
-  }, [currentTrack, prevTrack])
 
   // Real audio visualization with equalizer (for desktop/Android)
   const startRealVisualization = useCallback(() => {
@@ -591,7 +568,7 @@ export default function RadioMiniApp() {
         />
 
         <div className="relative z-10 w-full max-w-xs">
-          {/* Logo / Album Art - with smooth CSS transition */}
+          {/* Logo - with smooth CSS transition */}
           <div 
             className="relative z-0 overflow-hidden transition-all duration-300 ease-out"
             style={{
@@ -601,9 +578,9 @@ export default function RadioMiniApp() {
             }}
           >
             <motion.img
-              src={albumArt || STATION_LOGO}
-              alt={albumArt ? `Album: ${currentTrack}` : STATION_NAME}
-              className="mx-auto rounded-lg object-cover"
+              src={STATION_LOGO}
+              alt={STATION_NAME}
+              className="mx-auto"
               style={{
                 width: '150px',
                 height: '150px',
@@ -611,7 +588,6 @@ export default function RadioMiniApp() {
               }}
               animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              onError={() => setAlbumArt(null)} // Fallback to logo on error
             />
           </div>
 
