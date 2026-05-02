@@ -27,7 +27,7 @@ const COLORS = {
 
 const ADMIN_USER_ID = 55068554
 const BAR_COUNT = 24
-const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'DJGooDOFF_bot'
+const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'RadioGoodOFF_bot'
 const OFFLINE_CHECK_INTERVAL = 30000 // 30 seconds
 
 // Equalizer default values (in dB, -12 to +12)
