@@ -612,8 +612,8 @@ export default function RadioMiniApp() {
         />
 
         <div className="relative z-10 w-full max-w-xs">
-          {/* Album Art / Logo - with fade animation and pulse when playing */}
-          <div 
+          {/* Album Art / Logo - with fade animation and breathing effect */}
+          <div
             className="relative z-0 overflow-hidden transition-all duration-300 ease-out"
             style={{
               height: showEqualizer ? 0 : 150,
@@ -621,10 +621,16 @@ export default function RadioMiniApp() {
               marginBottom: showEqualizer ? 0 : 12,
             }}
           >
-            {/* Pulse animation wrapper when playing */}
+            {/* Breathing animation - always active, stronger when playing */}
             <motion.div
-              animate={isPlaying ? { scale: [1, 1.03, 1] } : { scale: 1 }}
-              transition={isPlaying ? { duration: 2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
+              animate={{
+                scale: [1, isPlaying ? 1.08 : 1.05, 1],
+              }}
+              transition={{
+                duration: isPlaying ? 2 : 3,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
               className="flex justify-center"
             >
               <AnimatePresence mode="wait">
