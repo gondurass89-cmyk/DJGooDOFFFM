@@ -88,11 +88,13 @@ export async function fetchTrackInfo(artist: string, track: string): Promise<Las
       // Sizes: small, medium, large, extralarge
       const images = album.image as Array<{ '#text': string; size: string }>;
       
+      // Get extralarge (300x300) for best quality, fallback to large
+      const extralargeImg = images.find(img => img.size === 'extralarge');
+      const largeImg = images.find(img => img.size === 'large');
       const mediumImg = images.find(img => img.size === 'medium');
-      const largeImg = images.find(img => img.size === 'large') || images.find(img => img.size === 'extralarge');
       
       albumArt = mediumImg?.['#text'] || null;
-      albumArtLarge = largeImg?.['#text'] || null;
+      albumArtLarge = extralargeImg?.['#text'] || largeImg?.['#text'] || null;
     }
     
     return {
