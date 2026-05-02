@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Sliders, ChevronDown, ChevronUp } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Sliders, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { useRadioPlayer, PlayerState } from '../hooks/useRadioPlayer'
 
 const STREAM_URL = '/api/stream'
 const STATION_NAME = 'DJ GooD OFF FM'
@@ -57,9 +58,21 @@ declare global {
   }
 }
 
+// Helper to get status message based on player state
+function getStatusMessage(state: PlayerState, attemptsLeft: number, maxAttempts: number): string | null {
+  switch (state) {
+    case 'connecting':
+      return 'Подключение...'
+    case 'reconnecting':
+      return `Переподключение... (${attemptsLeft}/${maxAttempts})`
+    case 'error':
+      return null // Will show error message with retry button
+    default:
+      return null
+  }
+}
+
 export default function RadioMiniApp() {
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
   const [volume, setVolume] = useState(100)
   const [isMuted, setIsMuted] = useState(false)
   const [currentTrack, setCurrentTrack] = useState('Загрузка...')
@@ -67,8 +80,6 @@ export default function RadioMiniApp() {
   const [icecastListeners, setIcecastListeners] = useState(0)
   const [audioData, setAudioData] = useState<number[]>(new Array(BAR_COUNT).fill(0))
   const [isTgReady, setIsTgReady] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [buffering, setBuffering] = useState(false)
   const [useCSSAnimation, setUseCSSAnimation] = useState(false)
   const [showEqualizer, setShowEqualizer] = useState(false)
   const [albumArtUrl, setAlbumArtUrl] = useState<string | null>(null)
@@ -86,7 +97,7 @@ export default function RadioMiniApp() {
     return EQ_DEFAULTS
   })
   
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  // Web Audio API refs for visualization
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null)
@@ -97,21 +108,39 @@ export default function RadioMiniApp() {
   const midFilterRef = useRef<BiquadFilterNode | null>(null)
   const highFilterRef = useRef<BiquadFilterNode | null>(null)
 
+  // Use the radio player hook
+  const {
+    isPlaying,
+    isLoading,
+    playerState,
+    error,
+    buffering,
+    attemptsLeft,
+    maxAttempts,
+    play,
+    pause,
+    retry,
+    audioRef,
+  } = useRadioPlayer({
+    streamUrl: STREAM_URL,
+    volume,
+    isMuted,
+    maxReconnectAttempts: 5,
+    reconnectDelay: 3000,
+  })
+
   // Detect if we need CSS animation (iOS in Telegram)
   useEffect(() => {
     const checkPlatform = () => {
-      // Check Telegram platform
       const tgPlatform = window.Telegram?.WebApp?.platform
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
       
-      // Use CSS animation on iOS or if Telegram reports iOS
       const needsCSS = isIOS || tgPlatform === 'ios'
       setUseCSSAnimation(needsCSS)
       console.log('Platform:', tgPlatform, 'iOS detected:', isIOS, 'Use CSS:', needsCSS)
     }
     
-    // Check immediately and after Telegram loads
     checkPlatform()
     setTimeout(checkPlatform, 500)
   }, [])
@@ -140,7 +169,6 @@ export default function RadioMiniApp() {
         console.log('Now playing:', data.title)
         if (data.title && data.title !== currentTrack) {
           setCurrentTrack(data.title)
-          // Reset album art when track changes
           setAlbumArtUrl(null)
         }
       }
@@ -282,8 +310,8 @@ export default function RadioMiniApp() {
 
   // Fetch track periodically
   useEffect(() => {
-    fetchCurrentTrack() // Initial fetch
-    const interval = setInterval(fetchCurrentTrack, 5000) // Every 5 seconds
+    fetchCurrentTrack()
+    const interval = setInterval(fetchCurrentTrack, 5000)
     return () => clearInterval(interval)
   }, [fetchCurrentTrack])
 
@@ -352,7 +380,7 @@ export default function RadioMiniApp() {
       }
       
       const analyser = analyserRef.current
-      const bufferLength = analyser.frequencyBinCount // 128 bins with fftSize=256
+      const bufferLength = analyser.frequencyBinCount
       const dataArray = new Uint8Array(bufferLength)
       
       const update = () => {
@@ -360,23 +388,15 @@ export default function RadioMiniApp() {
         const mapped = []
         
         for (let i = 0; i < BAR_COUNT; i++) {
-          // Better frequency distribution:
-          // BASS (bars 0-7): use bins 0-15 (concentrated low frequencies)
-          // MID (bars 8-15): use bins 16-63 (spread mid frequencies)  
-          // HIGH (bars 16-23): use bins 64-100 (concentrated high frequencies)
           let idx
           if (i < 8) {
-            // BASS - bins 0-15 (16 bins for 8 bars)
             idx = Math.floor(i * 2)
           } else if (i < 16) {
-            // MID - bins 16-63 (48 bins for 8 bars)
             idx = 16 + Math.floor((i - 8) * 6)
           } else {
-            // HIGH - bins 64-100 (36 bins for 8 bars)
             idx = 64 + Math.floor((i - 16) * 4.5)
           }
           
-          // Clamp index
           idx = Math.min(idx, bufferLength - 1)
           mapped.push(dataArray[idx] / 255)
         }
@@ -391,7 +411,7 @@ export default function RadioMiniApp() {
       console.error('Real visualization error:', e)
       return false
     }
-  }, [])
+  }, [audioRef, eqValues])
 
   const stopVisualization = useCallback(() => {
     if (animationRef.current) {
@@ -401,88 +421,18 @@ export default function RadioMiniApp() {
     setAudioData(new Array(BAR_COUNT).fill(0))
   }, [])
 
-  // Audio setup
+  // Start/stop visualization based on playing state
   useEffect(() => {
-    const audio = new Audio()
-    audio.preload = 'none'
-    audio.crossOrigin = 'anonymous'
-    audioRef.current = audio
-
-    audio.addEventListener('playing', () => {
-      setIsPlaying(true)
-      setIsLoading(false)
-      setBuffering(false)
-      setError(null)
-      
-      // Only try real visualization if NOT using CSS animation
-      if (!useCSSAnimation) {
-        const success = startRealVisualization()
-        if (!success) {
-          console.log('Falling back to CSS animation')
-          setUseCSSAnimation(true)
-        }
+    if (isPlaying && !useCSSAnimation) {
+      const success = startRealVisualization()
+      if (!success) {
+        console.log('Falling back to CSS animation')
+        setUseCSSAnimation(true)
       }
-    })
-    
-    audio.addEventListener('pause', () => {
-      setIsPlaying(false)
-      stopVisualization()
-    })
-    
-    audio.addEventListener('waiting', () => {
-      setBuffering(true)
-      setIsLoading(true)
-    })
-    
-    audio.addEventListener('canplay', () => {
-      setBuffering(false)
-      setIsLoading(false)
-    })
-    
-    audio.addEventListener('error', () => {
-      setIsLoading(false)
-      setIsPlaying(false)
-      setBuffering(false)
-      setError('Ошибка воспроизведения')
-      stopVisualization()
-    })
-
-    return () => {
-      audio.pause()
-      audio.src = ''
+    } else {
       stopVisualization()
     }
-  }, [useCSSAnimation, startRealVisualization, stopVisualization])
-
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = isMuted ? 0 : volume / 100
-    }
-  }, [volume, isMuted])
-
-  const handlePlay = async () => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    setError(null)
-
-    if (isPlaying) {
-      audio.pause()
-      return
-    }
-
-    setIsLoading(true)
-    
-    try {
-      audio.volume = isMuted ? 0 : volume / 100
-      audio.src = STREAM_URL
-      audio.load()
-      await audio.play()
-    } catch (err: any) {
-      setIsLoading(false)
-      setError(err.name === 'NotAllowedError' ? 'Нажмите ещё раз' : 'Ошибка воспроизведения')
-    }
-  }
+  }, [isPlaying, useCSSAnimation, startRealVisualization, stopVisualization])
 
   const displayVolume = isMuted ? 0 : volume
 
@@ -492,7 +442,6 @@ export default function RadioMiniApp() {
     setEqValues(newValues)
     localStorage.setItem('djgoodoff-eq', JSON.stringify(newValues))
     
-    // Apply to filters if they exist
     if (bassFilterRef.current && band === 'bass') {
       bassFilterRef.current.gain.value = value
     }
@@ -518,6 +467,20 @@ export default function RadioMiniApp() {
     if (index < third * 2) return { gradient: `linear-gradient(to top, ${COLORS.mid}, ${COLORS.accent})`, color: COLORS.mid }
     return { gradient: `linear-gradient(to top, ${COLORS.high}, #66ffee)`, color: COLORS.high }
   }
+
+  // Handle play/pause button
+  const handlePlayPause = async () => {
+    if (isPlaying) {
+      pause()
+    } else {
+      await play()
+    }
+  }
+
+  // Get status message
+  const statusMessage = getStatusMessage(playerState, attemptsLeft, maxAttempts)
+  const isReconnecting = playerState === 'reconnecting'
+  const isError = playerState === 'error'
 
   return (
     <>
@@ -547,7 +510,6 @@ export default function RadioMiniApp() {
           border: 3px solid #00c730;
         }
 
-        /* Equalizer horizontal sliders - compact */
         .eq-slider-h {
           -webkit-appearance: none;
           height: 6px;
@@ -585,7 +547,6 @@ export default function RadioMiniApp() {
           box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
         }
 
-        /* CSS Animation for iOS fallback - max 48px to fit container */
         @keyframes barAnim1 { 0%, 100% { height: 6px; } 50% { height: 44px; } }
         @keyframes barAnim2 { 0%, 100% { height: 10px; } 50% { height: 36px; } }
         @keyframes barAnim3 { 0%, 100% { height: 4px; } 50% { height: 32px; } }
@@ -612,7 +573,7 @@ export default function RadioMiniApp() {
         />
 
         <div className="relative z-10 w-full max-w-xs">
-          {/* Album Art / Logo - with fade animation and breathing effect */}
+          {/* Album Art / Logo */}
           <div
             className="relative z-0 overflow-hidden transition-all duration-300 ease-out"
             style={{
@@ -621,7 +582,6 @@ export default function RadioMiniApp() {
               marginBottom: showEqualizer ? 0 : 12,
             }}
           >
-            {/* Breathing animation - always active, stronger when playing */}
             <motion.div
               animate={{
                 scale: [1, isPlaying ? 1.08 : 1.05, 1],
@@ -655,7 +615,6 @@ export default function RadioMiniApp() {
 
           {/* Visualizer */}
           <div className="relative z-10 mb-3">
-            {/* LIVE badge */}
             <AnimatePresence>
               {isPlaying && (
                 <motion.div
@@ -674,11 +633,9 @@ export default function RadioMiniApp() {
               )}
             </AnimatePresence>
 
-            {/* Equalizer container with overflow hidden */}
             <div className="skeuo-card rounded-xl p-2 overflow-hidden">
               <div className="flex justify-center items-end gap-1 h-12 relative">
                 {useCSSAnimation && isPlaying ? (
-                  // CSS animated bars (iOS) - with overflow-hidden on container
                   Array.from({ length: BAR_COUNT }).map((_, i) => {
                     const colors = getBarColor(i)
                     const animClass = `bar-anim-${(i % 5) + 1}`
@@ -699,7 +656,6 @@ export default function RadioMiniApp() {
                     )
                   })
                 ) : (
-                  // Real audio data (desktop/Android)
                   audioData.map((value, i) => {
                     const colors = getBarColor(i)
                     const height = Math.min(48, Math.max(4, value * 48))
@@ -721,7 +677,6 @@ export default function RadioMiniApp() {
               </div>
             </div>
 
-            {/* Labels under the container */}
             <div className="flex justify-between mt-1.5 px-2">
               <span className="text-xs font-medium" style={{ color: COLORS.bass }}>BASS</span>
               <span className="text-xs font-medium" style={{ color: COLORS.mid }}>MID</span>
@@ -753,27 +708,48 @@ export default function RadioMiniApp() {
             </p>
           </div>
 
-          {/* Buffering */}
-          {buffering && (
-              <div className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl skeuo-card">
+          {/* Status messages */}
+          {(buffering || statusMessage) && !isError && (
+            <div className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl skeuo-card">
+              {isReconnecting ? (
+                <RefreshCw className="w-3 h-3 animate-spin" style={{ color: COLORS.accent }} />
+              ) : (
                 <Wifi className="w-3 h-3 animate-pulse" style={{ color: COLORS.secondary }} />
-                <span className="text-xs" style={{ color: COLORS.secondary }}>Буферизация...</span>
-              </div>
-            )}
+              )}
+              <span className="text-xs" style={{ color: isReconnecting ? COLORS.accent : COLORS.secondary }}>
+                {statusMessage || 'Буферизация...'}
+              </span>
+            </div>
+          )}
 
-          {/* Error */}
-          {error && (
-              <div className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl" style={{ background: 'rgba(255,0,102,0.1)' }}>
-                <AlertCircle className="w-3 h-3" style={{ color: COLORS.bass }} />
-                <span className="text-xs" style={{ color: '#ff6699' }}>{error}</span>
+          {/* Error with retry button */}
+          {isError && (
+            <div className="mb-2 p-2 rounded-xl" style={{ background: 'rgba(255,0,102,0.1)' }}>
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <AlertCircle className="w-4 h-4" style={{ color: COLORS.bass }} />
+                <span className="text-sm" style={{ color: '#ff6699' }}>
+                  {error || 'Радио временно недоступно'}
+                </span>
               </div>
-            )}
+              <motion.button
+                onClick={retry}
+                whileTap={{ scale: 0.95 }}
+                className="w-full py-1.5 rounded-lg text-sm font-medium"
+                style={{
+                  background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.secondary})`,
+                  color: COLORS.dark,
+                }}
+              >
+                Попробовать снова
+              </motion.button>
+            </div>
+          )}
 
           {/* Play Button */}
           <div className="flex justify-center mb-3">
             <motion.button
-              onClick={handlePlay}
-              disabled={isLoading}
+              onClick={handlePlayPause}
+              disabled={isLoading && !isReconnecting}
               whileTap={{ scale: 0.95 }}
               className="rounded-full flex items-center justify-center"
               style={{
@@ -781,9 +757,10 @@ export default function RadioMiniApp() {
                 height: '56px',
                 background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.secondary})`,
                 boxShadow: `0 4px 15px rgba(0,199,48,0.5)`,
+                opacity: isLoading && !isReconnecting ? 0.7 : 1,
               }}
             >
-              {isLoading || buffering ? (
+              {(isLoading && !isReconnecting) ? (
                 <Loader2 className="w-5 h-5 animate-spin" style={{ color: COLORS.dark }} />
               ) : isPlaying ? (
                 <Pause className="w-5 h-5" style={{ color: COLORS.dark }} />
@@ -836,7 +813,7 @@ export default function RadioMiniApp() {
             </div>
           )}
 
-          {/* Equalizer toggle button - hide on iOS */}
+          {/* Equalizer toggle - hide on iOS */}
           {!useCSSAnimation && (
             <div className="mb-2">
               <button
@@ -854,7 +831,6 @@ export default function RadioMiniApp() {
                 )}
               </button>
               
-              {/* Collapsible equalizer panel */}
               <AnimatePresence>
                 {showEqualizer && (
                   <motion.div
@@ -866,7 +842,6 @@ export default function RadioMiniApp() {
                   >
                     <div className="skeuo-card rounded-xl p-2 mt-2">
                       <div className="flex gap-2">
-                        {/* BASS */}
                         <div className="flex-1 flex items-center gap-1">
                           <span className="text-xs font-bold w-8" style={{ color: COLORS.bass }}>BASS</span>
                           <input
@@ -884,7 +859,6 @@ export default function RadioMiniApp() {
                       </div>
                       
                       <div className="flex gap-2 mt-1">
-                        {/* MID */}
                         <div className="flex-1 flex items-center gap-1">
                           <span className="text-xs font-bold w-8" style={{ color: COLORS.mid }}>MID</span>
                           <input
@@ -902,7 +876,6 @@ export default function RadioMiniApp() {
                       </div>
                       
                       <div className="flex gap-2 mt-1">
-                        {/* HIGH */}
                         <div className="flex-1 flex items-center gap-1">
                           <span className="text-xs font-bold w-8" style={{ color: COLORS.high }}>HIGH</span>
                           <input
@@ -919,7 +892,6 @@ export default function RadioMiniApp() {
                         </div>
                       </div>
                       
-                      {/* Reset button */}
                       <div className="flex justify-center mt-2">
                         <button
                           onClick={resetEqualizer}
