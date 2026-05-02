@@ -632,12 +632,20 @@ export default function RadioMiniApp() {
                   height: '150px',
                   filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
                 }}
-                animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
-                transition={isPlaying ? { duration: 2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
-                initial={{ opacity: 0 }}
-                exit={{ opacity: 0 }}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.3 }}
               />
             </AnimatePresence>
+            {/* Pulse animation overlay when playing */}
+            {isPlaying && (
+              <motion.div
+                className="absolute inset-0 pointer-events-none"
+                animate={{ scale: [1, 1.03, 1] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              />
+            )}
           </div>
 
           {/* Visualizer */}
