@@ -256,6 +256,11 @@ export async function GET() {
   const now = Date.now()
   const timeout = 30 * 60 * 1000 // 30 minutes
 
+  // Debug: check if Redis is configured
+  const redisConfigured = !!redis
+  const redisUrl = process.env.UPSTASH_REDIS_REST_URL ? 'SET' : 'NOT SET'
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN ? 'SET' : 'NOT SET'
+
   // Get Telegram listeners count
   let telegramCount = 0
 
@@ -294,6 +299,11 @@ export async function GET() {
     telegram: telegramCount,
     icecast: icecastData.unique,
     total: telegramCount + icecastData.unique,
-    clients: icecastData.clients // for debugging
+    clients: icecastData.clients, // for debugging
+    debug: {
+      redisConfigured,
+      redisUrl,
+      redisToken
+    }
   })
 }
