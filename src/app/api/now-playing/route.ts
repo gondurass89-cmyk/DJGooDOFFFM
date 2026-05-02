@@ -113,8 +113,12 @@ export async function GET() {
   // Fetch fresh data every time (no cache on serverless)
   const title = await fetchCurrentTrack()
   
+  // Radio is online if we have a title
+  const online = Boolean(title && title.trim().length > 0)
+  
   return NextResponse.json({
     title,
+    online,
     timestamp: Date.now()
   }, {
     headers: {

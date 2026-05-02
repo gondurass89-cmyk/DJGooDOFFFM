@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Sliders, ChevronDown, ChevronUp, RefreshCw, Share2, Check } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Sliders, ChevronDown, ChevronUp, RefreshCw, Share2, Check, Mic, Bell } from 'lucide-react'
 import { useRadioPlayer, PlayerState } from '../hooks/useRadioPlayer'
 
 const STREAM_URL = '/api/stream'
@@ -28,6 +28,7 @@ const COLORS = {
 const ADMIN_USER_ID = 55068554
 const BAR_COUNT = 24
 const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'DJGooDOFF_bot'
+const OFFLINE_CHECK_INTERVAL = 30000 // 30 seconds
 
 // Equalizer default values (in dB, -12 to +12)
 const EQ_DEFAULTS = { bass: 0, mid: 0, high: 0 }
@@ -40,6 +41,11 @@ declare global {
         ready: () => void
         expand: () => void
         openTelegramLink: (url: string) => void
+        showPopup: (params: {
+          title?: string
+          message: string
+          buttons?: Array<{ type?: string; label?: string; id?: string }>
+        }, callback?: (buttonId: string) => void) => void
         platform: string
         initData: string
         initDataUnsafe?: {
@@ -86,6 +92,7 @@ export default function RadioMiniApp() {
   const [albumArtUrl, setAlbumArtUrl] = useState<string | null>(null)
   const [lastAlbumArtFetch, setLastAlbumArtFetch] = useState(0)
   const [showToast, setShowToast] = useState(false)
+  const [isOnline, setIsOnline] = useState<boolean | null>(null) // null = loading
   
   // Equalizer state (in dB)
   const [eqValues, setEqValues] = useState(() => {
@@ -159,7 +166,7 @@ export default function RadioMiniApp() {
     } catch (e) {}
   }, [])
 
-  // Fetch current track
+  // Fetch current track and online status
   const fetchCurrentTrack = useCallback(async () => {
     try {
       const res = await fetch(NOW_PLAYING_API, { 
@@ -168,7 +175,13 @@ export default function RadioMiniApp() {
       })
       if (res.ok) {
         const data = await res.json()
-        console.log('Now playing:', data.title)
+        console.log('Now playing:', data.title, 'Online:', data.online)
+        
+        // Update online status
+        if (typeof data.online === 'boolean') {
+          setIsOnline(data.online)
+        }
+        
         if (data.title && data.title !== currentTrack) {
           setCurrentTrack(data.title)
           setAlbumArtUrl(null)
@@ -310,11 +323,15 @@ export default function RadioMiniApp() {
     return () => clearInterval(interval)
   }, [fetchListenersCount])
 
-  // Fetch track periodically
+  // Fetch track periodically (every 5 seconds for track, 30 seconds for online status check)
   useEffect(() => {
-    fetchCurrentTrack()
-    const interval = setInterval(fetchCurrentTrack, 5000)
-    return () => clearInterval(interval)
+    fetchCurrentTrack() // Initial fetch
+    const trackInterval = setInterval(fetchCurrentTrack, 5000)
+    const onlineCheckInterval = setInterval(fetchCurrentTrack, OFFLINE_CHECK_INTERVAL)
+    return () => {
+      clearInterval(trackInterval)
+      clearInterval(onlineCheckInterval)
+    }
   }, [fetchCurrentTrack])
 
   // Fetch album art when track changes
@@ -508,10 +525,37 @@ export default function RadioMiniApp() {
     }
   }, [])
 
+  // Handle notify me button
+  const handleNotifyMe = useCallback(() => {
+    const tg = window.Telegram?.WebApp
+    
+    if (tg?.showPopup) {
+      tg.showPopup({
+        title: 'Уведомление о эфире',
+        message: 'Хотите получить уведомление, когда радио начнёт вещание?',
+        buttons: [
+          { type: 'cancel', label: 'Отмена' },
+          { type: 'ok', label: 'Подписаться', id: 'subscribe' }
+        ]
+      }, (buttonId) => {
+        if (buttonId === 'subscribe') {
+          // Open bot with subscribe command
+          tg.openTelegramLink?.(`https://t.me/${BOT_USERNAME}?start=subscribe_notify`)
+        }
+      })
+    } else {
+      // Outside Telegram - open bot link
+      window.open(`https://t.me/${BOT_USERNAME}?start=subscribe_notify`, '_blank')
+    }
+  }, [])
+
   // Get status message
   const statusMessage = getStatusMessage(playerState, attemptsLeft, maxAttempts)
   const isReconnecting = playerState === 'reconnecting'
   const isError = playerState === 'error'
+
+  // Loading state while checking online status
+  const isLoadingStatus = isOnline === null
 
   return (
     <>
@@ -603,7 +647,102 @@ export default function RadioMiniApp() {
           }}
         />
 
-        <div className="relative z-10 w-full max-w-xs">
+        <AnimatePresence mode="wait">
+          {/* Loading state */}
+          {isLoadingStatus && (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="relative z-10 flex flex-col items-center"
+            >
+              <Loader2 className="w-12 h-12 animate-spin" style={{ color: COLORS.secondary }} />
+              <p className="mt-4 text-sm" style={{ color: COLORS.text }}>Проверка статуса...</p>
+            </motion.div>
+          )}
+
+          {/* Offline screen */}
+          {!isLoadingStatus && !isOnline && (
+            <motion.div
+              key="offline"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.3 }}
+              className="relative z-10 w-full max-w-xs flex flex-col items-center"
+            >
+              {/* Pulsing microphone icon */}
+              <motion.div
+                animate={{
+                  scale: [1, 1.1, 1],
+                  opacity: [0.7, 1, 0.7],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+                className="mb-6"
+              >
+                <div 
+                  className="rounded-full p-6"
+                  style={{
+                    background: `linear-gradient(145deg, rgba(46,0,113,0.8), rgba(13,0,38,0.9))`,
+                    boxShadow: `0 0 40px rgba(0,199,48,0.3), inset 0 0 20px rgba(0,199,48,0.1)`,
+                    border: `2px solid ${COLORS.secondary}`,
+                  }}
+                >
+                  <Mic className="w-16 h-16" style={{ color: COLORS.secondary }} />
+                </div>
+              </motion.div>
+
+              {/* Offline info card */}
+              <div className="skeuo-card rounded-xl p-4 text-center w-full mb-4">
+                <h1 className="text-xl font-bold text-white mb-2">{STATION_NAME}</h1>
+                <p className="text-lg mb-1" style={{ color: COLORS.accent }}>
+                  Эфир скоро начнётся
+                </p>
+                <p className="text-xs" style={{ color: COLORS.text }}>
+                  Радио временно не ведёт вещание
+                </p>
+              </div>
+
+              {/* Notify button */}
+              <motion.button
+                onClick={handleNotifyMe}
+                whileTap={{ scale: 0.95 }}
+                className="w-full skeuo-card rounded-xl p-3 flex items-center justify-center gap-2"
+                style={{
+                  border: `1px solid ${COLORS.secondary}`,
+                }}
+              >
+                <Bell className="w-5 h-5" style={{ color: COLORS.secondary }} />
+                <span className="text-sm font-medium" style={{ color: COLORS.secondary }}>
+                  Уведомить меня
+                </span>
+              </motion.button>
+
+              {/* Footer */}
+              <p 
+                className="text-center text-xs mt-4" 
+                style={{ color: '#555' }}
+              >
+                Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
+              </p>
+            </motion.div>
+          )}
+
+          {/* Online player */}
+          {!isLoadingStatus && isOnline && (
+            <motion.div
+              key="online"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="relative z-10 w-full max-w-xs"
+            >
           {/* Album Art / Logo */}
           <div
             className="relative z-0 overflow-hidden transition-all duration-300 ease-out"
@@ -961,7 +1100,9 @@ export default function RadioMiniApp() {
           >
             Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
           </p>
-        </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Toast notification */}
         <AnimatePresence>
