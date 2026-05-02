@@ -3,7 +3,8 @@
  * Fetches album artwork for currently playing tracks
  */
 
-const LASTFM_API_KEY = process.env.LASTFM_API_KEY;
+// Use NEXT_PUBLIC_ prefix for client-side access (already configured in Vercel)
+const LASTFM_API_KEY = process.env.NEXT_PUBLIC_LASTFM_KEY;
 const LASTFM_API_URL = 'https://ws.audioscrobbler.com/2.0/';
 
 export interface LastFMTrackInfo {
