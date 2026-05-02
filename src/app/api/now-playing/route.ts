@@ -14,6 +14,10 @@ const PATTERNS_TO_REMOVE = [
   /\d+\s*BPM/gi,
   // Key info variations
   /Key[:\s]*[A-G][#b]?\s*(min|maj|minor|major)?\s*[-–—]\s*/gi,
+  // "by author" tags in brackets: [by DragoN_Sky], [by Someone], etc.
+  /\s*\[by\s+[^\]]+\]/gi,
+  // Any bracketed tags at the end: [Extended], [Radio Edit], etc. - but keep (Original Mix)
+  /\s*\[(?!Original\s*Mix|Radio\s*Edit|Extended|Remix)[^\]]*\]$/gi,
   // Website URLs - www.domain.com, domain.com, etc.
   /www\.[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}/gi,
   /https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}/gi,
