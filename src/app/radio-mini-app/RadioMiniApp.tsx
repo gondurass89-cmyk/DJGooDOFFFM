@@ -498,7 +498,7 @@ export default function RadioMiniApp() {
 
   // Handle share button
   const handleShare = useCallback(() => {
-    const shareUrl = `https://t.me/${BOT_USERNAME}/app`
+    const shareUrl = `https://t.me/${BOT_USERNAME}?startapp=play`
     const shareText = `Слушаю DJ GooD OFF FM 🎵`
     
     const tg = window.Telegram?.WebApp
