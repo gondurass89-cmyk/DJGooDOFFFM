@@ -210,17 +210,30 @@ export async function POST(request: NextRequest) {
       // Get total count (clean up stale entries)
       const allListeners = await redis.hgetall(LISTENERS_KEY)
       console.log('Redis hgetall result:', JSON.stringify(allListeners))
+      console.log('Redis hgetall type:', typeof allListeners, 'isArray:', Array.isArray(allListeners))
       
       const now = Date.now()
 
       let count = 0
       if (allListeners && Object.keys(allListeners).length > 0) {
         for (const [id, dataStr] of Object.entries(allListeners)) {
+          console.log('Entry - id:', id, 'type:', typeof id, 'dataStr type:', typeof dataStr, 'dataStr value:', dataStr)
           try {
-            const data = JSON.parse(String(dataStr)) as ListenerData
+            // Upstash Redis might return the value as string or already parsed object
+            let data: ListenerData
+            if (typeof dataStr === 'string') {
+              data = JSON.parse(dataStr)
+            } else if (typeof dataStr === 'object') {
+              data = dataStr as ListenerData
+            } else {
+              throw new Error('Unexpected data type: ' + typeof dataStr)
+            }
+            console.log('Parsed data:', JSON.stringify(data), 'lastSeen:', data.lastSeen, 'now:', now, 'diff:', now - data.lastSeen)
             if (now - data.lastSeen > timeout) {
+              console.log('Entry expired, deleting')
               await redis.hdel(LISTENERS_KEY, id)
             } else {
+              console.log('Entry valid, counting')
               count++
             }
           } catch (e) {
