@@ -612,7 +612,7 @@ export default function RadioMiniApp() {
         />
 
         <div className="relative z-10 w-full max-w-xs">
-          {/* Album Art / Logo - with smooth CSS transition and fade animation */}
+          {/* Album Art / Logo - with fade animation and pulse when playing */}
           <div 
             className="relative z-0 overflow-hidden transition-all duration-300 ease-out"
             style={{
@@ -621,31 +621,30 @@ export default function RadioMiniApp() {
               marginBottom: showEqualizer ? 0 : 12,
             }}
           >
-            <AnimatePresence mode="wait">
-              <motion.img
-                key={albumArtUrl || 'default'}
-                src={albumArtUrl || STATION_LOGO}
-                alt={STATION_NAME}
-                className="mx-auto rounded-lg object-cover"
-                style={{
-                  width: '150px',
-                  height: '150px',
-                  filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
-                }}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.3 }}
-              />
-            </AnimatePresence>
-            {/* Pulse animation overlay when playing */}
-            {isPlaying && (
-              <motion.div
-                className="absolute inset-0 pointer-events-none"
-                animate={{ scale: [1, 1.03, 1] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              />
-            )}
+            {/* Pulse animation wrapper when playing */}
+            <motion.div
+              animate={isPlaying ? { scale: [1, 1.03, 1] } : { scale: 1 }}
+              transition={isPlaying ? { duration: 2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
+              className="flex justify-center"
+            >
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={albumArtUrl || 'default'}
+                  src={albumArtUrl || STATION_LOGO}
+                  alt={STATION_NAME}
+                  className="rounded-lg object-cover"
+                  style={{
+                    width: '150px',
+                    height: '150px',
+                    filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
+                  }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                />
+              </AnimatePresence>
+            </motion.div>
           </div>
 
           {/* Visualizer */}
