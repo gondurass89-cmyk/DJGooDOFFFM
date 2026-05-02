@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { parseTrackTitle, fetchTrackInfo, searchAlbumArt } from '@/lib/lastfm'
+import { parseTrackTitle, getTrackArtwork } from '@/lib/lastfm'
 
 // Cache for album art requests
 const cache = new Map<string, { data: any; timestamp: number }>()
@@ -31,42 +31,25 @@ export async function GET(request: NextRequest) {
       artist: null, 
       track: title, 
       albumArt: null,
-      albumArtLarge: null 
+      albumArtLarge: null,
+      source: 'none'
     }
     return NextResponse.json(result, {
       headers: { 'Cache-Control': 'public, max-age=60' }
     })
   }
   
-  // Fetch from Last.fm
-  const trackInfo = await fetchTrackInfo(parsed.artist, parsed.track)
-  
-  if (trackInfo && trackInfo.albumArtLarge) {
-    const result = {
-      title,
-      artist: trackInfo.artist,
-      track: trackInfo.track,
-      album: trackInfo.album,
-      albumArt: trackInfo.albumArt,
-      albumArtLarge: trackInfo.albumArtLarge,
-    }
-    
-    cache.set(title, { data: result, timestamp: Date.now() })
-    
-    return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'public, max-age=60' }
-    })
-  }
-  
-  // Fallback: search for album art
-  const albumArt = await searchAlbumArt(parsed.artist, parsed.track)
+  // Fetch from Last.fm → iTunes fallback
+  const trackInfo = await getTrackArtwork(parsed.artist, parsed.track)
   
   const result = {
     title,
-    artist: parsed.artist,
-    track: parsed.track,
-    albumArt,
-    albumArtLarge: albumArt,
+    artist: trackInfo?.artist || parsed.artist,
+    track: trackInfo?.track || parsed.track,
+    album: trackInfo?.album || '',
+    albumArt: trackInfo?.albumArt || null,
+    albumArtLarge: trackInfo?.albumArtLarge || null,
+    source: trackInfo?.source || 'none',
   }
   
   cache.set(title, { data: result, timestamp: Date.now() })
