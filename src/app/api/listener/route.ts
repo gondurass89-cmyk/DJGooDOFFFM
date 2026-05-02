@@ -197,36 +197,50 @@ export async function POST(request: NextRequest) {
 
     if (redis) {
       // Use Redis
+      console.log('Using Redis for listener storage')
+      
       if (action === 'open') {
-        await redis.hset(LISTENERS_KEY, { [user_id]: JSON.stringify(listenerData) })
+        const setResult = await redis.hset(LISTENERS_KEY, { [user_id]: JSON.stringify(listenerData) })
+        console.log('Redis hset result:', setResult, 'for user_id:', user_id)
       } else if (action === 'close') {
-        await redis.hdel(LISTENERS_KEY, user_id.toString())
+        const delResult = await redis.hdel(LISTENERS_KEY, user_id.toString())
+        console.log('Redis hdel result:', delResult)
       }
 
       // Get total count (clean up stale entries)
-      const allListeners = await redis.hgetall(LISTENERS_KEY) || {}
+      const allListeners = await redis.hgetall(LISTENERS_KEY)
+      console.log('Redis hgetall result:', JSON.stringify(allListeners))
+      
       const now = Date.now()
 
       let count = 0
-      for (const [id, dataStr] of Object.entries(allListeners)) {
-        try {
-          const data = JSON.parse(String(dataStr)) as ListenerData
-          if (now - data.lastSeen > timeout) {
+      if (allListeners && Object.keys(allListeners).length > 0) {
+        for (const [id, dataStr] of Object.entries(allListeners)) {
+          try {
+            const data = JSON.parse(String(dataStr)) as ListenerData
+            if (now - data.lastSeen > timeout) {
+              await redis.hdel(LISTENERS_KEY, id)
+            } else {
+              count++
+            }
+          } catch (e) {
+            console.error('Parse error for id:', id, e)
             await redis.hdel(LISTENERS_KEY, id)
-          } else {
-            count++
           }
-        } catch {
-          await redis.hdel(LISTENERS_KEY, id)
         }
       }
 
-      console.log('Redis listeners count:', count)
+      console.log('Redis listeners count:', count, 'raw entries:', allListeners ? Object.keys(allListeners).length : 0)
       notifyAdmin(listenerData, count, isAdmin || user_id === Number(ADMIN_CHAT_ID))
 
       return NextResponse.json({
         success: true,
-        telegramListeners: count
+        telegramListeners: count,
+        debug: {
+          redisEntries: allListeners ? Object.keys(allListeners).length : 0,
+          action,
+          userId: user_id
+        }
       })
     } else {
       // Fallback to in-memory (local dev)
