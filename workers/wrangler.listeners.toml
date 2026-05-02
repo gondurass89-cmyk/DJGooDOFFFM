@@ -1,0 +1,21 @@
+# =====================================================
+# WRANGLER.TOML - listeners worker
+# =====================================================
+# Деплой: wrangler deploy --config workers/wrangler.listeners.toml
+# =====================================================
+
+name = "listeners"
+main = "listeners-worker.js"
+compatibility_date = "2024-01-01"
+
+# Раскомментируйте и укажите ваш Account ID
+# account_id = "your-account-id-here"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "nowplaying-db"
+database_id = "your-d1-database-id-here"
+
+[env.production]
+logpush = true

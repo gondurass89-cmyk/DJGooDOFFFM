@@ -1,55 +1,21 @@
 # =====================================================
-# WRANGLER.TOML - Конфигурация для radio-stream worker
+# WRANGLER.TOML - Главный конфиг для radio-stream worker
 # =====================================================
-# 
-# ИНСТРУКЦИЯ ПО ДЕПЛОЮ ЧЕРЕЗ CLI:
-# 1. npm install -g wrangler
-# 2. wrangler login
-# 3. wrangler deploy
+#
+# Для деплоя других workers используйте:
+# - wrangler deploy --config workers/wrangler.radio-stream.toml
+# - wrangler deploy --config workers/wrangler.nowplaying.toml
+# - wrangler deploy --config workers/wrangler.listeners.toml
 #
 # ИЛИ ИСПОЛЬЗОВАТЬ КОД В CLOUDFLARE DASHBOARD
 # =====================================================
 
-# Имя воркера (определяет URL: https://radio-stream.<subdomain>.workers.dev)
 name = "radio-stream"
-
-# Точка входа (главный файл с кодом воркера)
 main = "workers/radio-stream-worker.js"
-
-# Дата привязки для совместимости
 compatibility_date = "2024-01-01"
 
-# =====================================================
-# НАСТРОЙКИ ACCOUNT ID
-# =====================================================
-# Раскомментируйте и укажите ваш Account ID из Cloudflare Dashboard
+# Раскомментируйте и укажите ваш Account ID
 # account_id = "your-account-id-here"
 
-# =====================================================
-# НАСТРОЙКИ ДЕПЛОЯ
-# =====================================================
-# Режим воркера (bundled = сборка с webpack/esbuild)
-[build]
-command = ""  # Нет команды сборки для простого JS файла
-
-# =====================================================
-# ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
-# =====================================================
-# Можно добавить если нужно менять upstream URL
-# [vars]
-# UPSTREAM_URL = "http://s0.radioheart.ru:8000/RH84200"
-
-# =====================================================
-# НАСТРОЙКИ ЛОГИРОВАНИЯ
-# =====================================================
-# Уровень логирования для production
 [env.production]
 logpush = true
-
-# =====================================================
-# НАСТРОЙКИ РОУТИНГА (опционально)
-# =====================================================
-# Если нужен кастомный домен:
-# [[routes]]
-# pattern = "stream.volfrings.ru/*"
-# zone_name = "volfrings.ru"
