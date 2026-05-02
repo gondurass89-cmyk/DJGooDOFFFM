@@ -1,20 +1,31 @@
 // =====================================================
 // CLOUDFLARE WORKER: NOW PLAYING (HYBRID)
-// Получение текущего трека: D1 + Icecast JSON fallback
+// Получение текущего трека: D1 + Icecast fallback
+// Подсчёт слушателей: уникальные Telegram ID
 // =====================================================
 //
 // ИСТОЧНИКИ ДАННЫХ:
-// 1. D1 Database (POST от RadioBoss) — первичный
-// 2. Icecast JSON API — fallback
+// 1. D1 Database (POST от RadioBoss) — title
+// 2. D1 Database (listeners таблица) — уникальные слушатели
+// 3. Icecast JSON API — fallback
 //
 // РАЗМЕЩЕНИЕ:
 // - Cloudflare Dashboard -> Workers -> nowplaying
 // - URL: https://nowplaying.gondurass89.workers.dev
 // - D1 Binding: DB -> nowplaying-db
 //
-// SQL ТАБЛИЦА:
+// SQL ТАБЛИЦЫ:
 // CREATE TABLE track (id INTEGER PRIMARY KEY CHECK (id = 1), title TEXT);
 // INSERT INTO track (id, title) VALUES (1, 'DJ GooD OFF FM');
+//
+// CREATE TABLE listeners (
+//   user_id INTEGER PRIMARY KEY,
+//   first_name TEXT,
+//   last_name TEXT,
+//   username TEXT,
+//   is_admin INTEGER DEFAULT 0,
+//   last_heartbeat INTEGER
+// );
 // =====================================================
 
 // =====================================================
@@ -24,6 +35,7 @@ const ICECAST_JSON_URL = 'http://178.49.69.37:8000/status-json.xsl';
 const MOUNT_POINT = '/Radio';
 const CACHE_MAX_AGE = 10; // секунд
 const CONNECT_TIMEOUT = 5000; // 5 секунд
+const LISTENER_TTL = 120000; // 2 минуты (heartbeat timeout)
 
 // =====================================================
 // ГЛАВНЫЙ ОБРАБОТЧИК
@@ -93,15 +105,16 @@ async function handlePost(request, env) {
 }
 
 // =====================================================
-// GET: Получение трека (D1 + Icecast fallback)
+// GET: Получение трека и слушателей
 // =====================================================
 async function handleGet(env) {
   let title = null;
   let listeners = 0;
   let source = 'unknown';
+  let unique = false;
 
   // =====================================================
-  // 1. Пробуем получить из D1
+  // 1. Получаем title из D1
   // =====================================================
   try {
     const result = await env.DB.prepare(`
@@ -114,26 +127,54 @@ async function handleGet(env) {
       console.log('[NOWPLAYING] D1 title:', title);
     }
   } catch (error) {
-    console.error('[NOWPLAYING] D1 Error:', error);
+    console.error('[NOWPLAYING] D1 title Error:', error);
   }
 
   // =====================================================
-  // 2. Если D1 пустой — fallback на Icecast JSON
+  // 2. Получаем уникальных слушателей из D1
+  // =====================================================
+  try {
+    const now = Date.now();
+    const ttlThreshold = now - LISTENER_TTL;
+
+    // Сначала удаляем неактивных
+    await env.DB.prepare(`
+      DELETE FROM listeners WHERE last_heartbeat < ?
+    `).bind(ttlThreshold).run();
+
+    // Считаем уникальных
+    const countResult = await env.DB.prepare(`
+      SELECT COUNT(*) as total FROM listeners
+    `).first();
+
+    if (countResult?.total && countResult.total > 0) {
+      listeners = countResult.total;
+      unique = true;
+      console.log('[NOWPLAYING] Unique listeners from D1:', listeners);
+    }
+  } catch (error) {
+    console.error('[NOWPLAYING] D1 listeners Error:', error);
+  }
+
+  // =====================================================
+  // 3. Если D1 пустой — fallback на Icecast
   // =====================================================
   if (!title) {
     try {
       const icecastData = await fetchIcecastData();
       if (icecastData) {
         title = icecastData.title;
-        listeners = icecastData.listeners;
+        if (!unique) {
+          listeners = icecastData.listeners;
+        }
         source = 'icecast';
         console.log('[NOWPLAYING] Icecast title:', title);
       }
     } catch (error) {
       console.error('[NOWPLAYING] Icecast Error:', error);
     }
-  } else {
-    // Если title из D1 — всё равно получаем listeners из Icecast
+  } else if (!unique) {
+    // Если title из D1, но listeners нет — получаем из Icecast
     try {
       const icecastData = await fetchIcecastData();
       if (icecastData) {
@@ -145,7 +186,7 @@ async function handleGet(env) {
   }
 
   // =====================================================
-  // 3. Формируем ответ
+  // 4. Формируем ответ
   // =====================================================
   if (!title) {
     return jsonResponse({
@@ -153,6 +194,7 @@ async function handleGet(env) {
       listeners: 0,
       online: false,
       source: 'none',
+      unique: false,
     }, 200, CACHE_MAX_AGE);
   }
 
@@ -161,6 +203,7 @@ async function handleGet(env) {
     listeners,
     online: true,
     source,
+    unique,
   }, 200, CACHE_MAX_AGE);
 }
 

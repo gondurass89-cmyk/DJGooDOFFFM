@@ -23,6 +23,11 @@ const LOAD_TIMEOUT = 30000
 const REAL_MODE_CHECK_FRAMES = 10
 const REAL_MODE_CHECK_DELAY = 500
 
+// Last.fm API для обложек альбомов
+const LASTFM_API_KEY = process.env.NEXT_PUBLIC_LASTFM_KEY || ''
+const LASTFM_API_URL = 'https://ws.audioscrobbler.com/2.0/'
+const ALBUM_ART_CACHE_TIME = 15000 // 15 секунд мин. между запросами
+
 // Настройки автосоединения
 const RECONNECT_DELAY = 3000 // задержка перед переподключением (мс)
 const MAX_RECONNECT_ATTEMPTS = 10 // макс. попыток переподключения
@@ -115,6 +120,7 @@ export default function RadioMiniApp() {
   const [eqMid, setEqMid] = useState(0)
   const [eqTreble, setEqTreble] = useState(0)
   const [showEq, setShowEq] = useState(false) // Скрыт/раскрыт эквалайзер
+  const [albumArt, setAlbumArt] = useState<string | null>(null) // URL обложки альбома
 
   // =====================================================
   // ССЫЛКИ (useRef)
@@ -143,6 +149,10 @@ export default function RadioMiniApp() {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const keepaliveIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastPlayingTimeRef = useRef<number>(0)
+
+  // Album art refs
+  const lastAlbumArtFetchRef = useRef<number>(0)
+  const lastTrackRef = useRef<string>('')
 
   const SMOOTHING_FACTOR = 0.25
 
@@ -806,6 +816,113 @@ export default function RadioMiniApp() {
   }, [fetchCurrentTrack])
 
   // =====================================================
+  // ALBUM ART - загрузка обложки из Last.fm
+  // =====================================================
+  
+  /**
+   * Парсит строку "Artist - Track" на отдельные компоненты
+   */
+  const parseTrackInfo = useCallback((trackString: string): { artist: string; track: string } | null => {
+    if (!trackString || trackString.includes('Загрузка') || trackString.includes('Офлайн')) {
+      return null
+    }
+
+    // Ищем разделитель " - " (с пробелами)
+    const separatorIndex = trackString.indexOf(' - ')
+    if (separatorIndex === -1) {
+      return null
+    }
+
+    const artist = trackString.substring(0, separatorIndex).trim()
+    const track = trackString.substring(separatorIndex + 3).trim()
+
+    if (!artist || !track) {
+      return null
+    }
+
+    return { artist, track }
+  }, [])
+
+  /**
+   * Получает обложку альбома из Last.fm API
+   */
+  const fetchAlbumArt = useCallback(async (artist: string, track: string): Promise<string | null> => {
+    if (!LASTFM_API_KEY) {
+      console.log('[ALBUM_ART] Last.fm API key not configured')
+      return null
+    }
+
+    try {
+      const url = `${LASTFM_API_URL}?method=track.getInfo&artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(track)}&api_key=${LASTFM_API_KEY}&format=json`
+      
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(5000),
+      })
+
+      if (!response.ok) {
+        console.log('[ALBUM_ART] API error:', response.status)
+        return null
+      }
+
+      const data = await response.json()
+
+      // Ищем обложку размера "extralarge" (300x300)
+      const images = data?.track?.album?.image
+      if (images && Array.isArray(images)) {
+        // image[3] - обычно extralarge
+        const extralarge = images.find((img: { size: string; '#text': string }) => img.size === 'extralarge')
+          || images[3] // fallback по индексу
+        
+        if (extralarge?.['#text']) {
+          console.log('[ALBUM_ART] Found cover for:', artist, '-', track)
+          return extralarge['#text']
+        }
+      }
+
+      console.log('[ALBUM_ART] No cover found for:', artist, '-', track)
+      return null
+    } catch (error) {
+      console.error('[ALBUM_ART] Fetch error:', error)
+      return null
+    }
+  }, [])
+
+  /**
+   * Загружает обложку при смене трека
+   */
+  useEffect(() => {
+    // Не делаем запрос если трек не изменился
+    if (currentTrack === lastTrackRef.current) {
+      return
+    }
+    lastTrackRef.current = currentTrack
+
+    // Проверяем ограничение по времени (15 сек)
+    const now = Date.now()
+    const timeSinceLastFetch = now - lastAlbumArtFetchRef.current
+    if (timeSinceLastFetch < ALBUM_ART_CACHE_TIME) {
+      console.log('[ALBUM_ART] Skipping - too soon since last fetch')
+      return
+    }
+
+    // Парсим информацию о треке
+    const trackInfo = parseTrackInfo(currentTrack)
+    if (!trackInfo) {
+      // Если не удалось распарсить - показываем логотип
+      setAlbumArt(null)
+      return
+    }
+
+    // Обновляем время последнего запроса
+    lastAlbumArtFetchRef.current = now
+
+    // Загружаем обложку
+    fetchAlbumArt(trackInfo.artist, trackInfo.track).then(artUrl => {
+      setAlbumArt(artUrl)
+    })
+  }, [currentTrack, parseTrackInfo, fetchAlbumArt])
+
+  // =====================================================
   // CLOSE ON UNLOAD
   // =====================================================
   useEffect(() => {
@@ -1083,7 +1200,7 @@ export default function RadioMiniApp() {
         
         <div className="relative z-10 w-full max-w-xs">
           
-          {/* Логотип станции - с параллакс эффектом */}
+          {/* Логотип станции / Обложка альбома - с параллакс эффектом */}
           <motion.div
             animate={{
               y: showEq ? -180 : 0,
@@ -1093,18 +1210,59 @@ export default function RadioMiniApp() {
             transition={{ duration: 0.4, ease: "easeInOut" }}
             style={{ position: showEq ? 'absolute' : 'relative', width: '100%', pointerEvents: showEq ? 'none' : 'auto' }}
           >
-            <motion.img
-              src={STATION_LOGO}
-              alt={STATION_NAME}
-              className="mx-auto mb-3"
-              style={{
-                width: '150px',
-                height: '150px',
-                filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))'
-              }}
-              animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            />
+            <AnimatePresence mode="wait">
+              {albumArt ? (
+                <motion.img
+                  key="album-art"
+                  src={albumArt}
+                  alt="Album Cover"
+                  className="mx-auto mb-3 rounded-lg"
+                  style={{
+                    width: '150px',
+                    height: '150px',
+                    objectFit: 'cover',
+                    filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))'
+                  }}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.3, ease: "easeInOut" }}
+                />
+              ) : (
+                <motion.img
+                  key="station-logo"
+                  src={STATION_LOGO}
+                  alt={STATION_NAME}
+                  className="mx-auto mb-3"
+                  style={{
+                    width: '150px',
+                    height: '150px',
+                    filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))'
+                  }}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.3, ease: "easeInOut" }}
+                />
+              )}
+            </AnimatePresence>
+            
+            {/* Пульсация при воспроизведении */}
+            {isPlaying && (
+              <motion.div
+                className="absolute inset-0 mx-auto rounded-full"
+                style={{
+                  width: '150px',
+                  height: '150px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: 'radial-gradient(circle, rgba(0,199,48,0.2) 0%, transparent 70%)',
+                  zIndex: -1,
+                }}
+                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              />
+            )}
           </motion.div>
           
           {/* Визуализатор */}
