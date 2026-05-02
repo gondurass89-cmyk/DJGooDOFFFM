@@ -61,7 +61,8 @@ export default function RadioMiniApp() {
   const [volume, setVolume] = useState(100)
   const [isMuted, setIsMuted] = useState(false)
   const [currentTrack, setCurrentTrack] = useState('Загрузка...')
-  const [listeners, setListeners] = useState(0)
+  const [telegramListeners, setTelegramListeners] = useState(0)
+  const [icecastListeners, setIcecastListeners] = useState(0)
   const [audioData, setAudioData] = useState<number[]>(new Array(BAR_COUNT).fill(0))
   const [isTgReady, setIsTgReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -117,7 +118,8 @@ export default function RadioMiniApp() {
       const res = await fetch(LISTENERS_API)
       if (res.ok) {
         const data = await res.json()
-        setListeners(data.total || 0)
+        setTelegramListeners(data.telegram || 0)
+        setIcecastListeners(data.icecast || 0)
       }
     } catch (e) {}
   }, [])
@@ -681,7 +683,13 @@ export default function RadioMiniApp() {
               <span style={{ color: '#fff' }}>{currentTrack}</span>
             </p>
             <p className="text-xs mt-0.5" style={{ color: COLORS.accent }}>
-              👥 {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
+              💬 Telegram: {telegramListeners} {telegramListeners === 1 ? 'слушатель' : telegramListeners < 5 ? 'слушателя' : 'слушателей'}
+              {icecastListeners > 0 && (
+                <>
+                  <span className="mx-1.5" style={{ color: COLORS.text }}>|</span>
+                  📻 Стрим: {icecastListeners} {icecastListeners === 1 ? 'подключение' : icecastListeners < 5 ? 'подключения' : 'подключений'}
+                </>
+              )}
             </p>
           </div>
 
