@@ -9,6 +9,8 @@ const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
 const LISTENERS_API = '/api/listener'
 const NOW_PLAYING_API = '/api/now-playing'
+const ALBUM_ART_API = '/api/album-art'
+const ALBUM_ART_DEBOUNCE = 15000 // 15 seconds
 
 const COLORS = {
   primary: '#2e0071',
@@ -69,6 +71,8 @@ export default function RadioMiniApp() {
   const [buffering, setBuffering] = useState(false)
   const [useCSSAnimation, setUseCSSAnimation] = useState(false)
   const [showEqualizer, setShowEqualizer] = useState(false)
+  const [albumArtUrl, setAlbumArtUrl] = useState<string | null>(null)
+  const [lastAlbumArtFetch, setLastAlbumArtFetch] = useState(0)
   
   // Equalizer state (in dB)
   const [eqValues, setEqValues] = useState(() => {
@@ -136,12 +140,43 @@ export default function RadioMiniApp() {
         console.log('Now playing:', data.title)
         if (data.title && data.title !== currentTrack) {
           setCurrentTrack(data.title)
+          // Reset album art when track changes
+          setAlbumArtUrl(null)
         }
       }
     } catch (e) {
       console.error('Error fetching track:', e)
     }
   }, [currentTrack])
+
+  // Fetch album art with 15 second debounce
+  const fetchAlbumArt = useCallback(async (trackTitle: string) => {
+    if (!trackTitle || trackTitle === 'Загрузка...') return
+    
+    const now = Date.now()
+    if (now - lastAlbumArtFetch < ALBUM_ART_DEBOUNCE) {
+      console.log('Album art fetch debounced, skipping')
+      return
+    }
+    
+    setLastAlbumArtFetch(now)
+    
+    try {
+      const res = await fetch(`${ALBUM_ART_API}?title=${encodeURIComponent(trackTitle)}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.albumArtLarge) {
+          console.log('Album art found:', data.albumArtLarge)
+          setAlbumArtUrl(data.albumArtLarge)
+        } else {
+          console.log('No album art found, using default')
+          setAlbumArtUrl(null)
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching album art:', e)
+    }
+  }, [lastAlbumArtFetch])
 
   // Register listener
   const registerListener = useCallback(async (action: 'open' | 'close') => {
@@ -251,6 +286,13 @@ export default function RadioMiniApp() {
     const interval = setInterval(fetchCurrentTrack, 5000) // Every 5 seconds
     return () => clearInterval(interval)
   }, [fetchCurrentTrack])
+
+  // Fetch album art when track changes
+  useEffect(() => {
+    if (currentTrack && currentTrack !== 'Загрузка...') {
+      fetchAlbumArt(currentTrack)
+    }
+  }, [currentTrack, fetchAlbumArt])
 
   // Real audio visualization with equalizer (for desktop/Android)
   const startRealVisualization = useCallback(() => {
@@ -570,7 +612,7 @@ export default function RadioMiniApp() {
         />
 
         <div className="relative z-10 w-full max-w-xs">
-          {/* Logo - with smooth CSS transition */}
+          {/* Album Art / Logo - with smooth CSS transition and fade animation */}
           <div 
             className="relative z-0 overflow-hidden transition-all duration-300 ease-out"
             style={{
@@ -579,18 +621,23 @@ export default function RadioMiniApp() {
               marginBottom: showEqualizer ? 0 : 12,
             }}
           >
-            <motion.img
-              src={STATION_LOGO}
-              alt={STATION_NAME}
-              className="mx-auto"
-              style={{
-                width: '150px',
-                height: '150px',
-                filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
-              }}
-              animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            />
+            <AnimatePresence mode="wait">
+              <motion.img
+                key={albumArtUrl || 'default'}
+                src={albumArtUrl || STATION_LOGO}
+                alt={STATION_NAME}
+                className="mx-auto rounded-lg object-cover"
+                style={{
+                  width: '150px',
+                  height: '150px',
+                  filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
+                }}
+                animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
+                transition={isPlaying ? { duration: 2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
+                initial={{ opacity: 0 }}
+                exit={{ opacity: 0 }}
+              />
+            </AnimatePresence>
           </div>
 
           {/* Visualizer */}
