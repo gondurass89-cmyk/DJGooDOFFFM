@@ -10,7 +10,7 @@
 # ИЛИ ИСПОЛЬЗОВАТЬ КОД В CLOUDFLARE DASHBOARD
 # =====================================================
 
-name = "radio-stream"
+name = "fmradio"
 main = "workers/radio-stream-worker.js"
 compatibility_date = "2024-01-01"
 
