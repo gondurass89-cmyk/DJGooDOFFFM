@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 
-const ICECAST_STATUS_URL = 'http://s0.radioheart.ru:8000/status.xsl'
-const MOUNT_POINT = 'RH84200'
+// Local Icecast server - streaming from local PC via RadioBoss
+const ICECAST_HOST = 'http://178.49.69.37:8000'
+const MOUNT_POINT = 'Radio'
 
 // Patterns to remove from track title
 const PATTERNS_TO_REMOVE = [
@@ -59,37 +60,88 @@ function cleanTrackTitle(title: string): string {
 
 async function fetchCurrentTrack(): Promise<string> {
   try {
-    const response = await fetch(ICECAST_STATUS_URL, {
-      signal: AbortSignal.timeout(5000), // 5 second timeout
-      cache: 'no-store', // Always fetch fresh data
+    // Try Icecast JSON status first (Icecast 2.4+)
+    const jsonUrl = `${ICECAST_HOST}/status-json.xsl`
+    const response = await fetch(jsonUrl, {
+      signal: AbortSignal.timeout(5000),
+      cache: 'no-store',
     })
     
-    if (!response.ok) {
-      console.error('Icecast status fetch failed:', response.status)
+    if (response.ok) {
+      const data = await response.json()
+      
+      // Icecast JSON structure: { icestats: { source: [...] } }
+      const sources = data?.icestats?.source
+      if (sources) {
+        // Find our mount point
+        const sourceArray = Array.isArray(sources) ? sources : [sources]
+        const mountSource = sourceArray.find((s: any) => 
+          s.listenurl?.includes(`/${MOUNT_POINT}`) || 
+          s.server_name === MOUNT_POINT
+        )
+        
+        if (mountSource?.title) {
+          const rawTitle = mountSource.title.trim()
+          const cleanTitle = cleanTrackTitle(rawTitle)
+          console.log('Track fetched from JSON:', { raw: rawTitle, clean: cleanTitle })
+          return cleanTitle
+        }
+      }
+    }
+    
+    // Fallback to HTML parsing for older Icecast versions
+    const htmlResponse = await fetch(`${ICECAST_HOST}/status.xsl`, {
+      signal: AbortSignal.timeout(5000),
+      cache: 'no-store',
+    })
+    
+    if (!htmlResponse.ok) {
+      console.error('Icecast status fetch failed:', htmlResponse.status)
       return ''
     }
     
-    const html = await response.text()
+    const html = await htmlResponse.text()
     
-    // Find the mount point section - look for the mount point header first
-    const mountStart = html.indexOf(`<h3>Канал /${MOUNT_POINT}</h3>`)
+    // Try different HTML patterns for Icecast 2.5
+    // Pattern 1: Standard Icecast mount point header
+    let mountStart = html.indexOf(`<h3>Канал /${MOUNT_POINT}</h3>`)
     if (mountStart === -1) {
-      console.log('Mount point not found')
-      return ''
+      // Pattern 2: English version
+      mountStart = html.indexOf(`<h3>Mount Point /${MOUNT_POINT}</h3>`)
+    }
+    if (mountStart === -1) {
+      // Pattern 3: Stream name in heading
+      mountStart = html.indexOf(`<h3>/${MOUNT_POINT}</h3>`)
+    }
+    if (mountStart === -1) {
+      // Pattern 4: Listen URL containing mount point
+      mountStart = html.indexOf(`/${MOUNT_POINT}`)
     }
     
-    // Find "Сейчас играет:" after the mount point header
-    const searchArea = html.substring(mountStart, mountStart + 5000)
-    const playMatch = searchArea.match(/Сейчас играет:<\/td>\s*<td class="streamdata">([^<]*)<\/td>/i)
-    
-    if (playMatch && playMatch[1]) {
-      const rawTitle = playMatch[1].trim()
-      const cleanTitle = cleanTrackTitle(rawTitle)
-      console.log('Track fetched:', { raw: rawTitle, clean: cleanTitle })
-      return cleanTitle
+    if (mountStart !== -1) {
+      const searchArea = html.substring(mountStart, mountStart + 5000)
+      
+      // Try multiple patterns for "Now Playing"
+      const patterns = [
+        /Сейчас играет:<\/td>\s*<td[^>]*>([^<]*)<\/td>/i,
+        /Currently Playing:<\/td>\s*<td[^>]*>([^<]*)<\/td>/i,
+        /Current Song:<\/td>\s*<td[^>]*>([^<]*)<\/td>/i,
+        /title:<\/td>\s*<td[^>]*>([^<]*)<\/td>/i,
+        /<td[^>]*>Title<\/td>\s*<td[^>]*>([^<]*)<\/td>/i,
+      ]
+      
+      for (const pattern of patterns) {
+        const match = searchArea.match(pattern)
+        if (match && match[1]) {
+          const rawTitle = match[1].trim()
+          const cleanTitle = cleanTrackTitle(rawTitle)
+          console.log('Track fetched from HTML:', { raw: rawTitle, clean: cleanTitle })
+          return cleanTitle
+        }
+      }
     }
     
-    console.log('Play info not found in section')
+    console.log('Mount point or play info not found')
     return ''
   } catch (error) {
     console.error('Error fetching track:', error)
