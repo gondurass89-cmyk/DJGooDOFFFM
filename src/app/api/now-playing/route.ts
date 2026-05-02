@@ -96,7 +96,7 @@ function cleanTrackTitle(title: string): string {
 }
 
 // Fetch from Cloudflare Worker (RadioBoss sends track there)
-async function fetchFromWorker(): Promise<string | null> {
+async function fetchFromWorker(): Promise<{ title: string; listeners: number } | null> {
   try {
     // Add timestamp to prevent any caching
     const url = `${WORKER_URL}?_t=${Date.now()}`
@@ -105,7 +105,7 @@ async function fetchFromWorker(): Promise<string | null> {
       signal: AbortSignal.timeout(10000),
       cache: 'no-store',
       headers: {
-        'Accept': 'text/plain',
+        'Accept': 'application/json',
         'User-Agent': 'DJGooDOFF-FM/1.0',
         'Cache-Control': 'no-cache',
       },
@@ -120,17 +120,20 @@ async function fetchFromWorker(): Promise<string | null> {
       return null
     }
 
-    // Worker returns plain text, not JSON
-    const title = await response.text()
+    // Worker returns JSON: { title, listeners, online, source }
+    const data = await response.json()
 
-    if (title && title.trim() && !title.includes('Загрузка')) {
-      const cleaned = cleanTrackTitle(title.trim())
+    if (data.title && data.title.trim() && !data.title.includes('Загрузка') && !data.title.includes('Офлайн')) {
+      const cleaned = cleanTrackTitle(data.title.trim())
       
       if (process.env.NODE_ENV === 'development') {
-        console.log('Worker track:', { raw: title, clean: cleaned })
+        console.log('Worker track:', { raw: data.title, clean: cleaned })
       }
       
-      return cleaned
+      return {
+        title: cleaned,
+        listeners: data.listeners || 0,
+      }
     }
 
     return null
@@ -178,23 +181,25 @@ async function fetchFromIcecast(): Promise<string> {
   }
 }
 
-async function fetchCurrentTrack(): Promise<string> {
+async function fetchCurrentTrack(): Promise<{ title: string; listeners: number }> {
   // Try Worker first (has full track info with Cyrillic)
-  const workerTrack = await fetchFromWorker()
-  if (workerTrack) {
-    return workerTrack
+  const workerData = await fetchFromWorker()
+  if (workerData) {
+    return workerData
   }
   
   // Fallback to Icecast
   console.log('Falling back to Icecast...')
-  return await fetchFromIcecast()
+  const title = await fetchFromIcecast()
+  return { title, listeners: 0 }
 }
 
 export async function GET() {
-  const title = await fetchCurrentTrack()
+  const data = await fetchCurrentTrack()
   
   return NextResponse.json({
-    title: title || 'Загрузка...',
+    title: data.title || 'Загрузка...',
+    listeners: data.listeners,
     timestamp: Date.now()
   }, {
     headers: {

@@ -1,17 +1,20 @@
 // =====================================================
-// CLOUDFLARE WORKER: NOW PLAYING
-// Получение текущего трека из Icecast JSON API
+// CLOUDFLARE WORKER: NOW PLAYING (HYBRID)
+// Получение текущего трека: D1 + Icecast JSON fallback
 // =====================================================
 //
-// НАЗНАЧЕНИЕ:
-// - Получает название текущего трека из Icecast
-// - Возвращает JSON с title, listeners, online
-// - Кэширует ответ на 10 секунд
+// ИСТОЧНИКИ ДАННЫХ:
+// 1. D1 Database (POST от RadioBoss) — первичный
+// 2. Icecast JSON API — fallback
 //
 // РАЗМЕЩЕНИЕ:
-// - Cloudflare Dashboard -> Workers -> Create Worker
-// - Имя: nowplaying
+// - Cloudflare Dashboard -> Workers -> nowplaying
 // - URL: https://nowplaying.gondurass89.workers.dev
+// - D1 Binding: DB -> nowplaying-db
+//
+// SQL ТАБЛИЦА:
+// CREATE TABLE track (id INTEGER PRIMARY KEY CHECK (id = 1), title TEXT);
+// INSERT INTO track (id, title) VALUES (1, 'DJ GooD OFF FM');
 // =====================================================
 
 // =====================================================
@@ -39,93 +42,175 @@ export default {
     }
 
     // =====================================================
-    // Только GET
+    // POST: Сохранение трека от RadioBoss
     // =====================================================
-    if (request.method !== 'GET') {
-      return jsonResponse({ error: 'Method not allowed' }, 405);
+    if (request.method === 'POST') {
+      return handlePost(request, env);
     }
 
     // =====================================================
-    // ЗАПРОС К ICECAST
+    // GET: Получение текущего трека
     // =====================================================
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), CONNECT_TIMEOUT);
-
-      const response = await fetch(ICECAST_JSON_URL, {
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        return jsonResponse(getOfflineResponse(), 503, CACHE_MAX_AGE);
-      }
-
-      const data = await response.json();
-
-      // =====================================================
-      // ПАРСИНГ ДАННЫХ
-      // =====================================================
-      const source = findSource(data, MOUNT_POINT);
-
-      if (!source) {
-        return jsonResponse(getOfflineResponse(), 503, CACHE_MAX_AGE);
-      }
-
-      // Извлекаем title с fallback логикой
-      let title = source.title;
-
-      // Если title пустой, пробуем metadata.x_icy_title
-      if (!title && source.metadata?.x_icy_title) {
-        title = source.metadata.x_icy_title;
-      }
-
-      // Если всё ещё пустой, берём первый трек из плейлиста
-      if (!title && source.playlist?.trackList?.length > 0) {
-        title = source.playlist.trackList[0].title;
-      }
-
-      // Очищаем title от технических префиксов
-      title = cleanTitle(title);
-
-      // Если после очистки пусто — дефолт
-      if (!title) {
-        title = 'DJ GooD OFF FM';
-      }
-
-      // Количество слушателей
-      const listeners = source.listeners || 0;
-
-      // =====================================================
-      // ОТВЕТ
-      // =====================================================
-      return jsonResponse({
-        title,
-        listeners,
-        online: true,
-      }, 200, CACHE_MAX_AGE);
-
-    } catch (error) {
-      console.error('[NOWPLAYING] Error:', error.message);
-      return jsonResponse(getOfflineResponse(), 503, CACHE_MAX_AGE);
+    if (request.method === 'GET') {
+      return handleGet(env);
     }
+
+    // =====================================================
+    // Неподдерживаемый метод
+    // =====================================================
+    return jsonResponse({ error: 'Method not allowed' }, 405);
   }
 };
 
 // =====================================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// POST: Сохранение от RadioBoss
 // =====================================================
+async function handlePost(request, env) {
+  try {
+    let track = await request.text();
 
-/**
- * Найти source по mount point
- */
+    // Нормализация апострофов
+    track = track
+      .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+      .replace(/[\u0060\u00B4]/g, "'")
+      .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+      .replace(/\u2026/g, '...')
+      .replace(/\u2013\u2014/g, '-');
+
+    console.log('[NOWPLAYING] POST received:', track);
+
+    // Сохранение в D1
+    await env.DB.prepare(`
+      UPDATE track SET title = ? WHERE id = 1
+    `).bind(track).run();
+
+    return jsonResponse({ success: true, title: track }, 200);
+
+  } catch (error) {
+    console.error('[NOWPLAYING] POST Error:', error);
+    return jsonResponse({ error: error.message }, 500);
+  }
+}
+
+// =====================================================
+// GET: Получение трека (D1 + Icecast fallback)
+// =====================================================
+async function handleGet(env) {
+  let title = null;
+  let listeners = 0;
+  let source = 'unknown';
+
+  // =====================================================
+  // 1. Пробуем получить из D1
+  // =====================================================
+  try {
+    const result = await env.DB.prepare(`
+      SELECT title FROM track WHERE id = 1
+    `).first();
+
+    if (result?.title && result.title.trim() && !result.title.includes('Загрузка')) {
+      title = cleanTitle(result.title);
+      source = 'd1';
+      console.log('[NOWPLAYING] D1 title:', title);
+    }
+  } catch (error) {
+    console.error('[NOWPLAYING] D1 Error:', error);
+  }
+
+  // =====================================================
+  // 2. Если D1 пустой — fallback на Icecast JSON
+  // =====================================================
+  if (!title) {
+    try {
+      const icecastData = await fetchIcecastData();
+      if (icecastData) {
+        title = icecastData.title;
+        listeners = icecastData.listeners;
+        source = 'icecast';
+        console.log('[NOWPLAYING] Icecast title:', title);
+      }
+    } catch (error) {
+      console.error('[NOWPLAYING] Icecast Error:', error);
+    }
+  } else {
+    // Если title из D1 — всё равно получаем listeners из Icecast
+    try {
+      const icecastData = await fetchIcecastData();
+      if (icecastData) {
+        listeners = icecastData.listeners;
+      }
+    } catch (error) {
+      // Ignore
+    }
+  }
+
+  // =====================================================
+  // 3. Формируем ответ
+  // =====================================================
+  if (!title) {
+    return jsonResponse({
+      title: 'DJ GooD OFF FM',
+      listeners: 0,
+      online: false,
+      source: 'none',
+    }, 200, CACHE_MAX_AGE);
+  }
+
+  return jsonResponse({
+    title,
+    listeners,
+    online: true,
+    source,
+  }, 200, CACHE_MAX_AGE);
+}
+
+// =====================================================
+// Получение данных из Icecast JSON API
+// =====================================================
+async function fetchIcecastData() {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), CONNECT_TIMEOUT);
+
+  const response = await fetch(ICECAST_JSON_URL, {
+    signal: controller.signal,
+  });
+
+  clearTimeout(timeoutId);
+
+  if (!response.ok) return null;
+
+  const data = await response.json();
+  const source = findSource(data, MOUNT_POINT);
+
+  if (!source) return null;
+
+  // Извлекаем title с fallback
+  let title = source.title;
+
+  if (!title && source.metadata?.x_icy_title) {
+    title = source.metadata.x_icy_title;
+  }
+
+  if (!title && source.playlist?.trackList?.length > 0) {
+    title = source.playlist.trackList[0].title;
+  }
+
+  title = cleanTitle(title);
+
+  return {
+    title: title || null,
+    listeners: source.listeners || 0,
+  };
+}
+
+// =====================================================
+// Найти source по mount point
+// =====================================================
 function findSource(data, mountPoint) {
   if (!data?.icestats?.source) return null;
 
   const source = data.icestats.source;
 
-  // Если один source (не массив)
   if (!Array.isArray(source)) {
     const url = source.listenurl || '';
     if (url.endsWith(mountPoint) || url.includes(mountPoint)) {
@@ -134,7 +219,6 @@ function findSource(data, mountPoint) {
     return null;
   }
 
-  // Если массив sources
   for (const s of source) {
     const url = s.listenurl || '';
     if (url.endsWith(mountPoint) || url.includes(mountPoint)) {
@@ -142,53 +226,50 @@ function findSource(data, mountPoint) {
     }
   }
 
-  // Если не нашли по mount, берём первый
   return source[0] || null;
 }
 
-/**
- * Очистка title от технических префиксов
- * Удаляет: "6A - Energy 8 - " и подобное
- */
+// =====================================================
+// Очистка title от технических префиксов
+// =====================================================
 function cleanTitle(title) {
   if (!title) return null;
 
   let cleaned = title.trim();
 
-  // Удаляем Camelot key и Energy в начале
-  // Паттерн: "6A - Energy 8 - " или "11B - "
+  // Удаляем [by ...] теги (например, "[by DragoN_Sky]")
+  cleaned = cleaned.replace(/\s*\[by[^\]]*\]/gi, '');
+
+  // Удаляем Camelot key и Energy
   cleaned = cleaned.replace(/^\d{1,2}[ABАВ]\s*-\s*(Energy\s*\d{1,2}\s*-\s*)?/gi, '');
-
-  // Удаляем Camelot key в середине/конце
   cleaned = cleaned.replace(/\s*-\s*\d{1,2}[ABАВ]\s*/gi, ' ');
-
-  // Удаляем "Energy X" в середине/конце
   cleaned = cleaned.replace(/\s*-?\s*Energy\s*\d{1,2}\s*/gi, ' ');
 
-  // Убираем лишние пробелы
-  cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+  // Удаляем веб-сайты в скобках
+  cleaned = cleaned.replace(/\s*\([^)]*\.(com|ru|net|org|io)[^)]*\)/gi, '');
 
-  // Убираем trailing dash
+  // Cleanup
+  cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
   cleaned = cleaned.replace(/\s*-\s*$/g, '').trim();
 
   return cleaned || null;
 }
 
-/**
- * Базовые CORS заголовки
- */
+// =====================================================
+// CORS заголовки
+// =====================================================
 function getCorsHeaders() {
   return new Headers({
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '3600',
   });
 }
 
-/**
- * JSON ответ с CORS и кэшированием
- */
+// =====================================================
+// JSON ответ
+// =====================================================
 function jsonResponse(data, status = 200, maxAge = 0) {
   const headers = getCorsHeaders();
   headers.set('Content-Type', 'application/json');
@@ -203,15 +284,4 @@ function jsonResponse(data, status = 200, maxAge = 0) {
     status,
     headers,
   });
-}
-
-/**
- * Ответ когда стрим офлайн
- */
-function getOfflineResponse() {
-  return {
-    title: 'Офлайн',
-    listeners: 0,
-    online: false,
-  };
 }
