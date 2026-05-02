@@ -1,4 +1,7 @@
-export const runtime = 'edge'
+import { NextResponse } from 'next/server'
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
 
 const ICECAST_URL = 'http://178.49.69.37:8000/Radio'
 
@@ -17,10 +20,11 @@ export async function GET(request: Request) {
     })
 
     if (!response.ok) {
-      return new Response(JSON.stringify({ error: 'Stream unavailable' }), {
-        status: response.status,
-        headers: { 'Content-Type': 'application/json' }
-      })
+      console.error('Icecast error:', response.status, response.statusText)
+      return NextResponse.json(
+        { error: 'Stream unavailable', status: response.status },
+        { status: response.status }
+      )
     }
 
     // Build response headers
@@ -37,22 +41,23 @@ export async function GET(request: Request) {
     responseHeaders.set('Cache-Control', 'no-store, no-cache')
     
     // Stream the response directly
-    return new Response(response.body, {
+    return new NextResponse(response.body, {
       status: 200,
       headers: responseHeaders,
     })
     
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: 'Stream connection failed', message: error.message }), {
-      status: 502,
-      headers: { 'Content-Type': 'application/json' }
-    })
+    console.error('Stream proxy error:', error)
+    return NextResponse.json(
+      { error: 'Stream connection failed', message: error.message },
+      { status: 502 }
+    )
   }
 }
 
 // Handle OPTIONS for CORS preflight
 export async function OPTIONS() {
-  return new Response(null, {
+  return new NextResponse(null, {
     status: 204,
     headers: {
       'Access-Control-Allow-Origin': '*',
