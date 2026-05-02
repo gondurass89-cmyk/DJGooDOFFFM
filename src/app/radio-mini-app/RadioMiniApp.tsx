@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Sliders, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Sliders, ChevronDown, ChevronUp, RefreshCw, Share2, Check } from 'lucide-react'
 import { useRadioPlayer, PlayerState } from '../hooks/useRadioPlayer'
 
 const STREAM_URL = '/api/stream'
@@ -27,6 +27,7 @@ const COLORS = {
 
 const ADMIN_USER_ID = 55068554
 const BAR_COUNT = 24
+const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'DJGooDOFF_bot'
 
 // Equalizer default values (in dB, -12 to +12)
 const EQ_DEFAULTS = { bass: 0, mid: 0, high: 0 }
@@ -84,6 +85,7 @@ export default function RadioMiniApp() {
   const [showEqualizer, setShowEqualizer] = useState(false)
   const [albumArtUrl, setAlbumArtUrl] = useState<string | null>(null)
   const [lastAlbumArtFetch, setLastAlbumArtFetch] = useState(0)
+  const [showToast, setShowToast] = useState(false)
   
   // Equalizer state (in dB)
   const [eqValues, setEqValues] = useState(() => {
@@ -476,6 +478,35 @@ export default function RadioMiniApp() {
       await play()
     }
   }
+
+  // Handle share button
+  const handleShare = useCallback(() => {
+    const shareUrl = `https://t.me/${BOT_USERNAME}/app`
+    const shareText = `Слушаю DJ GooD OFF FM 🎵`
+    
+    const tg = window.Telegram?.WebApp
+    
+    if (tg?.openTelegramLink) {
+      // Inside Telegram - use native share
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`)
+    } else {
+      // Outside Telegram - copy to clipboard
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        setShowToast(true)
+        setTimeout(() => setShowToast(false), 2000)
+      }).catch(() => {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea')
+        textArea.value = shareUrl
+        document.body.appendChild(textArea)
+        textArea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textArea)
+        setShowToast(true)
+        setTimeout(() => setShowToast(false), 2000)
+      })
+    }
+  }, [])
 
   // Get status message
   const statusMessage = getStatusMessage(playerState, attemptsLeft, maxAttempts)
@@ -911,6 +942,18 @@ export default function RadioMiniApp() {
             </div>
           )}
 
+          {/* Share Button */}
+          <motion.button
+            onClick={handleShare}
+            whileTap={{ scale: 0.95 }}
+            className="w-full skeuo-card rounded-xl p-2 flex items-center justify-center gap-2 mb-2"
+          >
+            <Share2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
+            <span className="text-xs font-medium" style={{ color: COLORS.secondary }}>
+              Поделиться
+            </span>
+          </motion.button>
+
           {/* Footer */}
           <p 
             className="text-center text-xs mt-2" 
@@ -919,6 +962,28 @@ export default function RadioMiniApp() {
             Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
           </p>
         </div>
+
+        {/* Toast notification */}
+        <AnimatePresence>
+          {showToast && (
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              className="fixed bottom-8 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full z-50"
+              style={{
+                background: `linear-gradient(145deg, ${COLORS.secondary}, ${COLORS.accent})`,
+                color: COLORS.dark,
+                boxShadow: '0 4px 20px rgba(0,199,48,0.4)',
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4" />
+                <span className="text-sm font-medium">Ссылка скопирована</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </>
   )
