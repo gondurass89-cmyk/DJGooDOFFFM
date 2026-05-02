@@ -279,18 +279,29 @@ export async function GET() {
   let telegramCount = 0
 
   if (redis) {
-    const allListeners = await redis.hgetall(LISTENERS_KEY) || {}
-
-    for (const [id, dataStr] of Object.entries(allListeners)) {
-      try {
-        const data = JSON.parse(String(dataStr)) as ListenerData
-        if (now - data.lastSeen > timeout) {
+    const allListeners = await redis.hgetall(LISTENERS_KEY)
+    console.log('GET: Redis hgetall raw result:', JSON.stringify(allListeners))
+    
+    if (!allListeners || Object.keys(allListeners).length === 0) {
+      console.log('GET: No listeners in Redis')
+    } else {
+      for (const [id, dataStr] of Object.entries(allListeners)) {
+        console.log('GET: Processing id:', id, 'dataStr type:', typeof dataStr, 'value:', dataStr)
+        try {
+          // Upstash can return the data already parsed or as string
+          const data = typeof dataStr === 'string' ? JSON.parse(dataStr) : dataStr
+          console.log('GET: Parsed data:', JSON.stringify(data))
+          if (now - data.lastSeen > timeout) {
+            console.log('GET: Entry expired, deleting')
+            await redis.hdel(LISTENERS_KEY, id)
+          } else {
+            console.log('GET: Entry valid, counting')
+            telegramCount++
+          }
+        } catch (e) {
+          console.error('GET: Parse error:', e)
           await redis.hdel(LISTENERS_KEY, id)
-        } else {
-          telegramCount++
         }
-      } catch {
-        await redis.hdel(LISTENERS_KEY, id)
       }
     }
   } else {
@@ -317,7 +328,8 @@ export async function GET() {
     debug: {
       redisConfigured,
       redisUrl,
-      redisToken
+      redisToken,
+      timestamp: now
     }
   })
 }
