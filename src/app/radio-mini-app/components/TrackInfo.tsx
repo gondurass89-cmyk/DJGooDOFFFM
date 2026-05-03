@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import { STATION_NAME, STATION_LOGO, COLORS } from '../types'
+import { AlbumArtSkeleton, Skeleton } from './Skeleton'
 
 // =====================================================
 // TRACK INFO COMPONENT
@@ -14,6 +15,7 @@ interface TrackInfoProps {
   listeners: number
   showEq: boolean
   isPlaying: boolean
+  isLoading?: boolean
 }
 
 export function TrackInfo({
@@ -22,7 +24,10 @@ export function TrackInfo({
   listeners,
   showEq,
   isPlaying,
+  isLoading = false,
 }: TrackInfoProps) {
+  const showSkeleton = isLoading && currentTrack === 'Загрузка...'
+
   return (
     <motion.div
       animate={{
@@ -38,17 +43,21 @@ export function TrackInfo({
       }}
     >
       {/* Album Art / Logo */}
-      <motion.img
-        src={albumArtUrl || STATION_LOGO}
-        alt={albumArtUrl ? `Album art for ${currentTrack}` : STATION_NAME}
-        className="mx-auto mb-3 rounded-lg object-cover"
-        style={{
-          width: '150px',
-          height: '150px',
-        }}
-        animate={isPlaying ? { scale: [1, 1.03, 1] } : { scale: 1 }}
-        transition={isPlaying ? { duration: 2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
-      />
+      {showSkeleton ? (
+        <AlbumArtSkeleton />
+      ) : (
+        <motion.img
+          src={albumArtUrl || STATION_LOGO}
+          alt={albumArtUrl ? `Album art for ${currentTrack}` : STATION_NAME}
+          className="mx-auto mb-3 rounded-lg object-cover"
+          style={{
+            width: '150px',
+            height: '150px',
+          }}
+          animate={isPlaying ? { scale: [1, 1.03, 1] } : { scale: 1 }}
+          transition={isPlaying ? { duration: 2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
+        />
+      )}
 
       {/* Station Name */}
       <h1
@@ -59,23 +68,34 @@ export function TrackInfo({
       </h1>
 
       {/* Current Track - с переносом строк вместо обрезания */}
-      <div
-        className="text-center text-sm mb-2 px-2"
-        style={{ color: COLORS.text }}
-        title={currentTrack}
-      >
-        <span style={{ opacity: 0.7 }}>Сейчас в эфире:</span>
-        <br />
-        <span className="font-medium">{currentTrack}</span>
-      </div>
+      {showSkeleton ? (
+        <div className="text-center mb-2">
+          <Skeleton width="60%" height="12px" borderRadius="4px" className="mx-auto mb-1" />
+          <Skeleton width="80%" height="16px" borderRadius="4px" className="mx-auto" />
+        </div>
+      ) : (
+        <div
+          className="text-center text-sm mb-2 px-2"
+          style={{ color: COLORS.text }}
+          title={currentTrack}
+        >
+          <span style={{ opacity: 0.7 }}>Сейчас в эфире:</span>
+          <br />
+          <span className="font-medium">{currentTrack}</span>
+        </div>
+      )}
 
       {/* Listeners Count */}
-      <p
-        className="text-center text-xs"
-        style={{ color: COLORS.text }}
-      >
-        👥 {listeners} {getListenersWord(listeners)}
-      </p>
+      {showSkeleton ? (
+        <Skeleton width="100px" height="14px" borderRadius="4px" className="mx-auto" />
+      ) : (
+        <p
+          className="text-center text-xs"
+          style={{ color: COLORS.text }}
+        >
+          👥 {listeners} {getListenersWord(listeners)}
+        </p>
+      )}
     </motion.div>
   )
 }

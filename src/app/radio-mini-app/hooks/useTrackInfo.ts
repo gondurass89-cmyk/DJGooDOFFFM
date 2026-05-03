@@ -12,12 +12,14 @@ import { logger } from '@/lib/logger'
 export interface UseTrackInfoReturn {
   currentTrack: string
   albumArtUrl: string | null
+  isLoading: boolean
   fetchCurrentTrack: () => Promise<void>
 }
 
 export function useTrackInfo(): UseTrackInfoReturn {
   const [currentTrack, setCurrentTrack] = useState('Загрузка...')
   const [albumArtUrl, setAlbumArtUrl] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const lastTrackRef = useRef<string>('')
 
   // Fetch current track from API
@@ -34,10 +36,12 @@ export function useTrackInfo(): UseTrackInfoReturn {
         if (data.title && data.title.trim() && data.title !== lastTrackRef.current) {
           lastTrackRef.current = data.title
           setCurrentTrack(data.title)
+          setIsLoading(false)
         }
       }
     } catch (e) {
       logger.error('[TRACK] Fetch error:', e)
+      setIsLoading(false)
     }
   }, []) // No dependency on currentTrack - use ref instead
 
@@ -73,6 +77,7 @@ export function useTrackInfo(): UseTrackInfoReturn {
   return {
     currentTrack,
     albumArtUrl,
+    isLoading,
     fetchCurrentTrack,
   }
 }

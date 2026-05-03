@@ -40,7 +40,7 @@ export default function RadioMiniApp() {
   const visualizer = useVisualizer()
 
   // Track info
-  const { currentTrack, albumArtUrl } = useTrackInfo()
+  const { currentTrack, albumArtUrl, isLoading: isTrackLoading } = useTrackInfo()
 
   // Listeners - count display + registration
   const listeners = useListenersCount()
@@ -168,6 +168,7 @@ export default function RadioMiniApp() {
             listeners={listeners}
             showEq={showEq}
             isPlaying={audio.isPlaying}
+            isLoading={isTrackLoading}
           />
 
           {/* Visualizer */}
