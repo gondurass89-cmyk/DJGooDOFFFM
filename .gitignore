@@ -1,2 +1,10 @@
 .next/
 node_modules/
+
+# Build artifacts (не коммитить)
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# Environment files
+.env
+.env.local
