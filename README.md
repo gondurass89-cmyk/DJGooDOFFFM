@@ -153,6 +153,21 @@ npm run build
 
 # Lint
 npm run lint
+
+# Тесты (Vitest)
+npm run test           # Watch mode
+npm run test:run       # Single run
+npm run test:coverage  # С покрытием кода
+```
+
+### Структура тестов
+
+```
+src/tests/
+├── setup.ts           # Моки для Telegram, AudioContext, etc.
+├── lastfm.test.ts     # Тесты парсинга названий треков
+├── utils.test.ts      # Тесты detectIOS, getAudioErrorMessage
+└── listeners.test.ts  # Тесты склонения слова "слушатель*"
 ```
 
 ## 📊 Cloudflare Workers
@@ -194,6 +209,29 @@ Endpoints:
 - ✅ CORS headers для API
 - ✅ Error Boundary для обработки React ошибок
 - ✅ Logger с условным выводом (только в development)
+
+## 📱 PWA (Progressive Web App)
+
+Приложение поддерживает установку как PWA:
+
+- **manifest.json** — описание приложения
+- **Иконки** — 8 размеров (72x72 до 512x512)
+- **Theme color** — #2e0071 (фиолетовый)
+- **Display** — standalone (без адресной строки)
+
+Иконки генерируются из `public/logo.png`:
+```bash
+# Если нужно перегенерировать иконки
+python3 -c "
+from PIL import Image
+import os
+sizes = [72, 96, 128, 144, 152, 192, 384, 512]
+logo = Image.open('public/logo.png')
+os.makedirs('public/icons', exist_ok=True)
+for size in sizes:
+    logo.resize((size, size), Image.LANCZOS).save(f'public/icons/icon-{size}x{size}.png')
+"
+```
 
 ## 🔄 Схема работы
 
