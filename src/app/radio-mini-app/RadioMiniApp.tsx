@@ -19,6 +19,7 @@ const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
 const LISTENERS_API = 'https://listeners.gondurass89.workers.dev'
 const NOW_PLAYING_API = '/api/now-playing'
+const ALBUM_ART_API = '/api/album-art'
 const HEARTBEAT_INTERVAL = 30000
 const LOAD_TIMEOUT = 30000
 const REAL_MODE_CHECK_FRAMES = 10
@@ -116,6 +117,7 @@ export default function RadioMiniApp() {
   const [eqMid, setEqMid] = useState(0)
   const [eqTreble, setEqTreble] = useState(0)
   const [showEq, setShowEq] = useState(false) // Скрыт/раскрыт эквалайзер
+  const [albumArtUrl, setAlbumArtUrl] = useState<string | null>(null)
 
   // =====================================================
   // ССЫЛКИ (useRef)
@@ -774,6 +776,36 @@ export default function RadioMiniApp() {
     }
   }, [currentTrack])
 
+  // =====================================================
+  // ALBUM ART
+  // =====================================================
+  const fetchAlbumArt = useCallback(async (trackTitle: string) => {
+    if (!trackTitle || trackTitle === 'Загрузка...') return
+    
+    try {
+      const res = await fetch(`${ALBUM_ART_API}?title=${encodeURIComponent(trackTitle)}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.albumArtLarge) {
+          console.log('Album art found:', data.albumArtLarge)
+          setAlbumArtUrl(data.albumArtLarge)
+        } else {
+          console.log('No album art found, using default')
+          setAlbumArtUrl(null)
+        }
+      }
+    } catch (e) {
+      console.error('[ALBUM_ART] Fetch error:', e)
+      setAlbumArtUrl(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (currentTrack && currentTrack !== 'Загрузка...') {
+      fetchAlbumArt(currentTrack)
+    }
+  }, [currentTrack, fetchAlbumArt])
+
   useEffect(() => {
     fetchCurrentTrack()
     const interval = setInterval(fetchCurrentTrack, 5000)
@@ -1056,7 +1088,7 @@ export default function RadioMiniApp() {
         
         <div className="relative z-10 w-full max-w-xs">
           
-          {/* Логотип станции - с параллакс эффектом */}
+          {/* Логотип станции или обложка трека - с параллакс эффектом */}
           <motion.div
             animate={{
               y: showEq ? -180 : 0,
@@ -1067,9 +1099,10 @@ export default function RadioMiniApp() {
             style={{ position: showEq ? 'absolute' : 'relative', width: '100%', pointerEvents: showEq ? 'none' : 'auto' }}
           >
             <motion.img
-              src={STATION_LOGO}
-              alt={STATION_NAME}
-              className="mx-auto mb-3"
+              key={albumArtUrl || 'default'}
+              src={albumArtUrl || STATION_LOGO}
+              alt={albumArtUrl ? `Album art for ${currentTrack}` : STATION_NAME}
+              className="mx-auto mb-3 rounded-lg object-cover"
               style={{
                 width: '150px',
                 height: '150px',
