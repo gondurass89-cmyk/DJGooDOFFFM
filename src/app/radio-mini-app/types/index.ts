@@ -2,6 +2,12 @@
 // DJ GooD OFF FM - TypeScript Types
 // =====================================================
 
+// Import centralized config
+import { WORKERS_CONFIG, API_ENDPOINTS, TIMEOUTS } from '@/lib/config'
+
+// Re-export config for convenience
+export { WORKERS_CONFIG, API_ENDPOINTS, TIMEOUTS }
+
 // Extend Window interface for Telegram WebApp
 declare global {
   interface Window {
@@ -79,20 +85,20 @@ export const COLORS: VisualizerColors = {
 export const STATION_NAME = 'DJ GooD OFF FM'
 export const STATION_LOGO = '/logo.png'
 
-// API URLs
-export const STREAM_URL = '/api/stream'
-export const LISTENERS_API = 'https://listeners.gondurass89.workers.dev'
-export const NOW_PLAYING_API = '/api/now-playing'
-export const ALBUM_ART_API = '/api/album-art'
+// API URLs - using centralized config
+export const STREAM_URL = API_ENDPOINTS.stream
+export const LISTENERS_API = WORKERS_CONFIG.listeners
+export const NOW_PLAYING_API = API_ENDPOINTS.nowPlaying
+export const ALBUM_ART_API = API_ENDPOINTS.albumArt
 
-// Timeouts & Intervals
-export const HEARTBEAT_INTERVAL = 30000
-export const LOAD_TIMEOUT = 30000
-export const BUFFERING_TIMEOUT = 15000
-export const RECONNECT_MAX_ATTEMPTS = 5
-export const RECONNECT_DELAY = 3000
-export const REAL_MODE_CHECK_FRAMES = 10
-export const REAL_MODE_CHECK_DELAY = 500
+// Timeouts & Intervals - using centralized config
+export const HEARTBEAT_INTERVAL = TIMEOUTS.heartbeat
+export const LOAD_TIMEOUT = TIMEOUTS.load
+export const BUFFERING_TIMEOUT = TIMEOUTS.buffering
+export const RECONNECT_MAX_ATTEMPTS = TIMEOUTS.reconnectMaxAttempts
+export const RECONNECT_DELAY = TIMEOUTS.reconnectDelay
+export const REAL_MODE_CHECK_FRAMES = TIMEOUTS.realModeCheckFrames
+export const REAL_MODE_CHECK_DELAY = TIMEOUTS.realModeCheckDelay
 
 // =====================================================
 // UTILITY FUNCTIONS

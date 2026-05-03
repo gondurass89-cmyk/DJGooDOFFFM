@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { serverLog } from '@/lib/logger'
+import { WORKERS_CONFIG } from '@/lib/config'
 
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
 
 // Cloudflare Worker (primary source - has Cyrillic support)
-const WORKER_URL = 'https://nowplaying.gondurass89.workers.dev'
+const WORKER_URL = WORKERS_CONFIG.nowPlaying
 
 // Icecast fallback (secondary source - limited Cyrillic support)
 const ICECAST_STATUS_URL = 'http://s0.radioheart.ru:8000/status.xsl'

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { serverLog } from '@/lib/logger'
+import { WORKERS_CONFIG } from '@/lib/config'
 
 // =====================================================
 // TYPES
@@ -63,7 +64,7 @@ setInterval(() => {
 // =====================================================
 // CLOUDFLARE D1 WORKER URL
 // =====================================================
-const LISTENERS_WORKER_URL = 'https://listeners.gondurass89.workers.dev'
+const LISTENERS_WORKER_URL = WORKERS_CONFIG.listeners
 
 // =====================================================
 // SEND TELEGRAM NOTIFICATION

@@ -8,13 +8,7 @@ import { TelegramWebApp, TelegramUser, detectIOS } from '../types'
 // Интеграция с Telegram Mini App API
 // =====================================================
 
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp?: TelegramWebApp
-    }
-  }
-}
+// Note: Window interface is declared in types/index.ts
 
 export interface UseTelegramReturn {
   user: TelegramUser | null
