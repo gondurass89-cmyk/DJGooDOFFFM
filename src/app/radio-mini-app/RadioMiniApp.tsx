@@ -195,7 +195,7 @@ export default function RadioMiniApp() {
               )}
             </AnimatePresence>
 
-            <AudioVisualizer ref={visualizer.canvasRef} width={280} height={60} />
+            <AudioVisualizer ref={visualizer.canvasRef} height={60} />
 
             {/* Frequency Labels */}
             {!isIOS && (

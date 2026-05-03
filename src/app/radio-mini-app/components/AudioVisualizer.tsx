@@ -1,6 +1,6 @@
 'use client'
 
-import { forwardRef } from 'react'
+import { forwardRef, useEffect, useRef, useImperativeHandle } from 'react'
 import { COLORS } from '../types'
 
 // =====================================================
@@ -9,24 +9,42 @@ import { COLORS } from '../types'
 // =====================================================
 
 interface AudioVisualizerProps {
-  width?: number
   height?: number
 }
 
 export const AudioVisualizer = forwardRef<HTMLCanvasElement, AudioVisualizerProps>(
-  ({ width = 280, height = 80 }, ref) => {
+  ({ height = 60 }, ref) => {
+    const innerRef = useRef<HTMLCanvasElement>(null)
+    
+    // Merge refs
+    useImperativeHandle(ref, () => innerRef.current!)
+    
+    // Update canvas size on mount and resize
+    useEffect(() => {
+      const canvas = innerRef.current
+      if (!canvas) return
+      
+      const updateSize = () => {
+        const container = canvas.parentElement
+        if (container) {
+          canvas.width = container.clientWidth
+        }
+      }
+      
+      updateSize()
+      window.addEventListener('resize', updateSize)
+      return () => window.removeEventListener('resize', updateSize)
+    }, [])
+    
     return (
-      <div className="flex justify-center w-full">
-        <canvas
-          ref={ref}
-          width={width}
-          height={height}
-          className="rounded-lg"
-          style={{
-            background: `linear-gradient(180deg, ${COLORS.dark} 0%, rgba(13,0,38,0.5) 100%)`,
-          }}
-        />
-      </div>
+      <canvas
+        ref={innerRef}
+        height={height}
+        className="w-full rounded-lg"
+        style={{
+          background: `linear-gradient(180deg, ${COLORS.dark} 0%, rgba(13,0,38,0.5) 100%)`,
+        }}
+      />
     )
   }
 )
