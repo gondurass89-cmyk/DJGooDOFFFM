@@ -42,8 +42,6 @@ const COLORS = {
   high: '#00ffcc',
 }
 
-const ADMIN_USER_ID = 55068554
-
 // =====================================================
 // ТИПЫ
 // =====================================================
@@ -717,7 +715,6 @@ export default function RadioMiniApp() {
           last_name: user?.last_name || null,
           username: user?.username || null,
           action,
-          isAdmin: user?.id === ADMIN_USER_ID,
         }),
       })
     } catch (e) {
@@ -847,7 +844,6 @@ export default function RadioMiniApp() {
         last_name: user?.last_name || null,
         username: user?.username || null,
         action: 'close',
-        isAdmin: user?.id === ADMIN_USER_ID,
       })], { type: 'application/json' }))
     }
     window.addEventListener('beforeunload', sendClose)

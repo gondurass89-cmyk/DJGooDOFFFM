@@ -1,113 +1,161 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BOT_TOKEN = '8600657705:AAEn6pFmFKcLCPFm8FcF9UiAag404S1av00'
-const ADMIN_CHAT_ID = '55068554'
+// =====================================================
+// ENVIRONMENT VARIABLES (безопасность)
+// =====================================================
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID
 
-declare global {
-  var listenersStorage: Map<number, ListenerData> | undefined
+// =====================================================
+// RATE LIMITING (защита от спама)
+// =====================================================
+const rateLimitMap = new Map<number, { count: number; resetTime: number }>()
+const RATE_LIMIT_WINDOW = 60 * 1000 // 1 минута
+const RATE_LIMIT_MAX = 30 // максимум запросов в окне
+
+function checkRateLimit(userId: number): boolean {
+  const now = Date.now()
+  const record = rateLimitMap.get(userId)
+
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(userId, { count: 1, resetTime: now + RATE_LIMIT_WINDOW })
+    return true
+  }
+
+  if (record.count >= RATE_LIMIT_MAX) {
+    return false
+  }
+
+  record.count++
+  return true
 }
 
-interface ListenerData {
+// Периодическая очистка старых записей (каждые 5 минут)
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, value] of rateLimitMap.entries()) {
+    if (now > value.resetTime) {
+      rateLimitMap.delete(key)
+    }
+  }
+}, 5 * 60 * 1000)
+
+// =====================================================
+// CLOUDFLARE D1 WORKER URL
+// =====================================================
+const LISTENERS_WORKER_URL = 'https://listeners.gondurass89.workers.dev'
+
+// =====================================================
+// SEND TELEGRAM NOTIFICATION
+// =====================================================
+async function notifyAdmin(data: {
   user_id: number
   first_name: string
   last_name?: string
   username?: string
-  language_code?: string
-  name: string
   action: string
-  lastSeen: Date
-  sessions: number  // Track multiple sessions per user
-}
-
-if (!global.listenersStorage) {
-  global.listenersStorage = new Map()
-}
-const listeners = global.listenersStorage
-
-// Send notification - skip if user is admin
-function notifyAdmin(data: ListenerData, count: number, isAdmin: boolean) {
-  // Don't notify for admin user
-  if (isAdmin) {
-    console.log('Skip notification for admin user:', data.user_id)
+}, count: number, isAdmin: boolean) {
+  // Don't notify for admin user or if credentials not configured
+  if (isAdmin || !BOT_TOKEN || !ADMIN_CHAT_ID) {
     return
   }
-  
-  const name = data.username 
-    ? `@${data.username}` 
+
+  const name = data.username
+    ? `@${data.username}`
     : `${data.first_name}${data.last_name ? ' ' + data.last_name : ''}`
-  
+
   let emoji = '👂'
   let status = 'открыл Mini App'
-  
+
   if (data.action === 'close') {
     emoji = '👋'
     status = 'закрыл приложение'
   }
-  
+
   const message = `${emoji} *${name}* ${status}
 
 👥 Всего: ${count}
 👤 ID: \`${data.user_id}\``
-  
-  fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: ADMIN_CHAT_ID,
-      text: message,
-      parse_mode: 'Markdown'
+
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: ADMIN_CHAT_ID,
+        text: message,
+        parse_mode: 'Markdown'
+      })
     })
-  }).catch(e => console.error('Telegram notify error:', e))
+  } catch (e) {
+    console.error('Telegram notify error:', e)
+  }
 }
 
+// =====================================================
+// PROXY TO CLOUDFLARE D1 WORKER
+// =====================================================
+async function proxyToWorker(action: string, data: any) {
+  try {
+    const response = await fetch(LISTENERS_WORKER_URL, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...data,
+        action,
+        isAdmin: data.user_id === Number(ADMIN_CHAT_ID)
+      })
+    })
+
+    if (!response.ok) {
+      console.error('Worker error:', response.status)
+      return null
+    }
+
+    return await response.json()
+  } catch (e) {
+    console.error('Worker fetch error:', e)
+    return null
+  }
+}
+
+// =====================================================
+// POST HANDLER
+// =====================================================
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { user_id, first_name, last_name, username, language_code, action, isAdmin } = body
+    const { user_id, first_name, last_name, username, action, isAdmin } = body
 
     console.log('Listener API POST:', { user_id, first_name, action, isAdmin })
 
     if (!user_id || !first_name) {
-      console.log('Missing user data')
       return NextResponse.json({ error: 'Missing user data' }, { status: 400 })
     }
 
-    const name = username ? `@${username}` : `${first_name}${last_name ? ' ' + last_name : ''}`
-
-    if (action === 'open') {
-      // Add or update listener, increment session count
-      const existing = listeners.get(user_id)
-      const listenerData: ListenerData = {
-        user_id,
-        first_name,
-        last_name,
-        username,
-        language_code,
-        name,
-        action,
-        lastSeen: new Date(),
-        sessions: (existing?.sessions || 0) + 1
-      }
-      listeners.set(user_id, listenerData)
-      console.log('Added listener session, user:', user_id, 'sessions:', listenerData.sessions, 'total users:', listeners.size)
-      notifyAdmin(listenerData, listeners.size, isAdmin || user_id === Number(ADMIN_CHAT_ID))
-    } else if (action === 'close') {
-      // Decrement session count, but don't remove user completely
-      const existing = listeners.get(user_id)
-      if (existing) {
-        existing.sessions = Math.max(0, existing.sessions - 1)
-        existing.lastSeen = new Date()
-        console.log('Removed listener session, user:', user_id, 'sessions:', existing.sessions, 'total users:', listeners.size)
-        notifyAdmin(existing, listeners.size, isAdmin || user_id === Number(ADMIN_CHAT_ID))
-      }
+    // Rate limiting
+    if (!checkRateLimit(user_id)) {
+      return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
     }
 
-    // Count users with active sessions
-    const activeCount = Array.from(listeners.values()).filter(l => l.sessions > 0).length
+    // Proxy to Cloudflare D1 Worker for persistent storage
+    const result = await proxyToWorker(action, {
+      user_id,
+      first_name,
+      last_name,
+      username
+    })
+
+    // Get count from worker response
+    const count = result?.total || 0
+
+    // Send notification (async, non-blocking)
+    notifyAdmin({ user_id, first_name, last_name, username, action }, count, isAdmin)
 
     return NextResponse.json({
       success: true,
-      totalListeners: activeCount
+      totalListeners: count
     })
 
   } catch (error) {
@@ -116,30 +164,28 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// =====================================================
+// GET HANDLER
+// =====================================================
 export async function GET() {
-  const now = Date.now()
-  const timeout = 30 * 60 * 1000
+  try {
+    // Fetch from Cloudflare D1 Worker
+    const response = await fetch(LISTENERS_WORKER_URL, {
+      method: 'GET',
+      mode: 'cors'
+    })
 
-  // Remove users with expired lastSeen or zero sessions
-  Array.from(listeners.entries()).forEach(([id, data]) => {
-    const lastSeen = new Date(data.lastSeen).getTime()
-    if (now - lastSeen > timeout) {
-      listeners.delete(id)
+    if (!response.ok) {
+      console.error('Worker GET error:', response.status)
+      return NextResponse.json({ total: 0, listeners: [] })
     }
-  })
 
-  // Count users with active sessions (sessions > 0)
-  const activeListeners = Array.from(listeners.values()).filter(l => l.sessions > 0)
-  const count = activeListeners.length
+    const data = await response.json()
+    console.log('Listener API GET, count:', data.total)
 
-  console.log('Listener API GET, active users:', count, 'total in storage:', listeners.size)
-
-  return NextResponse.json({
-    total: count,
-    listeners: activeListeners.map(l => ({
-      name: l.name,
-      user_id: l.user_id,
-      sessions: l.sessions
-    }))
-  })
+    return NextResponse.json(data)
+  } catch (error) {
+    console.error('Listener API GET error:', error)
+    return NextResponse.json({ total: 0, listeners: [] })
+  }
 }
