@@ -13,7 +13,8 @@ import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Chevr
 // =====================================================
 // КОНСТАНТЫ
 // =====================================================
-const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
+// Используем локальный API для проксирования потока через Vercel (IPv4 совместимость)
+const STREAM_URL = '/api/stream'
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
 const LISTENERS_API = 'https://listeners.gondurass89.workers.dev'
