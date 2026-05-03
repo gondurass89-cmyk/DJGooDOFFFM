@@ -1,11 +1,12 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { RotateCcw } from 'lucide-react'
 import { COLORS } from '../types'
 
 // =====================================================
 // EQUALIZER PANEL COMPONENT
-// 3-band equalizer (Bass, Mid, Treble)
+// 3-band equalizer (Bass, Mid, Treble) with reset
 // =====================================================
 
 interface EqualizerPanelProps {
@@ -15,6 +16,7 @@ interface EqualizerPanelProps {
   onBassChange: (value: number) => void
   onMidChange: (value: number) => void
   onTrebleChange: (value: number) => void
+  onReset: () => void
   show: boolean
 }
 
@@ -25,6 +27,7 @@ export function EqualizerPanel({
   onBassChange,
   onMidChange,
   onTrebleChange,
+  onReset,
   show,
 }: EqualizerPanelProps) {
   return (
@@ -35,9 +38,21 @@ export function EqualizerPanel({
       className="overflow-hidden"
     >
       <div className="skeuo-card rounded-xl p-4 mb-4 space-y-4">
-        <h3 className="text-center text-sm font-medium" style={{ color: COLORS.text }}>
-          Эквалайзер
-        </h3>
+        {/* Header with Reset button */}
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium" style={{ color: COLORS.text }}>
+            Эквалайзер
+          </h3>
+          <button
+            onClick={onReset}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all hover:bg-white/10"
+            style={{ color: COLORS.secondary }}
+            title="Сбросить настройки"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Сбросить
+          </button>
+        </div>
 
         {/* Bass */}
         <div className="space-y-1">

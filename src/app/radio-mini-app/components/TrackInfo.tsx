@@ -13,6 +13,7 @@ interface TrackInfoProps {
   albumArtUrl: string | null
   listeners: number
   showEq: boolean
+  isPlaying: boolean
 }
 
 export function TrackInfo({
@@ -20,6 +21,7 @@ export function TrackInfo({
   albumArtUrl,
   listeners,
   showEq,
+  isPlaying,
 }: TrackInfoProps) {
   return (
     <motion.div
@@ -45,10 +47,11 @@ export function TrackInfo({
           width: '150px',
           height: '150px',
           boxShadow: `0 8px 32px rgba(0,0,0,0.5), 0 0 60px ${COLORS.secondary}30`,
+          filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
         }}
         initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.3 }}
+        animate={isPlaying ? { scale: [1, 1.03, 1] } : { scale: 1, opacity: 1 }}
+        transition={isPlaying ? { duration: 2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
       />
 
       {/* Station Name */}
@@ -59,14 +62,16 @@ export function TrackInfo({
         {STATION_NAME}
       </h1>
 
-      {/* Current Track */}
-      <p
-        className="text-center text-sm mb-2 px-2 truncate"
+      {/* Current Track - с переносом строк вместо обрезания */}
+      <div
+        className="text-center text-sm mb-2 px-2"
         style={{ color: COLORS.text }}
         title={currentTrack}
       >
-        Сейчас в эфире: {currentTrack}
-      </p>
+        <span style={{ opacity: 0.7 }}>Сейчас в эфире:</span>
+        <br />
+        <span className="font-medium">{currentTrack}</span>
+      </div>
 
       {/* Listeners Count */}
       <p

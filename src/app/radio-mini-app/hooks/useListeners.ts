@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { LISTENERS_API, HEARTBEAT_INTERVAL } from '../types'
 import { TelegramUser } from '../types'
 
@@ -41,7 +41,7 @@ export function useListeners(
   user: TelegramUser | null
 ): UseListenersReturn {
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const listenersRef = useRef(0)
+  const [listeners, setListeners] = useState(0)
 
   // Register listener action
   const registerListener = useCallback(async (
@@ -138,21 +138,21 @@ export function useListeners(
   }, [isPlaying, user, registerListener])
 
   return {
-    listeners: listenersRef.current,
+    listeners,
     registerListener,
   }
 }
 
-// Hook for fetching listeners count
+// Hook for fetching listeners count - ИСПРАВЛЕНО: useState вместо useRef
 export function useListenersCount(): number {
-  const listenersRef = useRef(0)
+  const [listeners, setListeners] = useState(0)
 
   const fetchCount = useCallback(async () => {
     try {
       const res = await fetch(LISTENERS_API, { mode: 'cors' })
       if (res.ok) {
         const data = await res.json()
-        listenersRef.current = data.total || 0
+        setListeners(data.total || 0)
       }
     } catch (e) {
       console.error('[LISTENERS] Fetch error:', e)
@@ -165,5 +165,5 @@ export function useListenersCount(): number {
     return () => clearInterval(interval)
   }, [fetchCount])
 
-  return listenersRef.current
+  return listeners
 }

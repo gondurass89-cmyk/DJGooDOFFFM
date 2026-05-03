@@ -166,6 +166,7 @@ export default function RadioMiniApp() {
             albumArtUrl={albumArtUrl}
             listeners={listeners}
             showEq={showEq}
+            isPlaying={audio.isPlaying}
           />
 
           {/* Visualizer */}
@@ -249,6 +250,7 @@ export default function RadioMiniApp() {
               onBassChange={setEqBass}
               onMidChange={setEqMid}
               onTrebleChange={setEqTreble}
+              onReset={() => { setEqBass(0); setEqMid(0); setEqTreble(0) }}
               show={showEq}
             />
           )}
