@@ -49,9 +49,10 @@ export async function GET(request: NextRequest) {
         'Expires': '0',
       },
     })
-  } catch (error: any) {
-    serverLog.error('[STREAM] Error:', error.message)
-    return new Response(`Stream error: ${error.message}`, {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    serverLog.error('[STREAM] Error:', message)
+    return new Response(`Stream error: ${message}`, {
       status: 502,
       headers: {
         'Content-Type': 'text/plain',

@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { parseTrackTitle, getTrackArtwork } from '@/lib/lastfm'
+import { parseTrackTitle, getTrackArtwork, TrackArtwork } from '@/lib/lastfm'
 
 // =====================================================
 // LRU CACHE WITH TTL (исправление memory leak)
 // =====================================================
+interface AlbumArtResult {
+  title: string
+  artist: string | null
+  track: string
+  album?: string
+  albumArt: string | null
+  albumArtLarge: string | null
+  source: 'lastfm' | 'itunes' | 'none'
+}
+
 interface CacheEntry {
-  data: any
+  data: AlbumArtResult
   timestamp: number
 }
 
@@ -35,7 +45,7 @@ function getFromCache(key: string): CacheEntry | null {
   return entry
 }
 
-function setToCache(key: string, data: any): void {
+function setToCache(key: string, data: AlbumArtResult): void {
   // LRU: удаляем старые записи если кэш полон
   if (cache.size >= MAX_CACHE_SIZE) {
     // Удаляем самую старую запись

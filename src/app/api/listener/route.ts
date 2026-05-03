@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { serverLog } from '@/lib/logger'
 
 // =====================================================
+// TYPES
+// =====================================================
+interface ListenerData {
+  user_id: number
+  first_name: string
+  last_name?: string
+  username?: string
+}
+
+interface WorkerResponse {
+  total: number
+  listeners?: Array<{
+    user_id: number
+    first_name: string
+    last_seen: number
+  }>
+}
+
+// =====================================================
 // ENVIRONMENT VARIABLES (безопасность)
 // =====================================================
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
@@ -96,7 +115,7 @@ async function notifyAdmin(data: {
 // =====================================================
 // PROXY TO CLOUDFLARE D1 WORKER
 // =====================================================
-async function proxyToWorker(action: string, data: any) {
+async function proxyToWorker(action: string, data: ListenerData): Promise<WorkerResponse | null> {
   try {
     const response = await fetch(LISTENERS_WORKER_URL, {
       method: 'POST',

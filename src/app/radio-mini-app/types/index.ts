@@ -2,6 +2,16 @@
 // DJ GooD OFF FM - TypeScript Types
 // =====================================================
 
+// Extend Window interface for Telegram WebApp
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp?: TelegramWebApp
+    }
+    webkitAudioContext?: typeof AudioContext
+  }
+}
+
 // Telegram WebApp API Types
 export interface TelegramUser {
   id: number
@@ -21,13 +31,6 @@ export interface TelegramWebApp {
   }
   onEvent: (event: string, callback: () => void) => void
   close: () => void
-}
-
-export interface TelegramWindow {
-  Telegram?: {
-    WebApp?: TelegramWebApp
-  }
-  webkitAudioContext?: typeof AudioContext
 }
 
 // Audio State
@@ -108,7 +111,7 @@ export function detectIOS(): boolean {
   const isIPod = /iPod/i.test(ua)
   const isIPadModern = /Macintosh/i.test(ua) &&
     !!(navigator.maxTouchPoints && navigator.maxTouchPoints > 1)
-  const tgPlatform = (window as any).Telegram?.WebApp?.platform || ''
+  const tgPlatform = window.Telegram?.WebApp?.platform || ''
 
   return isIPad || isIPhone || isIPod || isIPadModern || tgPlatform === 'ios'
 }

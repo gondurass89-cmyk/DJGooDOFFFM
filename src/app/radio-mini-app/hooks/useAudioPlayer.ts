@@ -81,7 +81,7 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
   // Get or create AudioContext
   const getAudioContext = useCallback((): AudioContext | null => {
     if (audioContextRef.current) return audioContextRef.current
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext
     if (!AudioContextClass) return null
     const ctx = new AudioContextClass()
     audioContextRef.current = ctx
@@ -359,16 +359,18 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
 
       await audio.play()
       isPlayingRef.current = true
-    } catch (err: any) {
-      logger.error('[PLAY] Error:', err.name, err.message)
+    } catch (err) {
+      const errorName = err instanceof Error ? err.name : 'Unknown'
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+      logger.error('[PLAY] Error:', errorName, errorMessage)
 
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
       setIsLoading(false)
 
       let errorMsg = 'Ошибка воспроизведения'
-      if (err.name === 'NotAllowedError') errorMsg = 'Нажмите кнопку ещё раз'
-      else if (err.name === 'NotSupportedError') errorMsg = 'Формат не поддерживается'
-      else if (err.name === 'AbortError') errorMsg = 'Воспроизведение прервано'
+      if (errorName === 'NotAllowedError') errorMsg = 'Нажмите кнопку ещё раз'
+      else if (errorName === 'NotSupportedError') errorMsg = 'Формат не поддерживается'
+      else if (errorName === 'AbortError') errorMsg = 'Воспроизведение прервано'
 
       setError(errorMsg)
 
