@@ -23,17 +23,34 @@ const cache = new Map<string, CacheEntry>()
 const CACHE_TTL = 60 * 1000 // 1 минута
 const MAX_CACHE_SIZE = 100 // максимум 100 записей в кэше
 
-// Периодическая очистка просроченных записей
-setInterval(() => {
+// Lazy cleanup - очищаем при каждом запросе вместо setInterval
+// Это предотвращает memory leak в serverless окружении
+function cleanupCache(): void {
   const now = Date.now()
+
+  // Удаляем просроченные записи
   for (const [key, entry] of cache.entries()) {
     if (now - entry.timestamp > CACHE_TTL) {
       cache.delete(key)
     }
   }
-}, 60 * 1000) // каждую минуту
+
+  // Если всё ещё слишком много - удаляем самые старые (LRU)
+  if (cache.size > MAX_CACHE_SIZE) {
+    const entries = [...cache.entries()]
+      .sort((a, b) => a[1].timestamp - b[1].timestamp)
+
+    const toDelete = entries.slice(0, cache.size - MAX_CACHE_SIZE)
+    for (const [key] of toDelete) {
+      cache.delete(key)
+    }
+  }
+}
 
 function getFromCache(key: string): CacheEntry | null {
+  // Lazy cleanup on each cache access
+  cleanupCache()
+
   const entry = cache.get(key)
   if (!entry) return null
 
@@ -46,24 +63,8 @@ function getFromCache(key: string): CacheEntry | null {
 }
 
 function setToCache(key: string, data: AlbumArtResult): void {
-  // LRU: удаляем старые записи если кэш полон
-  if (cache.size >= MAX_CACHE_SIZE) {
-    // Удаляем самую старую запись
-    let oldestKey: string | null = null
-    let oldestTime = Infinity
-
-    for (const [k, v] of cache.entries()) {
-      if (v.timestamp < oldestTime) {
-        oldestTime = v.timestamp
-        oldestKey = k
-      }
-    }
-
-    if (oldestKey) {
-      cache.delete(oldestKey)
-    }
-  }
-
+  // cleanupCache() уже вызывается в getFromCache, но для надёжности вызываем и здесь
+  cleanupCache()
   cache.set(key, { data, timestamp: Date.now() })
 }
 

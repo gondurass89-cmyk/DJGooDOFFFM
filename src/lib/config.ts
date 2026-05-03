@@ -38,6 +38,17 @@ export const STREAM_CONFIG = {
 } as const
 
 // =====================================================
+// ICECAST STATUS (server-side only, for fallback)
+// =====================================================
+export const ICECAST_CONFIG = {
+  // Status page URL for fallback track info
+  statusUrl: process.env.ICECAST_STATUS_URL || 'http://s0.radioheart.ru:8000/status.xsl',
+
+  // Mount point for this station
+  mountPoint: process.env.ICECAST_MOUNT_POINT || 'RH84200',
+} as const
+
+// =====================================================
 // TIMEOUTS & INTERVALS
 // =====================================================
 export const TIMEOUTS = {

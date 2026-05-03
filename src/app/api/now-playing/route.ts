@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { serverLog } from '@/lib/logger'
-import { WORKERS_CONFIG } from '@/lib/config'
+import { WORKERS_CONFIG, ICECAST_CONFIG } from '@/lib/config'
 
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic'
 const WORKER_URL = WORKERS_CONFIG.nowPlaying
 
 // Icecast fallback (secondary source - limited Cyrillic support)
-const ICECAST_STATUS_URL = 'http://s0.radioheart.ru:8000/status.xsl'
-const MOUNT_POINT = 'RH84200'
+const ICECAST_STATUS_URL = ICECAST_CONFIG.statusUrl
+const MOUNT_POINT = ICECAST_CONFIG.mountPoint
 
 // Clean track title from technical info
 function cleanTrackTitle(title: string): string {
