@@ -293,11 +293,11 @@ export default function RadioMiniApp() {
 
           {/* Station Name Footer */}
           <motion.div
-            className="mt-4 text-center text-xs"
-            style={{ color: COLORS.text, opacity: 0.5 }}
-            animate={{ opacity: audio.isPlaying ? 0.7 : 0.5 }}
+            className="mt-4 text-center text-xs font-medium"
+            style={{ color: '#39ff14' }}
+            animate={{ opacity: audio.isPlaying ? 1 : 0.7 }}
           >
-            {STATION_NAME} • Telegram Mini App
+            Powered by DJ GooD OFF
           </motion.div>
         </div>
       </div>
