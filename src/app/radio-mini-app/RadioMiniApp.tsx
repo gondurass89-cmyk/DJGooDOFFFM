@@ -42,8 +42,9 @@ export default function RadioMiniApp() {
   // Track info
   const { currentTrack, albumArtUrl } = useTrackInfo()
 
-  // Listeners
+  // Listeners - count display + registration
   const listeners = useListenersCount()
+  useListeners(audio.isPlaying, user) // Register listener on play
 
   // Equalizer state
   const [eqBass, setEqBass] = useState(0)

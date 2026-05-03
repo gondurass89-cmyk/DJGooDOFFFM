@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { NOW_PLAYING_API, ALBUM_ART_API } from '../types'
 
 // =====================================================
@@ -17,6 +17,7 @@ export interface UseTrackInfoReturn {
 export function useTrackInfo(): UseTrackInfoReturn {
   const [currentTrack, setCurrentTrack] = useState('Загрузка...')
   const [albumArtUrl, setAlbumArtUrl] = useState<string | null>(null)
+  const lastTrackRef = useRef<string>('')
 
   // Fetch current track from API
   const fetchCurrentTrack = useCallback(async () => {
@@ -28,14 +29,16 @@ export function useTrackInfo(): UseTrackInfoReturn {
 
       if (res.ok) {
         const data = await res.json()
-        if (data.title && data.title !== currentTrack) {
+        // Update if we have a valid title that's different from last one
+        if (data.title && data.title.trim() && data.title !== lastTrackRef.current) {
+          lastTrackRef.current = data.title
           setCurrentTrack(data.title)
         }
       }
     } catch (e) {
       console.error('[TRACK] Fetch error:', e)
     }
-  }, [currentTrack])
+  }, []) // No dependency on currentTrack - use ref instead
 
   // Fetch album art when track changes
   useEffect(() => {
@@ -43,9 +46,11 @@ export function useTrackInfo(): UseTrackInfoReturn {
 
     const fetchAlbumArt = async () => {
       try {
+        console.log('[ALBUM_ART] Fetching for:', currentTrack)
         const res = await fetch(`${ALBUM_ART_API}?title=${encodeURIComponent(currentTrack)}`)
         if (res.ok) {
           const data = await res.json()
+          console.log('[ALBUM_ART] Response:', data.albumArtLarge ? 'found' : 'not found')
           setAlbumArtUrl(data.albumArtLarge || null)
         }
       } catch (e) {
