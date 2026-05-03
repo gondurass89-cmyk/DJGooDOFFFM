@@ -169,12 +169,65 @@ Endpoints:
 
 Получение текущего трека из RadioBoss.
 
+## 🧩 Компоненты
+
+### UI Компоненты
+- **AudioVisualizer** — 24-полосный визуализатор с градиентами BASS/MID/TREBLE
+- **EqualizerPanel** — 3-полосный эквалайзер с регуляторами
+- **PlayerControls** — кнопки Play/Pause, громкость, mute
+- **TrackInfo** — обложка альбома, название трека, счётчик слушателей
+- **ErrorBoundary** — обработка React ошибок с UI для повтора
+- **Skeleton** — скелетоны загрузки (AlbumArtSkeleton, TrackTitleSkeleton)
+
+### Hooks
+- **useAudioPlayer** — управление аудио потоком, реконнект, Web Audio API
+- **useVisualizer** — визуализация частот через AnalyserNode
+- **useTrackInfo** — получение текущего трека и обложки
+- **useListeners** — регистрация слушателей через Cloudflare Worker
+- **useTelegram** — интеграция с Telegram WebApp API
+
 ## 🔒 Безопасность
 
 - ✅ Rate limiting (30 запросов/минута)
 - ✅ Секреты через env переменные
 - ✅ LRU кэш с TTL (защита от memory leak)
 - ✅ CORS headers для API
+- ✅ Error Boundary для обработки React ошибок
+- ✅ Logger с условным выводом (только в development)
+
+## 🔄 Схема работы
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Telegram Mini App                         │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │  RadioMiniApp.tsx                                       ││
+│  │  ├── useTelegram() → пользователь, платформа            ││
+│  │  ├── useAudioPlayer() → воспроизведение, Web Audio      ││
+│  │  ├── useVisualizer() → визуализация частот             ││
+│  │  ├── useTrackInfo() → трек + обложка                   ││
+│  │  └── useListeners() → счётчик слушателей               ││
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Vercel Edge Functions                     │
+│  /api/stream     → Proxy к Icecast (IPv4 force)             │
+│  /api/now-playing → Текущий трек (Worker → Icecast fallback)│
+│  /api/album-art  → Last.fm → iTunes fallback                │
+│  /api/listener   → Cloudflare D1 Worker                     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Внешние сервисы                           │
+│  • Icecast (s0.radioheart.ru:8000) — аудио поток            │
+│  • Cloudflare D1 — хранение слушателей                      │
+│  • Last.fm API — обложки альбомов                           │
+│  • iTunes Search API — fallback обложки                     │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ## 📄 Лицензия
 
