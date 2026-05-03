@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, ChevronDown, ChevronUp } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 
 // =====================================================
 // КОНСТАНТЫ
@@ -22,6 +22,9 @@ const HEARTBEAT_INTERVAL = 30000
 const LOAD_TIMEOUT = 30000
 const REAL_MODE_CHECK_FRAMES = 10
 const REAL_MODE_CHECK_DELAY = 500
+const RECONNECT_MAX_ATTEMPTS = 5
+const RECONNECT_DELAY = 3000
+const BUFFERING_TIMEOUT = 15000
 
 // =====================================================
 // ЦВЕТОВАЯ СХЕМА
@@ -106,6 +109,8 @@ export default function RadioMiniApp() {
   const [listeners, setListeners] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [buffering, setBuffering] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
+  const [reconnectAttempts, setReconnectAttempts] = useState(0)
   const [eqBass, setEqBass] = useState(0)
   const [eqMid, setEqMid] = useState(0)
   const [eqTreble, setEqTreble] = useState(0)
@@ -132,6 +137,9 @@ export default function RadioMiniApp() {
   const fallbackModeRef = useRef<boolean>(false)
   const realModeCheckCountRef = useRef<number>(0)
   const isPlayingRef = useRef<boolean>(false)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const bufferingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isManualStopRef = useRef<boolean>(false)
   
   const SMOOTHING_FACTOR = 0.25
 
@@ -423,6 +431,55 @@ export default function RadioMiniApp() {
   }, [getAudioContext, eqBass, eqMid, eqTreble])
 
   // =====================================================
+  // AUTO-RECONNECT
+  // =====================================================
+  const handleReconnect = useCallback(() => {
+    if (isManualStopRef.current) {
+      console.log('[RECONNECT] Manual stop, skipping')
+      return
+    }
+    
+    const attempt = reconnectAttempts + 1
+    console.log(`[RECONNECT] Attempt ${attempt}/${RECONNECT_MAX_ATTEMPTS}`)
+    
+    if (attempt > RECONNECT_MAX_ATTEMPTS) {
+      console.log('[RECONNECT] Max attempts reached')
+      setReconnecting(false)
+      setReconnectAttempts(0)
+      setError('Радио временно недоступно')
+      setIsPlaying(false)
+      setIsLoading(false)
+      stopVisualization()
+      return
+    }
+    
+    setReconnecting(true)
+    setReconnectAttempts(attempt)
+    setIsPlaying(false)
+    stopVisualization()
+    
+    reconnectTimeoutRef.current = setTimeout(async () => {
+      if (isManualStopRef.current) return
+      
+      const audio = audioRef.current
+      if (!audio) return
+      
+      try {
+        const newSrc = STREAM_URL + '?t=' + Date.now()
+        audio.src = newSrc
+        audio.load()
+        await audio.play()
+        console.log('[RECONNECT] Success')
+        setReconnecting(false)
+        setReconnectAttempts(0)
+      } catch (e) {
+        console.error('[RECONNECT] Failed:', e)
+        handleReconnect()
+      }
+    }, RECONNECT_DELAY)
+  }, [reconnectAttempts, stopVisualization])
+
+  // =====================================================
   // ИНИЦИАЛИЗАЦИЯ АУДИО
   // =====================================================
   useEffect(() => {
@@ -445,7 +502,10 @@ export default function RadioMiniApp() {
       setIsLoading(false)
       setBuffering(false)
       setError(null)
+      setReconnecting(false)
+      setReconnectAttempts(0)
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
+      if (bufferingTimeoutRef.current) { clearTimeout(bufferingTimeoutRef.current); bufferingTimeoutRef.current = null }
       startVisualization()
     }
     
@@ -459,14 +519,40 @@ export default function RadioMiniApp() {
     const onWaiting = () => {
       setBuffering(true)
       setIsLoading(true)
+      // Таймаут буферизации - если слишком долго, переподключаемся
+      if (bufferingTimeoutRef.current) clearTimeout(bufferingTimeoutRef.current)
+      bufferingTimeoutRef.current = setTimeout(() => {
+        console.log('[AUDIO] Buffering timeout, reconnecting')
+        if (!isManualStopRef.current && isPlayingRef.current) {
+          handleReconnect()
+        }
+      }, BUFFERING_TIMEOUT)
     }
     
     const onCanPlay = () => {
       setBuffering(false)
       setIsLoading(false)
+      if (bufferingTimeoutRef.current) { clearTimeout(bufferingTimeoutRef.current); bufferingTimeoutRef.current = null }
     }
     
-    const onStalled = () => setBuffering(true)
+    const onStalled = () => {
+      setBuffering(true)
+      // Таймаут stalled - если слишком долго, переподключаемся
+      if (bufferingTimeoutRef.current) clearTimeout(bufferingTimeoutRef.current)
+      bufferingTimeoutRef.current = setTimeout(() => {
+        console.log('[AUDIO] Stalled timeout, reconnecting')
+        if (!isManualStopRef.current && isPlayingRef.current) {
+          handleReconnect()
+        }
+      }, BUFFERING_TIMEOUT)
+    }
+    
+    const onEnded = () => {
+      console.log('[AUDIO] Stream ended')
+      if (!isManualStopRef.current) {
+        handleReconnect()
+      }
+    }
     
     const onError = () => {
       const mediaError = audio.error
@@ -477,6 +563,12 @@ export default function RadioMiniApp() {
           console.log('[AUDIO] Переключение в FALLBACK MODE')
           fallbackModeRef.current = true
         }
+      }
+      
+      // Попытка переподключения вместо показа ошибки
+      if (!isManualStopRef.current) {
+        handleReconnect()
+        return
       }
       
       let errorMsg = 'Ошибка воспроизведения'
@@ -502,6 +594,7 @@ export default function RadioMiniApp() {
     audio.addEventListener('waiting', onWaiting)
     audio.addEventListener('canplay', onCanPlay)
     audio.addEventListener('stalled', onStalled)
+    audio.addEventListener('ended', onEnded)
     audio.addEventListener('error', onError)
     
     const onVisibilityChange = async () => {
@@ -513,19 +606,23 @@ export default function RadioMiniApp() {
     document.addEventListener('visibilitychange', onVisibilityChange)
     
     return () => {
+      isManualStopRef.current = true
       audio.removeEventListener('playing', onPlaying)
       audio.removeEventListener('pause', onPause)
       audio.removeEventListener('waiting', onWaiting)
       audio.removeEventListener('canplay', onCanPlay)
       audio.removeEventListener('stalled', onStalled)
+      audio.removeEventListener('ended', onEnded)
       audio.removeEventListener('error', onError)
       document.removeEventListener('visibilitychange', onVisibilityChange)
       audio.pause()
       audio.src = ''
       stopVisualization()
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
+      if (bufferingTimeoutRef.current) clearTimeout(bufferingTimeoutRef.current)
     }
-  }, [stopVisualization, startVisualization])
+  }, [stopVisualization, startVisualization, handleReconnect])
 
   // =====================================================
   // ГРОМКОСТЬ
@@ -736,14 +833,19 @@ export default function RadioMiniApp() {
     if (!audio) return
     
     if (isPlaying) {
+      isManualStopRef.current = true
       audio.pause()
       isPlayingRef.current = false
       registerListener('close')
       return
     }
     
+    // Сброс флага ручной остановки при новом запуске
+    isManualStopRef.current = false
     setError(null)
     setIsLoading(true)
+    setReconnectAttempts(0)
+    setReconnecting(false)
     
     const isIOS = isIOSRef.current
     console.log('[PLAY] iOS:', isIOS, 'Fallback:', fallbackModeRef.current)
@@ -1138,7 +1240,7 @@ export default function RadioMiniApp() {
           </motion.div>
           
           {/* Индикатор буферизации */}
-          {buffering && (
+          {buffering && !reconnecting && (
             <motion.div
               animate={{ y: showEq ? -15 : 0 }}
               transition={{ duration: 0.4, ease: "easeInOut" }}
@@ -1146,6 +1248,20 @@ export default function RadioMiniApp() {
             >
               <Wifi className="w-3 h-3 animate-pulse" style={{ color: COLORS.secondary }} />
               <span className="text-xs" style={{ color: COLORS.secondary }}>Буферизация...</span>
+            </motion.div>
+          )}
+          
+          {/* Индикатор переподключения */}
+          {reconnecting && (
+            <motion.div
+              animate={{ y: showEq ? -15 : 0 }}
+              transition={{ duration: 0.4, ease: "easeInOut" }}
+              className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl skeuo-card"
+            >
+              <Loader2 className="w-3 h-3 animate-spin" style={{ color: COLORS.accent }} />
+              <span className="text-xs" style={{ color: COLORS.accent }}>
+                Переподключение... ({reconnectAttempts}/{RECONNECT_MAX_ATTEMPTS})
+              </span>
             </motion.div>
           )}
           
