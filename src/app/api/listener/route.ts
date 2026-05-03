@@ -33,8 +33,36 @@ const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID
 const rateLimitMap = new Map<number, { count: number; resetTime: number }>()
 const RATE_LIMIT_WINDOW = 60 * 1000 // 1 минута
 const RATE_LIMIT_MAX = 30 // максимум запросов в окне
+const MAX_MAP_SIZE = 1000 // защита от memory leak
+
+// Lazy cleanup - очищаем при каждом запросе если карта слишком большая
+function cleanupIfNeeded(): void {
+  if (rateLimitMap.size <= MAX_MAP_SIZE) return
+
+  const now = Date.now()
+  // Удаляем просроченные записи
+  for (const [key, value] of rateLimitMap.entries()) {
+    if (now > value.resetTime) {
+      rateLimitMap.delete(key)
+    }
+  }
+
+  // Если всё ещё слишком много - удаляем самые старые
+  if (rateLimitMap.size > MAX_MAP_SIZE) {
+    const entries = [...rateLimitMap.entries()]
+      .sort((a, b) => a[1].resetTime - b[1].resetTime)
+
+    const toDelete = entries.slice(0, rateLimitMap.size - MAX_MAP_SIZE)
+    for (const [key] of toDelete) {
+      rateLimitMap.delete(key)
+    }
+  }
+}
 
 function checkRateLimit(userId: number): boolean {
+  // Lazy cleanup on each request
+  cleanupIfNeeded()
+
   const now = Date.now()
   const record = rateLimitMap.get(userId)
 
@@ -50,16 +78,6 @@ function checkRateLimit(userId: number): boolean {
   record.count++
   return true
 }
-
-// Периодическая очистка старых записей (каждые 5 минут)
-setInterval(() => {
-  const now = Date.now()
-  for (const [key, value] of rateLimitMap.entries()) {
-    if (now > value.resetTime) {
-      rateLimitMap.delete(key)
-    }
-  }
-}, 5 * 60 * 1000)
 
 // =====================================================
 // CLOUDFLARE D1 WORKER URL

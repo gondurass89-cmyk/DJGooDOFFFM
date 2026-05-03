@@ -1,10 +1,6 @@
-import RadioMiniApp from './RadioMiniApp'
-import { ErrorBoundary } from './components'
+import { redirect } from 'next/navigation'
 
+// Redirect to main page - /radio-mini-app is deprecated
 export default function RadioPage() {
-  return (
-    <ErrorBoundary>
-      <RadioMiniApp />
-    </ErrorBoundary>
-  )
+  redirect('/')
 }

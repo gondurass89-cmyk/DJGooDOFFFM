@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useCallback, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { STATION_NAME, STATION_LOGO, COLORS } from '../types'
 import { AlbumArtSkeleton, Skeleton } from './Skeleton'
@@ -28,6 +29,20 @@ export function TrackInfo({
 }: TrackInfoProps) {
   const showSkeleton = isLoading && currentTrack === 'Загрузка...'
 
+  // Handle image load error - fallback to station logo
+  const [imgError, setImgError] = useState(false)
+  const handleImageError = useCallback(() => {
+    setImgError(true)
+  }, [])
+
+  // Reset error state when URL changes (new track)
+  useEffect(() => {
+    setImgError(false)
+  }, [albumArtUrl])
+
+  // Current image source with fallback
+  const currentImgSrc = imgError ? STATION_LOGO : (albumArtUrl || STATION_LOGO)
+
   return (
     <motion.div
       animate={{
@@ -47,8 +62,8 @@ export function TrackInfo({
         <AlbumArtSkeleton />
       ) : (
         <motion.img
-          src={albumArtUrl || STATION_LOGO}
-          alt={albumArtUrl ? `Album art for ${currentTrack}` : STATION_NAME}
+          src={currentImgSrc}
+          alt={albumArtUrl && !imgError ? `Album art for ${currentTrack}` : STATION_NAME}
           className="mx-auto mb-3 rounded-lg object-cover"
           style={{
             width: '150px',
@@ -56,6 +71,7 @@ export function TrackInfo({
           }}
           animate={isPlaying ? { scale: [1, 1.03, 1] } : { scale: 1 }}
           transition={isPlaying ? { duration: 2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
+          onError={handleImageError}
         />
       )}
 
