@@ -39,18 +39,14 @@ export function TrackInfo({
     >
       {/* Album Art / Logo */}
       <motion.img
-        key={albumArtUrl || 'default'}
         src={albumArtUrl || STATION_LOGO}
         alt={albumArtUrl ? `Album art for ${currentTrack}` : STATION_NAME}
         className="mx-auto mb-3 rounded-lg object-cover"
         style={{
           width: '150px',
           height: '150px',
-          boxShadow: `0 8px 32px rgba(0,0,0,0.5), 0 0 60px ${COLORS.secondary}30`,
-          filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
         }}
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={isPlaying ? { scale: [1, 1.03, 1], opacity: 1 } : { scale: 1, opacity: 1 }}
+        animate={isPlaying ? { scale: [1, 1.03, 1] } : { scale: 1 }}
         transition={isPlaying ? { duration: 2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
       />
 

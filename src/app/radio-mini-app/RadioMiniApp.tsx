@@ -174,7 +174,8 @@ export default function RadioMiniApp() {
           <motion.div
             animate={{ y: showEq ? -10 : 0 }}
             transition={{ duration: 0.4, ease: 'easeInOut' }}
-            className="skeuo-card rounded-xl p-2 mb-3 relative"
+            className="rounded-xl p-2 mb-3 relative"
+            style={{ background: 'transparent' }}
           >
             {/* LIVE Indicator */}
             <AnimatePresence>
