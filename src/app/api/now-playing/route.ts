@@ -99,12 +99,12 @@ async function fetchFromWorker(): Promise<string | null> {
   try {
     // Add timestamp to prevent any caching
     const url = `${WORKER_URL}?_t=${Date.now()}`
-    
+
     const response = await fetch(url, {
       signal: AbortSignal.timeout(10000),
       cache: 'no-store',
       headers: {
-        'Accept': 'text/plain',
+        'Accept': 'text/plain, application/json',
         'User-Agent': 'DJGooDOFF-FM/1.0',
         'Cache-Control': 'no-cache',
       },
@@ -117,9 +117,20 @@ async function fetchFromWorker(): Promise<string | null> {
       return null
     }
 
-    // Worker returns plain text, not JSON
-    const title = await response.text()
-    console.log('Worker raw response:', title)
+    // Get response as text first
+    const responseText = await response.text()
+    console.log('Worker raw response:', responseText)
+
+    // Try to parse as JSON first (in case Worker returns JSON)
+    let title: string
+    try {
+      const jsonData = JSON.parse(responseText)
+      // Handle various JSON formats
+      title = jsonData.title || jsonData.track || jsonData.name || jsonData.current_track || responseText
+    } catch {
+      // Not JSON, use as plain text
+      title = responseText
+    }
 
     if (title && title.trim() && !title.includes('Загрузка')) {
       const cleaned = cleanTrackTitle(title.trim())
