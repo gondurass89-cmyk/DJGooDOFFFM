@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { serverLog } from '@/lib/logger'
 
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
@@ -110,16 +111,16 @@ async function fetchFromWorker(): Promise<string | null> {
       },
     })
 
-    console.log('Worker response status:', response.status)
+    serverLog.log('Worker response status:', response.status)
 
     if (!response.ok) {
-      console.log('Worker not available:', response.status)
+      serverLog.log('Worker not available:', response.status)
       return null
     }
 
     // Get response as text first
     const responseText = await response.text()
-    console.log('Worker raw response:', responseText)
+    serverLog.log('Worker raw response:', responseText)
 
     // Try to parse as JSON first (in case Worker returns JSON)
     let title: string
@@ -134,13 +135,13 @@ async function fetchFromWorker(): Promise<string | null> {
 
     if (title && title.trim() && !title.includes('Загрузка')) {
       const cleaned = cleanTrackTitle(title.trim())
-      console.log('Worker track:', { raw: title, clean: cleaned })
+      serverLog.log('Worker track:', { raw: title, clean: cleaned })
       return cleaned
     }
 
     return null
   } catch (error) {
-    console.log('Worker fetch error:', error)
+    serverLog.log('Worker fetch error:', error)
     return null
   }
 }
@@ -154,7 +155,7 @@ async function fetchFromIcecast(): Promise<string> {
     })
     
     if (!response.ok) {
-      console.error('Icecast status fetch failed:', response.status)
+      serverLog.error('Icecast status fetch failed:', response.status)
       return ''
     }
     
@@ -162,7 +163,7 @@ async function fetchFromIcecast(): Promise<string> {
     
     const mountStart = html.indexOf(`<h3>Канал /${MOUNT_POINT}</h3>`)
     if (mountStart === -1) {
-      console.log('Mount point not found')
+      serverLog.log('Mount point not found')
       return ''
     }
     
@@ -172,13 +173,13 @@ async function fetchFromIcecast(): Promise<string> {
     if (playMatch && playMatch[1]) {
       const title = playMatch[1].trim()
       const cleaned = cleanTrackTitle(title)
-      console.log('Icecast track:', { raw: title, clean: cleaned })
+      serverLog.log('Icecast track:', { raw: title, clean: cleaned })
       return cleaned
     }
     
     return ''
   } catch (error) {
-    console.error('Icecast fetch error:', error)
+    serverLog.error('Icecast fetch error:', error)
     return ''
   }
 }
@@ -191,7 +192,7 @@ async function fetchCurrentTrack(): Promise<string> {
   }
   
   // Fallback to Icecast
-  console.log('Falling back to Icecast...')
+  serverLog.log('Falling back to Icecast...')
   return await fetchFromIcecast()
 }
 

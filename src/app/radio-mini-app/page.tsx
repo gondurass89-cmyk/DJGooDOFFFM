@@ -1,5 +1,10 @@
 import RadioMiniApp from './RadioMiniApp'
+import { ErrorBoundary } from './components'
 
 export default function RadioPage() {
-  return <RadioMiniApp />
+  return (
+    <ErrorBoundary>
+      <RadioMiniApp />
+    </ErrorBoundary>
+  )
 }

@@ -3,6 +3,8 @@
  * Fetches album artwork for currently playing tracks
  */
 
+import { serverLog } from './logger'
+
 // Server-side API key (не NEXT_PUBLIC_ - безопасность)
 const LASTFM_API_KEY = process.env.LASTFM_API_KEY
 const LASTFM_API_URL = 'https://ws.audioscrobbler.com/2.0/'
@@ -47,7 +49,7 @@ export function parseTrackTitle(title: string): { artist: string; track: string 
  */
 export async function fetchTrackInfo(artist: string, track: string): Promise<TrackArtwork | null> {
   if (!LASTFM_API_KEY) {
-    console.warn('Last.fm API key not configured')
+    serverLog.warn('Last.fm API key not configured')
     return null
   }
 
@@ -100,7 +102,7 @@ export async function fetchTrackInfo(artist: string, track: string): Promise<Tra
     }
 
   } catch (error) {
-    console.error('Error fetching Last.fm track info:', error)
+    serverLog.error('Error fetching Last.fm track info:', error)
     return null
   }
 }
@@ -124,7 +126,7 @@ export async function searchITunes(artist: string, track: string): Promise<Track
       limit: '1',
     })
 
-    console.log('iTunes search:', searchTerm)
+    serverLog.log('iTunes search:', searchTerm)
 
     const response = await fetch(`${ITUNES_API_URL}?${params}`, {
       next: { revalidate: 300 },
@@ -146,7 +148,7 @@ export async function searchITunes(artist: string, track: string): Promise<Track
 
     if (!artworkUrl) return null
 
-    console.log('iTunes found artwork:', artworkUrl)
+    serverLog.log('iTunes found artwork:', artworkUrl)
 
     return {
       artist: result.artistName || artist,
@@ -158,7 +160,7 @@ export async function searchITunes(artist: string, track: string): Promise<Track
     }
 
   } catch (error) {
-    console.error('Error searching iTunes:', error)
+    serverLog.error('Error searching iTunes:', error)
     return null
   }
 }
@@ -171,17 +173,17 @@ export async function searchITunes(artist: string, track: string): Promise<Track
 export async function getTrackArtwork(artist: string, track: string): Promise<TrackArtwork | null> {
   const lastfmResult = await fetchTrackInfo(artist, track)
   if (lastfmResult?.albumArtLarge) {
-    console.log('Artwork found in Last.fm')
+    serverLog.log('Artwork found in Last.fm')
     return lastfmResult
   }
 
-  console.log('Last.fm not found, trying iTunes...')
+  serverLog.log('Last.fm not found, trying iTunes...')
   const itunesResult = await searchITunes(artist, track)
   if (itunesResult?.albumArtLarge) {
-    console.log('Artwork found in iTunes')
+    serverLog.log('Artwork found in iTunes')
     return itunesResult
   }
 
-  console.log('No artwork found')
+  serverLog.log('No artwork found')
   return null
 }

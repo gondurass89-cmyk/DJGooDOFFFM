@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { TelegramWebApp, TelegramUser } from '../types'
+import { useState, useEffect } from 'react'
+import { TelegramWebApp, TelegramUser, detectIOS } from '../types'
 
 // =====================================================
 // TELEGRAM WEBAPP HOOK
@@ -29,20 +29,6 @@ export function useTelegram(): UseTelegramReturn {
   const [platform, setPlatform] = useState<string>('')
   const [isReady, setIsReady] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
-
-  // Detect iOS
-  const detectIOS = useCallback((): boolean => {
-    if (typeof window === 'undefined') return false
-
-    const ua = navigator.userAgent
-    const isIPad = /iPad/i.test(ua)
-    const isIPhone = /iPhone/i.test(ua)
-    const isIPod = /iPod/i.test(ua)
-    const isIPadModern = /Macintosh/i.test(ua) &&
-      !!(navigator.maxTouchPoints && navigator.maxTouchPoints > 1)
-
-    return isIPad || isIPhone || isIPod || isIPadModern
-  }, [])
 
   // Initialize Telegram WebApp
   useEffect(() => {
@@ -80,7 +66,7 @@ export function useTelegram(): UseTelegramReturn {
     }, 100)
 
     return () => clearInterval(interval)
-  }, [detectIOS])
+  }, [])
 
   return {
     user,

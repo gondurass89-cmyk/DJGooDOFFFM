@@ -7,7 +7,10 @@ import {
   BUFFERING_TIMEOUT,
   RECONNECT_MAX_ATTEMPTS,
   RECONNECT_DELAY,
+  detectIOS,
+  getAudioErrorMessage,
 } from '../types'
+import { logger } from '@/lib/logger'
 
 // =====================================================
 // AUDIO PLAYER HOOK
@@ -45,31 +48,6 @@ export interface UseAudioPlayerReturn {
   toggleMute: () => void
   connectAudioChain: (eqBass: number, eqMid: number, eqTreble: number) => boolean
   getAudioContext: () => AudioContext | null
-}
-
-// Get human-readable error message
-function getAudioErrorMessage(error: MediaError | null): string {
-  if (!error) return 'Нет ошибки'
-  switch (error.code) {
-    case MediaError.MEDIA_ERR_ABORTED: return 'Отменено пользователем'
-    case MediaError.MEDIA_ERR_NETWORK: return 'Ошибка сети'
-    case MediaError.MEDIA_ERR_DECODE: return 'Ошибка декодирования'
-    case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED: return 'Формат не поддерживается'
-    default: return `Неизвестная ошибка (${error.code})`
-  }
-}
-
-// Detect iOS
-function detectIOS(): boolean {
-  if (typeof window === 'undefined') return false
-  const ua = navigator.userAgent
-  const isIPad = /iPad/i.test(ua)
-  const isIPhone = /iPhone/i.test(ua)
-  const isIPod = /iPod/i.test(ua)
-  const isIPadModern = /Macintosh/i.test(ua) &&
-    navigator.maxTouchPoints && navigator.maxTouchPoints > 1
-  const tgPlatform = (window as any).Telegram?.WebApp?.platform || ''
-  return isIPad || isIPhone || isIPod || isIPadModern || tgPlatform === 'ios'
 }
 
 export function useAudioPlayer(): UseAudioPlayerReturn {
@@ -167,7 +145,7 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
       isSourceConnectedRef.current = true
       return true
     } catch (e) {
-      console.error('[AUDIO] Error connecting audio chain:', e)
+      logger.error('[AUDIO] Error connecting audio chain:', e)
       return false
     }
   }, [getAudioContext])
@@ -177,7 +155,7 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
     if (isManualStopRef.current) return
 
     const attempt = reconnectAttempts + 1
-    console.log(`[RECONNECT] Attempt ${attempt}/${RECONNECT_MAX_ATTEMPTS}`)
+    logger.log(`[RECONNECT] Attempt ${attempt}/${RECONNECT_MAX_ATTEMPTS}`)
 
     if (attempt > RECONNECT_MAX_ATTEMPTS) {
       setReconnecting(false)
@@ -205,7 +183,7 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
         setReconnecting(false)
         setReconnectAttempts(0)
       } catch (e) {
-        console.error('[RECONNECT] Failed:', e)
+        logger.error('[RECONNECT] Failed:', e)
         handleReconnect()
       }
     }, RECONNECT_DELAY)
@@ -214,7 +192,7 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
   // Initialize audio element
   useEffect(() => {
     isIOSRef.current = detectIOS()
-    console.log('[AUDIO] Init. iOS:', isIOSRef.current)
+    logger.log('[AUDIO] Init. iOS:', isIOSRef.current)
 
     const audio = new Audio()
     audio.preload = 'none'
@@ -276,7 +254,7 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
 
     const onError = () => {
       const mediaError = audio.error
-      console.error('[AUDIO] Error:', mediaError ? getAudioErrorMessage(mediaError) : 'Unknown')
+      logger.error('[AUDIO] Error:', mediaError ? getAudioErrorMessage(mediaError) : 'Unknown')
 
       if (mediaError?.code === MediaError.MEDIA_ERR_DECODE && isIOSRef.current) {
         fallbackModeRef.current = true
@@ -287,15 +265,7 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
         return
       }
 
-      let errorMsg = 'Ошибка воспроизведения'
-      if (mediaError) {
-        switch (mediaError.code) {
-          case MediaError.MEDIA_ERR_ABORTED: errorMsg = 'Воспроизведение отменено'; break
-          case MediaError.MEDIA_ERR_NETWORK: errorMsg = 'Ошибка сети'; break
-          case MediaError.MEDIA_ERR_DECODE: errorMsg = 'Ошибка декодирования'; break
-          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED: errorMsg = 'Формат не поддерживается'; break
-        }
-      }
+      const errorMsg = mediaError ? getAudioErrorMessage(mediaError) : 'Ошибка воспроизведения'
 
       setIsLoading(false)
       setIsPlaying(false)
@@ -390,7 +360,7 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
       await audio.play()
       isPlayingRef.current = true
     } catch (err: any) {
-      console.error('[PLAY] Error:', err.name, err.message)
+      logger.error('[PLAY] Error:', err.name, err.message)
 
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
       setIsLoading(false)

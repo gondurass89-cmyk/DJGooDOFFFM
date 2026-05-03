@@ -90,3 +90,39 @@ export const RECONNECT_MAX_ATTEMPTS = 5
 export const RECONNECT_DELAY = 3000
 export const REAL_MODE_CHECK_FRAMES = 10
 export const REAL_MODE_CHECK_DELAY = 500
+
+// =====================================================
+// UTILITY FUNCTIONS
+// =====================================================
+
+/**
+ * Detect iOS device (iPhone, iPad, iPod)
+ * Used for fallback audio mode
+ */
+export function detectIOS(): boolean {
+  if (typeof window === 'undefined') return false
+
+  const ua = navigator.userAgent
+  const isIPad = /iPad/i.test(ua)
+  const isIPhone = /iPhone/i.test(ua)
+  const isIPod = /iPod/i.test(ua)
+  const isIPadModern = /Macintosh/i.test(ua) &&
+    !!(navigator.maxTouchPoints && navigator.maxTouchPoints > 1)
+  const tgPlatform = (window as any).Telegram?.WebApp?.platform || ''
+
+  return isIPad || isIPhone || isIPod || isIPadModern || tgPlatform === 'ios'
+}
+
+/**
+ * Get human-readable audio error message
+ */
+export function getAudioErrorMessage(error: MediaError | null): string {
+  if (!error) return 'Нет ошибки'
+  switch (error.code) {
+    case MediaError.MEDIA_ERR_ABORTED: return 'Воспроизведение отменено'
+    case MediaError.MEDIA_ERR_NETWORK: return 'Ошибка сети'
+    case MediaError.MEDIA_ERR_DECODE: return 'Ошибка декодирования'
+    case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED: return 'Формат не поддерживается'
+    default: return `Неизвестная ошибка (${error.code})`
+  }
+}

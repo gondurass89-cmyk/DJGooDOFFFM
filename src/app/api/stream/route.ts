@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { serverLog } from '@/lib/logger'
 
 // Force Node.js runtime for streaming support
 export const runtime = 'nodejs'
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!response.ok) {
-      console.error('[STREAM] Upstream error:', response.status, response.statusText)
+      serverLog.error('[STREAM] Upstream error:', response.status, response.statusText)
       return new Response('Stream unavailable', {
         status: response.status,
         headers: {
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error: any) {
-    console.error('[STREAM] Error:', error.message)
+    serverLog.error('[STREAM] Error:', error.message)
     return new Response(`Stream error: ${error.message}`, {
       status: 502,
       headers: {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { serverLog } from '@/lib/logger'
 
 // =====================================================
 // ENVIRONMENT VARIABLES (безопасность)
@@ -88,7 +89,7 @@ async function notifyAdmin(data: {
       })
     })
   } catch (e) {
-    console.error('Telegram notify error:', e)
+    serverLog.error('Telegram notify error:', e)
   }
 }
 
@@ -109,13 +110,13 @@ async function proxyToWorker(action: string, data: any) {
     })
 
     if (!response.ok) {
-      console.error('Worker error:', response.status)
+      serverLog.error('Worker error:', response.status)
       return null
     }
 
     return await response.json()
   } catch (e) {
-    console.error('Worker fetch error:', e)
+    serverLog.error('Worker fetch error:', e)
     return null
   }
 }
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { user_id, first_name, last_name, username, action, isAdmin } = body
 
-    console.log('Listener API POST:', { user_id, first_name, action, isAdmin })
+    serverLog.log('Listener API POST:', { user_id, first_name, action, isAdmin })
 
     if (!user_id || !first_name) {
       return NextResponse.json({ error: 'Missing user data' }, { status: 400 })
@@ -159,7 +160,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Listener API error:', error)
+    serverLog.error('Listener API error:', error)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }
@@ -176,16 +177,16 @@ export async function GET() {
     })
 
     if (!response.ok) {
-      console.error('Worker GET error:', response.status)
+      serverLog.error('Worker GET error:', response.status)
       return NextResponse.json({ total: 0, listeners: [] })
     }
 
     const data = await response.json()
-    console.log('Listener API GET, count:', data.total)
+    serverLog.log('Listener API GET, count:', data.total)
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error('Listener API GET error:', error)
+    serverLog.error('Listener API GET error:', error)
     return NextResponse.json({ total: 0, listeners: [] })
   }
 }

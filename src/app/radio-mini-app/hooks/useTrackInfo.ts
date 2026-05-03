@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { NOW_PLAYING_API, ALBUM_ART_API } from '../types'
+import { logger } from '@/lib/logger'
 
 // =====================================================
 // TRACK INFO HOOK
@@ -36,7 +37,7 @@ export function useTrackInfo(): UseTrackInfoReturn {
         }
       }
     } catch (e) {
-      console.error('[TRACK] Fetch error:', e)
+      logger.error('[TRACK] Fetch error:', e)
     }
   }, []) // No dependency on currentTrack - use ref instead
 
@@ -46,15 +47,15 @@ export function useTrackInfo(): UseTrackInfoReturn {
 
     const fetchAlbumArt = async () => {
       try {
-        console.log('[ALBUM_ART] Fetching for:', currentTrack)
+        logger.log('[ALBUM_ART] Fetching for:', currentTrack)
         const res = await fetch(`${ALBUM_ART_API}?title=${encodeURIComponent(currentTrack)}`)
         if (res.ok) {
           const data = await res.json()
-          console.log('[ALBUM_ART] Response:', data.albumArtLarge ? 'found' : 'not found')
+          logger.log('[ALBUM_ART] Response:', data.albumArtLarge ? 'found' : 'not found')
           setAlbumArtUrl(data.albumArtLarge || null)
         }
       } catch (e) {
-        console.error('[ALBUM_ART] Fetch error:', e)
+        logger.error('[ALBUM_ART] Fetch error:', e)
         setAlbumArtUrl(null)
       }
     }

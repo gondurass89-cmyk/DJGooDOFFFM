@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { LISTENERS_API, HEARTBEAT_INTERVAL } from '../types'
 import { TelegramUser } from '../types'
+import { logger } from '@/lib/logger'
 
 // =====================================================
 // LISTENERS HOOK
@@ -78,7 +79,7 @@ export function useListeners(
         }),
       })
     } catch (e) {
-      console.error('[LISTENER] Error:', e)
+      logger.error('[LISTENER] Error:', e)
     }
   }, [])
 
@@ -155,7 +156,7 @@ export function useListenersCount(): number {
         setListeners(data.total || 0)
       }
     } catch (e) {
-      console.error('[LISTENERS] Fetch error:', e)
+      logger.error('[LISTENERS] Fetch error:', e)
     }
   }, [])
 
