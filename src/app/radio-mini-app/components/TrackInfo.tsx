@@ -50,7 +50,7 @@ export function TrackInfo({
           filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))',
         }}
         initial={{ scale: 0.9, opacity: 0 }}
-        animate={isPlaying ? { scale: [1, 1.03, 1] } : { scale: 1, opacity: 1 }}
+        animate={isPlaying ? { scale: [1, 1.03, 1], opacity: 1 } : { scale: 1, opacity: 1 }}
         transition={isPlaying ? { duration: 2, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
       />
 
