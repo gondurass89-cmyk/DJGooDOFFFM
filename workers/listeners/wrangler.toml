@@ -1,0 +1,28 @@
+# =====================================================
+# LISTENERS WORKER - Отслеживание слушателей
+# =====================================================
+#
+# ДЕПЛОЙ:
+#   cd workers/listeners && wrangler deploy
+#
+# D1 DATABASE (создать один раз):
+#   wrangler d1 create listeners-db
+#
+# После создания D1, добавьте database_id ниже
+# =====================================================
+
+name = "listeners"
+main = "../listeners-worker.js"
+compatibility_date = "2024-01-01"
+
+# Раскомментируйте и укажите ваш Account ID
+# account_id = "your-account-id-here"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "listeners-db"
+database_id = "xxx-xxx-xxx"  # Замените на реальный ID из `wrangler d1 create`
+
+[env.production]
+logpush = true
