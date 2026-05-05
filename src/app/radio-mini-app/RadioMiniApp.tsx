@@ -62,14 +62,14 @@ const THEMES: Record<ThemeName, { name: string; colors: ThemeColors }> = {
   custom: {
     name: 'Кастомная',
     colors: {
-      bg: '#1a0a2e',
-      text: '#e0c0ff',
-      textMuted: '#a080c0',
-      primary: '#2e0071',
-      secondary: '#c000ff',
-      accent: '#ff00ff',
-      cardBg: 'rgba(46, 0, 113, 0.6)',
-      border: 'rgba(192, 0, 255, 0.3)',
+      bg: '#320070',
+      text: '#ffffff',
+      textMuted: '#8444d4',
+      primary: '#5c1ba9',
+      secondary: '#06c633',
+      accent: '#06c633',
+      cardBg: 'rgba(92, 27, 169, 0.6)',
+      border: 'rgba(6, 198, 51, 0.4)',
     }
   },
 }
