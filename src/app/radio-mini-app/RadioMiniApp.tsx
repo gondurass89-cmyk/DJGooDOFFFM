@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Play, Pause, Volume2, VolumeX, Loader2, ChevronDown, ChevronUp, Share2, ExternalLink, Palette, Sun, Moon } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Loader2, ChevronDown, ChevronUp, Share2, ExternalLink, Palette, Sun, Moon, Sliders } from 'lucide-react'
 
 // =====================================================
 // КОНСТАНТЫ
@@ -1015,123 +1015,128 @@ export default function RadioMiniApp() {
   // =====================================================
   // RENDER
   // =====================================================
+
+  // Цвет названия трека - ядовито-зелёный в кастомной теме
+  const trackTitleColor = currentTheme === 'custom' ? '#06c633' : themeColors.secondary
+
+  // Длина названия трека для бегущей строки
+  const TRACK_MAX_LENGTH = 40
+  const shouldMarquee = currentTrack.length > TRACK_MAX_LENGTH
+
   return (
-    <div 
-      className="min-h-screen flex flex-col items-center justify-center p-4"
+    <div
+      className="h-screen flex flex-col items-center justify-between overflow-hidden tma-container"
       style={{ backgroundColor: themeColors.bg }}
     >
-      <div className="relative z-10 w-full max-w-xs">
-        
-        {/* Cover Art */}
+      <div className="flex-1 flex flex-col items-center justify-center w-full px-4 py-2">
+
+        {/* Cover Art - компактный размер */}
         <motion.div
-          animate={{
-            y: showEq ? -180 : 0,
-            opacity: showEq ? 0 : 1,
-            scale: showEq ? 0.8 : 1
+          className="w-32 h-32 rounded-2xl overflow-hidden relative shadow-xl"
+          animate={isPlaying ? { scale: [1, 1.02, 1] } : {}}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          style={{
+            boxShadow: isPlaying
+              ? `0 0 20px ${themeColors.secondary}40`
+              : '0 4px 15px rgba(0,0,0,0.3)',
+            border: `2px solid ${themeColors.secondary}`,
+            backgroundColor: themeColors.primary,
           }}
-          transition={{ duration: 0.4, ease: "easeInOut" }}
-          style={{ position: showEq ? 'absolute' : 'relative', width: '100%', pointerEvents: showEq ? 'none' : 'auto' }}
         >
-          <motion.div 
-            className="w-40 h-40 mx-auto rounded-2xl overflow-hidden relative shadow-2xl"
-            animate={isPlaying ? { scale: [1, 1.02, 1] } : {}}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            style={{
-              boxShadow: isPlaying 
-                ? `0 0 30px ${themeColors.secondary}40, 0 10px 40px rgba(0,0,0,0.3)` 
-                : '0 5px 20px rgba(0,0,0,0.3)',
-              border: `2px solid ${themeColors.secondary}`,
-              backgroundColor: themeColors.primary,
-            }}
-          >
-            {coverUrl ? (
-              <img 
-                src={coverUrl} 
-                alt={title || 'Track cover'}
-                className="w-full h-full object-cover"
-                onError={() => setCoverUrl(null)}
+          {coverUrl ? (
+            <img
+              src={coverUrl}
+              alt={title || 'Track cover'}
+              className="w-full h-full object-cover"
+              onError={() => setCoverUrl(null)}
+            />
+          ) : (
+            <div
+              className="w-full h-full flex items-center justify-center"
+              style={{ backgroundColor: themeColors.primary }}
+            >
+              <img
+                src={STATION_LOGO}
+                alt={STATION_NAME}
+                className="w-20 h-20 object-contain opacity-80"
+                onError={(e) => { e.currentTarget.style.display = 'none' }}
               />
-            ) : (
-              <div 
-                className="w-full h-full flex items-center justify-center"
-                style={{ backgroundColor: themeColors.primary }}
-              >
-                <img 
-                  src={STATION_LOGO} 
-                  alt={STATION_NAME}
-                  className="w-24 h-24 object-contain opacity-80"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none'
-                  }}
-                />
-              </div>
-            )}
-            
-            {isLoadingCover && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                <Loader2 className="w-8 h-8 animate-spin text-white" />
-              </div>
-            )}
-          </motion.div>
+            </div>
+          )}
+          {isLoadingCover && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+              <Loader2 className="w-6 h-6 animate-spin text-white" />
+            </div>
+          )}
         </motion.div>
 
-        {/* Track Info */}
-        <div className="mt-6 text-center">
-          <p
-            className="text-sm font-medium truncate px-2"
-            style={{ color: themeColors.text }}
-          >
-            {currentTrack}
+        {/* Track Info - "Сейчас в эфире:" + название */}
+        <div className="mt-3 w-full text-center">
+          <p className="text-xs" style={{ color: themeColors.textMuted }}>
+            Сейчас в эфире:
           </p>
-          {/* Show title only if different from currentTrack (avoid duplicate) */}
-          {title && currentTrack !== title && !currentTrack.includes(title) && (
-            <p
-              className="text-xs mt-1 truncate px-2"
-              style={{ color: themeColors.textMuted }}
-            >
-              {title}
-            </p>
-          )}
+          <div className="track-marquee-container mt-1 px-2">
+            {shouldMarquee ? (
+              <div className="inline-flex">
+                <span
+                  className="track-marquee text-sm font-bold"
+                  style={{ color: trackTitleColor, minWidth: '100%' }}
+                >
+                  {currentTrack}&nbsp;&nbsp;&nbsp;&nbsp;{currentTrack}&nbsp;&nbsp;&nbsp;&nbsp;
+                </span>
+              </div>
+            ) : (
+              <span
+                className="text-sm font-bold"
+                style={{ color: trackTitleColor }}
+              >
+                {currentTrack}
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Visualizer */}
-        <div className="mt-4 h-16 w-full">
-          <canvas 
+        {/* Visualizer - компактный */}
+        <div className="mt-2 h-12 w-full max-w-xs">
+          <canvas
             ref={canvasRef}
             width={280}
-            height={64}
+            height={48}
             className="w-full h-full"
           />
         </div>
 
         {/* Error Message */}
         {error && (
-          <div 
-            className="mt-4 p-3 rounded-lg text-center text-sm"
+          <div
+            className="mt-2 px-3 py-1 rounded text-xs text-center"
             style={{ backgroundColor: 'rgba(255,0,0,0.1)', color: '#ff6666' }}
           >
             {error}
           </div>
         )}
 
-        {/* Loading indicator - only show in Telegram mode when loading */}
-        {isLoading && !isPlaying && isTelegram && (
-          <div className="mt-6 flex justify-center">
-            <Loader2 className="w-8 h-8 animate-spin" style={{ color: themeColors.secondary }} />
+        {/* Loading indicator */}
+        {isLoading && !isPlaying && (
+          <div className="mt-2">
+            <Loader2 className="w-6 h-6 animate-spin" style={{ color: themeColors.secondary }} />
           </div>
         )}
+      </div>
 
+      {/* Bottom Controls */}
+      <div className="w-full px-4 pb-2">
         {/* Volume Control */}
-        <div className="mt-6 flex items-center gap-3 px-4">
-          <button 
+        <div className="flex items-center gap-2 mb-2">
+          <button
             onClick={() => setIsMuted(!isMuted)}
-            className="p-2 rounded-full hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-full hover:bg-white/10"
             style={{ color: themeColors.textMuted }}
           >
             {isMuted || volume === 0 ? (
-              <VolumeX className="w-5 h-5" />
+              <VolumeX className="w-4 h-4" />
             ) : (
-              <Volume2 className="w-5 h-5" />
+              <Volume2 className="w-4 h-4" />
             )}
           </button>
           <input
@@ -1139,232 +1144,123 @@ export default function RadioMiniApp() {
             min="0"
             max="100"
             value={isMuted ? 0 : volume}
-            onChange={(e) => {
-              setVolume(Number(e.target.value))
-              setIsMuted(false)
-            }}
-            className="volume-slider flex-1"
+            onChange={(e) => { setVolume(Number(e.target.value)); setIsMuted(false) }}
+            className="volume-slider flex-1 h-1"
             style={{
               background: `linear-gradient(90deg, ${themeColors.secondary} ${isMuted ? 0 : volume}%, ${themeColors.primary} ${isMuted ? 0 : volume}%)`,
             }}
           />
         </div>
 
-        {/* Equalizer Toggle */}
-        <div className="mt-6">
-          <button
-            onClick={() => setShowEq(!showEq)}
-            className="flex items-center justify-center gap-2 w-full py-2 text-sm transition-colors"
-            style={{ color: themeColors.textMuted }}
-          >
-            <span>Эквалайзер</span>
-            {showEq ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-
-          {showEq && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="mt-3 p-4 rounded-xl"
-              style={{ backgroundColor: themeColors.cardBg, border: `1px solid ${themeColors.border}` }}
-            >
-              {/* Bass */}
-              <div className="mb-4">
-                <div className="flex justify-between text-xs mb-1" style={{ color: vizColors.bass }}>
-                  <span>Bass</span>
-                  <span>{eqBass > 0 ? '+' : ''}{eqBass}dB</span>
-                </div>
-                <input
-                  type="range"
-                  min="-12"
-                  max="12"
-                  value={eqBass}
-                  onChange={(e) => setEqBass(Number(e.target.value))}
-                  className="eq-slider-bass w-full"
-                />
-              </div>
-              
-              {/* Mid */}
-              <div className="mb-4">
-                <div className="flex justify-between text-xs mb-1" style={{ color: vizColors.mid }}>
-                  <span>Mid</span>
-                  <span>{eqMid > 0 ? '+' : ''}{eqMid}dB</span>
-                </div>
-                <input
-                  type="range"
-                  min="-12"
-                  max="12"
-                  value={eqMid}
-                  onChange={(e) => setEqMid(Number(e.target.value))}
-                  className="eq-slider-mid w-full"
-                />
-              </div>
-              
-              {/* Treble */}
-              <div>
-                <div className="flex justify-between text-xs mb-1" style={{ color: vizColors.high }}>
-                  <span>Treble</span>
-                  <span>{eqTreble > 0 ? '+' : ''}{eqTreble}dB</span>
-                </div>
-                <input
-                  type="range"
-                  min="-12"
-                  max="12"
-                  value={eqTreble}
-                  onChange={(e) => setEqTreble(Number(e.target.value))}
-                  className="eq-slider-treble w-full"
-                />
-              </div>
-            </motion.div>
-          )}
-        </div>
-
-        {/* Theme Selector */}
-        <div className="mt-4">
-          <button
-            onClick={() => setShowThemeSelector(!showThemeSelector)}
-            className="flex items-center justify-center gap-2 w-full py-2 text-sm transition-colors"
-            style={{ color: themeColors.textMuted }}
-          >
-            <Palette className="w-4 h-4" />
-            <span>Тема: {THEMES[currentTheme].name}</span>
-            {showThemeSelector ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-
-          {showThemeSelector && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              className="mt-2 p-3 rounded-xl grid grid-cols-2 gap-2"
-              style={{ backgroundColor: themeColors.cardBg, border: `1px solid ${themeColors.border}` }}
-            >
-              {(Object.keys(THEMES) as ThemeName[]).map((theme) => (
-                <button
-                  key={theme}
-                  onClick={() => {
-                    changeTheme(theme)
-                    setShowThemeSelector(false)
-                  }}
-                  className={`p-3 rounded-lg text-sm font-medium transition-all ${currentTheme === theme ? 'ring-2' : ''}`}
-                  style={{
-                    backgroundColor: THEMES[theme].colors.primary,
-                    color: THEMES[theme].colors.text,
-                    border: `2px solid ${THEMES[theme].colors.secondary}`,
-                    boxShadow: currentTheme === theme ? `0 0 0 2px ${THEMES[theme].colors.secondary}` : 'none',
-                  }}
-                >
-                  {THEMES[theme].name}
-                </button>
-              ))}
-            </motion.div>
-          )}
-        </div>
-
-        {/* Stats & Actions */}
-        <div className="mt-6 flex justify-between items-center px-2">
-          <div className="text-xs" style={{ color: themeColors.textMuted }}>
-            <span>🎧 {listeners} слушателей</span>
-          </div>
+        {/* Stats */}
+        <div className="flex justify-between items-center text-xs" style={{ color: themeColors.textMuted }}>
+          <span>🎧 {listeners} слушателей</span>
           <div className="flex gap-2">
             <button
-              onClick={shareInTelegram}
-              className="p-2 rounded-full hover:bg-white/10 transition-colors"
-              style={{ color: themeColors.textMuted }}
-              title="Поделиться"
+              onClick={() => setShowThemeSelector(!showThemeSelector)}
+              className="p-1 hover:bg-white/10 rounded"
+              title="Тема"
             >
-              <Share2 className="w-5 h-5" />
+              <Palette className="w-4 h-4" />
             </button>
             <button
-              onClick={openInPlayer}
-              className="p-2 rounded-full hover:bg-white/10 transition-colors"
-              style={{ color: themeColors.textMuted }}
-              title="Открыть в плеере"
+              onClick={() => setShowEq(!showEq)}
+              className="p-1 hover:bg-white/10 rounded"
+              title="Эквалайзер"
             >
-              <ExternalLink className="w-5 h-5" />
+              <Sliders className="w-4 h-4" />
+            </button>
+            <button
+              onClick={shareInTelegram}
+              className="p-1 hover:bg-white/10 rounded"
+              title="Поделиться"
+            >
+              <Share2 className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Station Info */}
-        <div className="mt-6 text-center">
-          <p className="text-xs" style={{ color: themeColors.textMuted }}>
-            {STATION_NAME} • {isOnline ? '🟢 В эфире' : '🔴 Оффлайн'}
-          </p>
-        </div>
-      </div>
+        {/* Theme Selector - выпадающее */}
+        {showThemeSelector && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            className="mt-2 p-2 rounded-lg grid grid-cols-3 gap-1"
+            style={{ backgroundColor: themeColors.cardBg, border: `1px solid ${themeColors.border}` }}
+          >
+            {(Object.keys(THEMES) as ThemeName[]).map((theme) => (
+              <button
+                key={theme}
+                onClick={() => { changeTheme(theme); setShowThemeSelector(false) }}
+                className={`py-1.5 rounded text-xs font-medium ${currentTheme === theme ? 'ring-1' : ''}`}
+                style={{
+                  backgroundColor: THEMES[theme].colors.primary,
+                  color: THEMES[theme].colors.text,
+                  border: `1px solid ${THEMES[theme].colors.secondary}`,
+                }}
+              >
+                {THEMES[theme].name}
+              </button>
+            ))}
+          </motion.div>
+        )}
 
-      {/* Global Styles for sliders */}
-      <style jsx global>{`
-        .volume-slider {
-          -webkit-appearance: none;
-          height: 6px;
-          border-radius: 3px;
-          cursor: pointer;
-        }
-        .volume-slider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: white;
-          border: 2px solid currentColor;
-          cursor: pointer;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-        }
-        .volume-slider::-moz-range-thumb {
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: white;
-          border: 2px solid currentColor;
-          cursor: pointer;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-        }
-        .eq-slider-bass, .eq-slider-mid, .eq-slider-treble {
-          -webkit-appearance: none;
-          height: 4px;
-          border-radius: 2px;
-          background: rgba(128,128,128,0.3);
-          cursor: pointer;
-        }
-        .eq-slider-bass::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 16px;
-          height: 16px;
-          border-radius: 50%;
-          background: white;
-          border: 2px solid ${vizColors.bass};
-          cursor: pointer;
-        }
-        .eq-slider-mid::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 16px;
-          height: 16px;
-          border-radius: 50%;
-          background: white;
-          border: 2px solid ${vizColors.mid};
-          cursor: pointer;
-        }
-        .eq-slider-treble::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 16px;
-          height: 16px;
-          border-radius: 50%;
-          background: white;
-          border: 2px solid ${vizColors.high};
-          cursor: pointer;
-        }
-        .eq-slider-bass::-moz-range-thumb,
-        .eq-slider-mid::-moz-range-thumb,
-        .eq-slider-treble::-moz-range-thumb {
-          width: 16px;
-          height: 16px;
-          border-radius: 50%;
-          background: white;
-          cursor: pointer;
-        }
-      `}</style>
+        {/* Equalizer - выпадающее */}
+        {showEq && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            className="mt-2 p-3 rounded-lg"
+            style={{ backgroundColor: themeColors.cardBg, border: `1px solid ${themeColors.border}` }}
+          >
+            {/* Bass */}
+            <div className="mb-2">
+              <div className="flex justify-between text-xs mb-0.5" style={{ color: vizColors.bass }}>
+                <span>Bass</span>
+                <span>{eqBass > 0 ? '+' : ''}{eqBass}dB</span>
+              </div>
+              <input
+                type="range"
+                min="-12"
+                max="12"
+                value={eqBass}
+                onChange={(e) => setEqBass(Number(e.target.value))}
+                className="eq-slider-bass w-full"
+              />
+            </div>
+            {/* Mid */}
+            <div className="mb-2">
+              <div className="flex justify-between text-xs mb-0.5" style={{ color: vizColors.mid }}>
+                <span>Mid</span>
+                <span>{eqMid > 0 ? '+' : ''}{eqMid}dB</span>
+              </div>
+              <input
+                type="range"
+                min="-12"
+                max="12"
+                value={eqMid}
+                onChange={(e) => setEqMid(Number(e.target.value))}
+                className="eq-slider-mid w-full"
+              />
+            </div>
+            {/* Treble */}
+            <div>
+              <div className="flex justify-between text-xs mb-0.5" style={{ color: vizColors.high }}>
+                <span>Treble</span>
+                <span>{eqTreble > 0 ? '+' : ''}{eqTreble}dB</span>
+              </div>
+              <input
+                type="range"
+                min="-12"
+                max="12"
+                value={eqTreble}
+                onChange={(e) => setEqTreble(Number(e.target.value))}
+                className="eq-slider-treble w-full"
+              />
+            </div>
+          </motion.div>
+        )}
+      </div>
     </div>
   )
 }

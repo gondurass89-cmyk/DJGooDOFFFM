@@ -6,9 +6,32 @@ html, body {
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Telegram Mini App safe areas */
+.tma-container {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Бегущая строка для названия трека */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.track-marquee {
+  animation: marquee 15s linear infinite;
+}
+
+.track-marquee-container {
+  overflow: hidden;
+  white-space: nowrap;
 }
