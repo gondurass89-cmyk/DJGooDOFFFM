@@ -1,145 +1,137 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BOT_TOKEN = '8600657705:AAEn6pFmFKcLCPFm8FcF9UiAag404S1av00'
-const ADMIN_CHAT_ID = '55068554'
+// Cloudflare Worker URL для подсчёта слушателей
+const LISTENERS_WORKER_URL = 'https://listeners.gondurass89.workers.dev/'
 
-declare global {
-  var listenersStorage: Map<number, ListenerData> | undefined
-}
+// Секрет для авторизации запросов к Worker
+const WORKER_SECRET = process.env.WORKER_SECRET || 'djgoodoff-fm-secret-2024'
 
-interface ListenerData {
-  user_id: number
-  first_name: string
-  last_name?: string
-  username?: string
-  language_code?: string
-  name: string
-  action: string
-  lastSeen: Date
-  sessions: number  // Track multiple sessions per user
-}
-
-if (!global.listenersStorage) {
-  global.listenersStorage = new Map()
-}
-const listeners = global.listenersStorage
-
-// Send notification - skip if user is admin
-function notifyAdmin(data: ListenerData, count: number, isAdmin: boolean) {
-  // Don't notify for admin user
-  if (isAdmin) {
-    console.log('Skip notification for admin user:', data.user_id)
-    return
-  }
-  
-  const name = data.username 
-    ? `@${data.username}` 
-    : `${data.first_name}${data.last_name ? ' ' + data.last_name : ''}`
-  
-  let emoji = '👂'
-  let status = 'открыл Mini App'
-  
-  if (data.action === 'close') {
-    emoji = '👋'
-    status = 'закрыл приложение'
-  }
-  
-  const message = `${emoji} *${name}* ${status}
-
-👥 Всего: ${count}
-👤 ID: \`${data.user_id}\``
-  
-  fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: ADMIN_CHAT_ID,
-      text: message,
-      parse_mode: 'Markdown'
+// =====================================================
+// GET /api/listener
+// Получить количество активных слушателей
+// =====================================================
+export async function GET() {
+  try {
+    const response = await fetch(LISTENERS_WORKER_URL, {
+      method: 'GET',
+      headers: {
+        'X-Worker-Secret': WORKER_SECRET,
+      },
     })
-  }).catch(e => console.error('Telegram notify error:', e))
+
+    if (!response.ok) {
+      console.error('[LISTENER] Worker error:', response.status)
+      return NextResponse.json({ total: 0, listeners: [] })
+    }
+
+    const data = await response.json()
+    return NextResponse.json(data)
+
+  } catch (error) {
+    console.error('[LISTENER] GET error:', error)
+    return NextResponse.json({ total: 0, listeners: [] })
+  }
 }
 
+// =====================================================
+// POST /api/listener
+// Регистрация слушателя (open/close/heartbeat)
+// =====================================================
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { user_id, first_name, last_name, username, language_code, action, isAdmin } = body
+    const { user_id, first_name, last_name, username, action, isAdmin } = body
 
-    console.log('Listener API POST:', { user_id, first_name, action, isAdmin })
-
+    // Валидация
     if (!user_id || !first_name) {
-      console.log('Missing user data')
       return NextResponse.json({ error: 'Missing user data' }, { status: 400 })
     }
 
-    const name = username ? `@${username}` : `${first_name}${last_name ? ' ' + last_name : ''}`
-
-    if (action === 'open') {
-      // Add or update listener, increment session count
-      const existing = listeners.get(user_id)
-      const listenerData: ListenerData = {
+    // Отправляем в Cloudflare Worker
+    const response = await fetch(LISTENERS_WORKER_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Worker-Secret': WORKER_SECRET,
+      },
+      body: JSON.stringify({
         user_id,
         first_name,
-        last_name,
-        username,
-        language_code,
-        name,
+        last_name: last_name || null,
+        username: username || null,
         action,
-        lastSeen: new Date(),
-        sessions: (existing?.sessions || 0) + 1
-      }
-      listeners.set(user_id, listenerData)
-      console.log('Added listener session, user:', user_id, 'sessions:', listenerData.sessions, 'total users:', listeners.size)
-      notifyAdmin(listenerData, listeners.size, isAdmin || user_id === Number(ADMIN_CHAT_ID))
-    } else if (action === 'close') {
-      // Decrement session count, but don't remove user completely
-      const existing = listeners.get(user_id)
-      if (existing) {
-        existing.sessions = Math.max(0, existing.sessions - 1)
-        existing.lastSeen = new Date()
-        console.log('Removed listener session, user:', user_id, 'sessions:', existing.sessions, 'total users:', listeners.size)
-        notifyAdmin(existing, listeners.size, isAdmin || user_id === Number(ADMIN_CHAT_ID))
-      }
-    }
-
-    // Count users with active sessions
-    const activeCount = Array.from(listeners.values()).filter(l => l.sessions > 0).length
-
-    return NextResponse.json({
-      success: true,
-      totalListeners: activeCount
+        isAdmin: isAdmin || false,
+      }),
     })
 
+    if (!response.ok) {
+      console.error('[LISTENER] Worker error:', response.status)
+      return NextResponse.json({ success: false, error: 'Worker error' }, { status: 500 })
+    }
+
+    const data = await response.json()
+
+    // Отправляем уведомление админу в Telegram (только для open/close)
+    if (action === 'open' || action === 'close') {
+      await notifyAdmin(user_id, first_name, last_name, username, action, data.total, isAdmin)
+    }
+
+    return NextResponse.json(data)
+
   } catch (error) {
-    console.error('Listener API error:', error)
+    console.error('[LISTENER] POST error:', error)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }
 
-export async function GET() {
-  const now = Date.now()
-  const timeout = 30 * 60 * 1000
+// =====================================================
+// Уведомление админа в Telegram
+// =====================================================
+const BOT_TOKEN = '8600657705:AAEn6pFmFKcLCPFm8FcF9UiAag404S1av00'
+const ADMIN_CHAT_ID = '55068554'
 
-  // Remove users with expired lastSeen or zero sessions
-  Array.from(listeners.entries()).forEach(([id, data]) => {
-    const lastSeen = new Date(data.lastSeen).getTime()
-    if (now - lastSeen > timeout) {
-      listeners.delete(id)
-    }
-  })
+async function notifyAdmin(
+  userId: number,
+  firstName: string,
+  lastName: string | null,
+  username: string | null,
+  action: string,
+  total: number,
+  isAdmin: boolean
+) {
+  // Не уведомляем для админа
+  if (isAdmin || userId === Number(ADMIN_CHAT_ID)) {
+    return
+  }
 
-  // Count users with active sessions (sessions > 0)
-  const activeListeners = Array.from(listeners.values()).filter(l => l.sessions > 0)
-  const count = activeListeners.length
+  const name = username
+    ? `@${username}`
+    : `${firstName}${lastName ? ' ' + lastName : ''}`
 
-  console.log('Listener API GET, active users:', count, 'total in storage:', listeners.size)
+  let emoji = '👂'
+  let status = 'открыл Mini App'
 
-  return NextResponse.json({
-    total: count,
-    listeners: activeListeners.map(l => ({
-      name: l.name,
-      user_id: l.user_id,
-      sessions: l.sessions
-    }))
-  })
+  if (action === 'close') {
+    emoji = '👋'
+    status = 'закрыл приложение'
+  }
+
+  const message = `${emoji} *${name}* ${status}
+
+👥 Всего: ${total}
+👤 ID: \`${userId}\``
+
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: ADMIN_CHAT_ID,
+        text: message,
+        parse_mode: 'Markdown',
+      }),
+    })
+  } catch (error) {
+    console.error('[LISTENER] Telegram notify error:', error)
+  }
 }
