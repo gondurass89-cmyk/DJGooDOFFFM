@@ -32,44 +32,45 @@ const REAL_MODE_CHECK_DELAY = 500
 // =====================================================
 type ThemeName = 'dark' | 'light' | 'custom'
 
+// Цветовые схемы с улучшенным контрастом и визуальной гармонией
 const THEMES: Record<ThemeName, { name: string; colors: ThemeColors }> = {
   dark: {
     name: 'Тёмная',
     colors: {
-      bg: '#0d0d1a',
-      text: '#ffffff',
-      textMuted: '#a0a0a0',
-      primary: '#1a1a2e',
-      secondary: '#00c730',
-      accent: '#00ff40',
-      cardBg: 'rgba(30, 30, 50, 0.8)',
-      border: 'rgba(0, 199, 48, 0.3)',
+      bg: '#0a0a12',           // Глубокий тёмно-синий
+      text: '#f0f0f0',         // Чистый белый с мягкостью
+      textMuted: '#b8b8c8',    // Светло-серый с лёгким синим оттенком
+      primary: '#14142a',      // Тёмно-синий для карточек
+      secondary: '#00e640',    // Яркий неоновый зелёный
+      accent: '#00ff55',       // Яркий акцент
+      cardBg: 'rgba(20, 20, 42, 0.95)',
+      border: 'rgba(0, 230, 64, 0.4)',
     }
   },
   light: {
     name: 'Светлая',
     colors: {
-      bg: '#f5f5f5',
-      text: '#1a1a1a',
-      textMuted: '#666666',
-      primary: '#ffffff',
-      secondary: '#00a828',
-      accent: '#00c730',
-      cardBg: 'rgba(255, 255, 255, 0.9)',
-      border: 'rgba(0, 168, 40, 0.3)',
+      bg: '#fafafa',           // Чистый светлый фон
+      text: '#1a1a2e',         // Тёмно-синий текст
+      textMuted: '#4a4a5e',    // Приглушённый тёмный
+      primary: '#ffffff',      // Белый для карточек
+      secondary: '#00b82e',    // Насыщенный зелёный
+      accent: '#00d935',       // Яркий зелёный акцент
+      cardBg: 'rgba(255, 255, 255, 0.98)',
+      border: 'rgba(0, 184, 46, 0.35)',
     }
   },
   custom: {
     name: 'Кастомная',
     colors: {
-      bg: '#320070',
-      text: '#ffffff',
-      textMuted: '#8444d4',
-      primary: '#5c1ba9',
-      secondary: '#06c633',
-      accent: '#06c633',
-      cardBg: 'rgba(92, 27, 169, 0.6)',
-      border: 'rgba(6, 198, 51, 0.4)',
+      bg: '#28005a',          // Глубокий фиолетовый
+      text: '#ffffff',         // Чистый белый
+      textMuted: '#d4c8e8',    // Светло-лавандовый - читаемый на фиолетовом
+      primary: '#3d1a6e',      // Фиолетовый для карточек
+      secondary: '#00e633',    // Ядовито-зелёный (неоновый)
+      accent: '#00ff44',       // Яркий акцент
+      cardBg: 'rgba(61, 26, 110, 0.85)',
+      border: 'rgba(0, 230, 51, 0.5)',
     }
   },
 }
@@ -785,32 +786,20 @@ export default function RadioMiniApp() {
   }, [fetchTrackInfo])
 
   // =====================================================
-  // LISTENER TRACKING
+  // LISTENER TRACKING - ТОЛЬКО ДЛЯ TELEGRAM USERS
   // =====================================================
   const registerListener = useCallback(async (action: 'open' | 'close' | 'heartbeat') => {
     const tg = window.Telegram?.WebApp
     const user = tg?.initDataUnsafe?.user
     
-    let userId: number
-    let firstName: string
-    
-    if (user) {
-      userId = user.id
-      firstName = user.first_name
-    } else {
-      let sessionId = localStorage.getItem('radio_guest_id')
-      if (!sessionId) {
-        sessionId = 'guest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
-        localStorage.setItem('radio_guest_id', sessionId)
-      }
-      let hash = 0
-      for (let i = 0; i < sessionId.length; i++) {
-        hash = ((hash << 5) - hash) + sessionId.charCodeAt(i)
-        hash = hash & hash
-      }
-      userId = Math.abs(hash)
-      firstName = 'Гость'
+    // Регистрируем ТОЛЬКО Telegram пользователей, не гостей
+    if (!user) {
+      console.log('[LISTENER] Skip registration - not a Telegram user')
+      return
     }
+    
+    const userId = user.id
+    const firstName = user.first_name
     
     try {
       await fetch('/api/listener', {
@@ -819,10 +808,11 @@ export default function RadioMiniApp() {
         body: JSON.stringify({
           user_id: userId,
           first_name: firstName,
-          last_name: user?.last_name || null,
-          username: user?.username || null,
+          last_name: user.last_name || null,
+          username: user.username || null,
           action,
-          isAdmin: user?.id === ADMIN_USER_ID,
+          isAdmin: user.id === ADMIN_USER_ID,
+          isTelegram: true, // Помечаем как Telegram пользователя
         }),
       })
     } catch (e) {
@@ -848,10 +838,10 @@ export default function RadioMiniApp() {
 
   const fetchListenersCount = useCallback(async () => {
     try {
-      const res = await fetch('/api/listener')
+      const res = await fetch('/api/listener?telegram_only=true')
       if (res.ok) {
         const data = await res.json()
-        setListeners(data.total || 0)
+        setUniqueListeners(data.total || 0)
       }
     } catch (e) {
       console.error('[LISTENERS] Fetch error:', e)
@@ -865,41 +855,24 @@ export default function RadioMiniApp() {
   }, [fetchListenersCount])
 
   // =====================================================
-  // CLOSE ON UNLOAD
+  // CLOSE ON UNLOAD - ТОЛЬКО ДЛЯ TELEGRAM USERS
   // =====================================================
   useEffect(() => {
     const sendClose = () => {
       const tg = window.Telegram?.WebApp
       const user = tg?.initDataUnsafe?.user
 
-      let userId: number
-      let firstName: string
-
-      if (user) {
-        userId = user.id
-        firstName = user.first_name
-      } else {
-        const sessionId = localStorage.getItem('radio_guest_id')
-        if (sessionId) {
-          let hash = 0
-          for (let i = 0; i < sessionId.length; i++) {
-            hash = ((hash << 5) - hash) + sessionId.charCodeAt(i)
-            hash = hash & hash
-          }
-          userId = Math.abs(hash)
-          firstName = 'Гость'
-        } else {
-          return
-        }
-      }
+      // Отправляем close только для Telegram пользователей
+      if (!user) return
 
       navigator.sendBeacon('/api/listener', new Blob([JSON.stringify({
-        user_id: userId,
-        first_name: firstName,
-        last_name: user?.last_name || null,
-        username: user?.username || null,
+        user_id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name || null,
+        username: user.username || null,
         action: 'close',
-        isAdmin: user?.id === ADMIN_USER_ID,
+        isAdmin: user.id === ADMIN_USER_ID,
+        isTelegram: true,
       })], { type: 'application/json' }))
     }
     window.addEventListener('beforeunload', sendClose)
@@ -1025,9 +998,53 @@ export default function RadioMiniApp() {
 
   return (
     <div
-      className="h-screen flex flex-col items-center justify-between overflow-hidden tma-container"
+      className="h-screen flex flex-col items-center justify-between overflow-hidden tma-container relative"
       style={{ backgroundColor: themeColors.bg }}
     >
+      {/* Theme Button - Top Left Corner */}
+      <div className="absolute top-2 left-2 z-10">
+        <button
+          onClick={() => setShowThemeSelector(!showThemeSelector)}
+          className="p-2 rounded-full transition-all"
+          style={{
+            backgroundColor: themeColors.cardBg,
+            color: themeColors.text,
+            border: `1px solid ${themeColors.border}`,
+          }}
+          title="Выбор темы"
+        >
+          <Palette className="w-5 h-5" />
+        </button>
+
+        {/* Theme Selector Dropdown */}
+        {showThemeSelector && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="absolute top-12 left-0 p-2 rounded-lg grid grid-cols-1 gap-1 min-w-[100px]"
+            style={{
+              backgroundColor: themeColors.cardBg,
+              border: `1px solid ${themeColors.border}`,
+            }}
+          >
+            {(Object.keys(THEMES) as ThemeName[]).map((theme) => (
+              <button
+                key={theme}
+                onClick={() => { changeTheme(theme); setShowThemeSelector(false) }}
+                className={`py-2 px-3 rounded text-sm font-medium transition-all ${currentTheme === theme ? 'ring-2' : ''}`}
+                style={{
+                  backgroundColor: currentTheme === theme ? THEMES[theme].colors.secondary : THEMES[theme].colors.primary,
+                  color: currentTheme === theme ? '#000' : THEMES[theme].colors.text,
+                  border: `1px solid ${THEMES[theme].colors.secondary}`,
+                }}
+              >
+                {THEMES[theme].name}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </div>
+
       <div className="flex-1 flex flex-col items-center justify-center w-full px-4 py-2">
 
         {/* Cover Art - компактный размер */}
@@ -1154,56 +1171,26 @@ export default function RadioMiniApp() {
 
         {/* Stats */}
         <div className="flex justify-between items-center text-xs" style={{ color: themeColors.textMuted }}>
-          <span>🎧 {listeners} слушателей</span>
+          <span>🎧 {uniqueListeners} слушателей</span>
           <div className="flex gap-2">
             <button
-              onClick={() => setShowThemeSelector(!showThemeSelector)}
-              className="p-1 hover:bg-white/10 rounded"
-              title="Тема"
-            >
-              <Palette className="w-4 h-4" />
-            </button>
-            <button
               onClick={() => setShowEq(!showEq)}
-              className="p-1 hover:bg-white/10 rounded"
+              className="p-1 hover:bg-white/10 rounded transition-colors"
+              style={{ color: themeColors.textMuted }}
               title="Эквалайзер"
             >
               <Sliders className="w-4 h-4" />
             </button>
             <button
               onClick={shareInTelegram}
-              className="p-1 hover:bg-white/10 rounded"
+              className="p-1 hover:bg-white/10 rounded transition-colors"
+              style={{ color: themeColors.textMuted }}
               title="Поделиться"
             >
               <Share2 className="w-4 h-4" />
             </button>
           </div>
         </div>
-
-        {/* Theme Selector - выпадающее */}
-        {showThemeSelector && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            className="mt-2 p-2 rounded-lg grid grid-cols-3 gap-1"
-            style={{ backgroundColor: themeColors.cardBg, border: `1px solid ${themeColors.border}` }}
-          >
-            {(Object.keys(THEMES) as ThemeName[]).map((theme) => (
-              <button
-                key={theme}
-                onClick={() => { changeTheme(theme); setShowThemeSelector(false) }}
-                className={`py-1.5 rounded text-xs font-medium ${currentTheme === theme ? 'ring-1' : ''}`}
-                style={{
-                  backgroundColor: THEMES[theme].colors.primary,
-                  color: THEMES[theme].colors.text,
-                  border: `1px solid ${THEMES[theme].colors.secondary}`,
-                }}
-              >
-                {THEMES[theme].name}
-              </button>
-            ))}
-          </motion.div>
-        )}
 
         {/* Equalizer - выпадающее */}
         {showEq && (

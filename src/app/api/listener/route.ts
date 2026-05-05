@@ -9,9 +9,13 @@ const WORKER_SECRET = process.env.WORKER_SECRET || 'djgoodoff-fm-secret-2024'
 // =====================================================
 // GET /api/listener
 // Получить количество активных слушателей
+// Query params: telegram_only=true - только Telegram пользователи
 // =====================================================
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const telegramOnly = searchParams.get('telegram_only') === 'true'
+
     const response = await fetch(LISTENERS_WORKER_URL, {
       method: 'GET',
       headers: {
@@ -25,6 +29,16 @@ export async function GET() {
     }
 
     const data = await response.json()
+
+    // Если запрашиваем только Telegram пользователей, фильтруем
+    if (telegramOnly && data.listeners) {
+      const telegramListeners = data.listeners.filter((l: { isTelegram?: boolean }) => l.isTelegram === true)
+      return NextResponse.json({
+        total: telegramListeners.length,
+        listeners: telegramListeners
+      })
+    }
+
     return NextResponse.json(data)
 
   } catch (error) {
@@ -40,7 +54,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { user_id, first_name, last_name, username, action, isAdmin } = body
+    const { user_id, first_name, last_name, username, action, isAdmin, isTelegram } = body
 
     // Валидация
     if (!user_id || !first_name) {
@@ -61,6 +75,7 @@ export async function POST(request: NextRequest) {
         username: username || null,
         action,
         isAdmin: isAdmin || false,
+        isTelegram: isTelegram || false,
       }),
     })
 
@@ -71,8 +86,8 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json()
 
-    // Отправляем уведомление админу в Telegram (только для open/close)
-    if (action === 'open' || action === 'close') {
+    // Отправляем уведомление админу в Telegram (только для open/close и Telegram пользователей)
+    if ((action === 'open' || action === 'close') && isTelegram) {
       await notifyAdmin(user_id, first_name, last_name, username, action, data.total, isAdmin)
     }
 
