@@ -229,7 +229,17 @@ export default function RadioMiniApp() {
   const isPlayingRef = useRef<boolean>(false)
   const coverCacheRef = useRef<Map<string, string>>(new Map())
   
+  // Автопереподключение
+  const shouldPlayRef = useRef<boolean>(false) // Пользователь хочет играть
+  const reconnectAttemptsRef = useRef<number>(0) // Количество попыток переподключения
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null) // Таймер переподключения
+  const stallCheckRef = useRef<NodeJS.Timeout | null>(null) // Таймер проверки зависания
+  const lastProgressRef = useRef<number>(0) // Последняя позиция воспроизведения
+  
   const SMOOTHING_FACTOR = 0.25
+  const MAX_RECONNECT_ATTEMPTS = 5
+  const RECONNECT_DELAY = 2000 // 2 секунды
+  const STALL_TIMEOUT = 15000 // 15 секунд без прогресса = зависание
 
   // Colors for visualizer (always vibrant)
   const vizColors = {
@@ -595,97 +605,264 @@ export default function RadioMiniApp() {
   }, [getAudioContext, eqBass, eqMid, eqTreble])
 
   // =====================================================
+  // АВТОПЕРЕПОДКЛЮЧЕНИЕ
+  // =====================================================
+  const attemptReconnect = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio || !shouldPlayRef.current) {
+      console.log('[RECONNECT] Skip - shouldPlay is false')
+      return
+    }
+
+    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+      console.log('[RECONNECT] Max attempts reached')
+      setError('Потеряно соединение. Нажмите "Играть" для переподключения.')
+      shouldPlayRef.current = false
+      setIsPlaying(false)
+      setIsLoading(false)
+      reconnectAttemptsRef.current = 0
+      return
+    }
+
+    reconnectAttemptsRef.current++
+    console.log(`[RECONNECT] Attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS}`)
+
+    setIsLoading(true)
+    setBuffering(true)
+
+    // Очищаем предыдущий источник
+    audio.pause()
+    audio.src = ''
+    audio.load()
+
+    // Переподключаемся через задержку
+    reconnectTimeoutRef.current = setTimeout(async () => {
+      if (!shouldPlayRef.current) return
+
+      try {
+        audio.volume = isMuted ? 0 : volume / 100
+        audio.src = STREAM_URL
+        audio.load()
+        await audio.play()
+        console.log('[RECONNECT] Success!')
+        reconnectAttemptsRef.current = 0
+        setError(null)
+      } catch (err: any) {
+        console.error('[RECONNECT] Failed:', err.message)
+        // Попробуем ещё раз
+        attemptReconnect()
+      }
+    }, RECONNECT_DELAY)
+  }, [isMuted, volume])
+
+  // Сброс таймера проверки зависания
+  const resetStallCheck = useCallback(() => {
+    if (stallCheckRef.current) {
+      clearTimeout(stallCheckRef.current)
+      stallCheckRef.current = null
+    }
+  }, [])
+
+  // Запуск таймера проверки зависания
+  const startStallCheck = useCallback(() => {
+    resetStallCheck()
+
+    stallCheckRef.current = setTimeout(() => {
+      const audio = audioRef.current
+      if (!audio || !shouldPlayRef.current) return
+
+      // Проверяем, есть ли прогресс воспроизведения
+      const currentTime = audio.currentTime
+      console.log(`[STALL-CHECK] Current time: ${currentTime}, Last: ${lastProgressRef.current}`)
+
+      // Для стрима currentTime может не меняться, проверяем состояние
+      if (audio.paused && shouldPlayRef.current) {
+        console.log('[STALL-CHECK] Audio paused unexpectedly, reconnecting...')
+        attemptReconnect()
+      }
+    }, STALL_TIMEOUT)
+  }, [resetStallCheck, attemptReconnect])
+
+  // =====================================================
   // ИНИЦИАЛИЗАЦИЯ АУДИО
   // =====================================================
   useEffect(() => {
     isIOSRef.current = detectIOS()
-    
+
     const audio = new Audio()
     audio.preload = 'none'
     audio.crossOrigin = 'anonymous'
     audio.setAttribute('playsinline', 'true')
     audio.setAttribute('webkit-playsinline', 'true')
     audioRef.current = audio
-    
+
     const onPlaying = () => {
+      console.log('[AUDIO] Playing event')
       setIsPlaying(true)
       isPlayingRef.current = true
       setIsLoading(false)
       setBuffering(false)
       setError(null)
+      reconnectAttemptsRef.current = 0 // Сбрасываем счётчик попыток
+      lastProgressRef.current = Date.now()
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
       startVisualization()
+      startStallCheck()
     }
-    
+
     const onPause = () => {
+      console.log('[AUDIO] Pause event, shouldPlay:', shouldPlayRef.current)
       setIsPlaying(false)
       isPlayingRef.current = false
       stopVisualization()
+      resetStallCheck()
+
+      // Если пауза не по желанию пользователя - пробуем переподключиться
+      if (shouldPlayRef.current) {
+        console.log('[AUDIO] Unexpected pause, attempting reconnect...')
+        attemptReconnect()
+      }
     }
-    
+
     const onWaiting = () => {
+      console.log('[AUDIO] Waiting/buffering')
       setBuffering(true)
       setIsLoading(true)
     }
-    
+
     const onCanPlay = () => {
+      console.log('[AUDIO] Can play')
       setBuffering(false)
       setIsLoading(false)
     }
-    
-    const onStalled = () => setBuffering(true)
-    
+
+    const onStalled = () => {
+      console.log('[AUDIO] Stalled - network issue')
+      setBuffering(true)
+      // Stalled часто предшествует разрыву - готовимся к переподключению
+      if (shouldPlayRef.current && !reconnectTimeoutRef.current) {
+        console.log('[AUDIO] Stalled while playing, will monitor...')
+      }
+    }
+
+    const onSuspend = () => {
+      console.log('[AUDIO] Suspended')
+      // Браузер приостановил загрузку
+      if (shouldPlayRef.current) {
+        console.log('[AUDIO] Suspended while should play, reconnecting...')
+        attemptReconnect()
+      }
+    }
+
+    const onEmptied = () => {
+      console.log('[AUDIO] Emptied - source lost')
+      // Источник потерян
+      if (shouldPlayRef.current) {
+        attemptReconnect()
+      }
+    }
+
     const onError = () => {
       const mediaError = audio.error
       console.error('[AUDIO] Error:', mediaError ? getAudioErrorMessage(mediaError) : 'Unknown')
-      
+
       let errorMsg = 'Ошибка воспроизведения'
+      let shouldReconnect = false
+
       if (mediaError) {
         switch (mediaError.code) {
-          case MediaError.MEDIA_ERR_ABORTED: errorMsg = 'Воспроизведение отменено'; break
-          case MediaError.MEDIA_ERR_NETWORK: errorMsg = 'Ошибка сети'; break
-          case MediaError.MEDIA_ERR_DECODE: errorMsg = 'Ошибка декодирования'; break
-          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED: errorMsg = 'Формат не поддерживается'; break
+          case MediaError.MEDIA_ERR_ABORTED:
+            errorMsg = 'Воспроизведение отменено'
+            break
+          case MediaError.MEDIA_ERR_NETWORK:
+            errorMsg = 'Ошибка сети, переподключение...'
+            shouldReconnect = true
+            break
+          case MediaError.MEDIA_ERR_DECODE:
+            errorMsg = 'Ошибка декодирования, переподключение...'
+            shouldReconnect = true
+            break
+          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+            errorMsg = 'Формат не поддерживается'
+            break
         }
       }
-      
+
       setIsLoading(false)
       setIsPlaying(false)
       setBuffering(false)
       setError(errorMsg)
       stopVisualization()
+      resetStallCheck()
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
+
+      // Автопереподключение при сетевых ошибках
+      if (shouldReconnect && shouldPlayRef.current) {
+        attemptReconnect()
+      }
     }
-    
+
+    // Обработка прогресса для обнаружения зависаний
+    const onProgress = () => {
+      lastProgressRef.current = Date.now()
+    }
+
+    const onTimeUpdate = () => {
+      lastProgressRef.current = Date.now()
+      // Продлеваем stall check
+      if (shouldPlayRef.current) {
+        startStallCheck()
+      }
+    }
+
     audio.addEventListener('playing', onPlaying)
     audio.addEventListener('pause', onPause)
     audio.addEventListener('waiting', onWaiting)
     audio.addEventListener('canplay', onCanPlay)
     audio.addEventListener('stalled', onStalled)
+    audio.addEventListener('suspend', onSuspend)
+    audio.addEventListener('emptied', onEmptied)
     audio.addEventListener('error', onError)
-    
+    audio.addEventListener('progress', onProgress)
+    audio.addEventListener('timeupdate', onTimeUpdate)
+
     const onVisibilityChange = async () => {
       const ctx = audioContextRef.current
       if (document.visibilityState === 'visible' && ctx && ctx.state === 'suspended') {
         try { await ctx.resume() } catch (e) { console.error('[AUDIO] Resume error:', e) }
       }
+
+      // При возврате на вкладку проверяем состояние
+      if (document.visibilityState === 'visible' && shouldPlayRef.current && audio.paused) {
+        console.log('[VISIBILITY] Returning to tab, audio paused - reconnecting...')
+        attemptReconnect()
+      }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
-    
+
     return () => {
       audio.removeEventListener('playing', onPlaying)
       audio.removeEventListener('pause', onPause)
       audio.removeEventListener('waiting', onWaiting)
       audio.removeEventListener('canplay', onCanPlay)
       audio.removeEventListener('stalled', onStalled)
+      audio.removeEventListener('suspend', onSuspend)
+      audio.removeEventListener('emptied', onEmptied)
       audio.removeEventListener('error', onError)
+      audio.removeEventListener('progress', onProgress)
+      audio.removeEventListener('timeupdate', onTimeUpdate)
       document.removeEventListener('visibilitychange', onVisibilityChange)
+
+      // Очищаем все таймеры
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
+      if (stallCheckRef.current) clearTimeout(stallCheckRef.current)
+
       audio.pause()
       audio.src = ''
       stopVisualization()
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
-  }, [stopVisualization, startVisualization])
+  }, [stopVisualization, startVisualization, attemptReconnect, startStallCheck, resetStallCheck])
 
   // =====================================================
   // VOLUME
@@ -897,23 +1074,34 @@ export default function RadioMiniApp() {
   const handlePlay = async () => {
     const audio = audioRef.current
     if (!audio) return
-    
+
     if (isPlaying) {
+      // Пользователь нажал паузу - останавливаем автопереподключение
+      shouldPlayRef.current = false
+      reconnectAttemptsRef.current = 0
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
+      resetStallCheck()
+
       audio.pause()
       isPlayingRef.current = false
       registerListener('close')
       return
     }
-    
+
+    // Пользователь хочет играть
+    shouldPlayRef.current = true
     setError(null)
     setIsLoading(true)
-    
+
     const isIOS = isIOSRef.current
-    
+
     if (isIOS) {
       fallbackModeRef.current = true
     }
-    
+
     timeoutRef.current = setTimeout(() => {
       if (isLoading && !isPlaying) {
         setError('Таймаут загрузки')
@@ -922,15 +1110,15 @@ export default function RadioMiniApp() {
         audio.pause()
       }
     }, LOAD_TIMEOUT)
-    
+
     try {
       audio.volume = isMuted ? 0 : volume / 100
-      
+
       if (!audio.src || audio.src !== STREAM_URL) {
         audio.src = STREAM_URL
         audio.load()
       }
-      
+
       if (!fallbackModeRef.current) {
         const ctx = getAudioContext()
         if (ctx) {
@@ -940,7 +1128,7 @@ export default function RadioMiniApp() {
           fallbackModeRef.current = true
         }
       }
-      
+
       await audio.play()
       isPlayingRef.current = true
       
