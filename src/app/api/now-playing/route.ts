@@ -147,8 +147,11 @@ interface ParsedTrack {
  *   title: "Track Title"
  */
 function parseTrackInfo(text: string, artist: string, title: string): ParsedTrack {
-  // Step 1: Check if artist field is ONLY DJ metadata
-  if (artist && isDjMetadata(stripDjMetadataFromStart(artist))) {
+  // Step 1: Check if artist field is ONLY DJ metadata (empty after stripping = all metadata)
+  const strippedArtist = artist ? stripDjMetadataFromStart(artist) : ''
+  const artistIsOnlyMetadata = artist && (strippedArtist === '' || isDjMetadata(strippedArtist))
+
+  if (artistIsOnlyMetadata) {
     // The artist field is just metadata, ignore it
     // Try to parse artist from title or text
     if (title && title.includes(' - ')) {
@@ -187,8 +190,8 @@ function parseTrackInfo(text: string, artist: string, title: string): ParsedTrac
     }
   }
   
-  // Step 2: Clean metadata from artist field
-  let cleanArtist = artist ? stripDjMetadataFromStart(artist) : ''
+  // Step 2: Clean metadata from artist field (already computed above)
+  let cleanArtist = strippedArtist
   
   // Step 3: If title contains "Artist - Title", extract from there
   if (title && title.includes(' - ')) {

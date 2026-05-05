@@ -1074,18 +1074,19 @@ export default function RadioMiniApp() {
 
         {/* Track Info */}
         <div className="mt-6 text-center">
-          <p 
+          <p
             className="text-sm font-medium truncate px-2"
             style={{ color: themeColors.text }}
           >
             {currentTrack}
           </p>
-          {artist && (
-            <p 
+          {/* Show title only if different from currentTrack (avoid duplicate) */}
+          {title && currentTrack !== title && !currentTrack.includes(title) && (
+            <p
               className="text-xs mt-1 truncate px-2"
               style={{ color: themeColors.textMuted }}
             >
-              {artist}
+              {title}
             </p>
           )}
         </div>
