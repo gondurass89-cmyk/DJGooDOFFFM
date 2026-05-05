@@ -231,6 +231,7 @@ export default function RadioMiniApp() {
   
   // Автопереподключение
   const shouldPlayRef = useRef<boolean>(false) // Пользователь хочет играть
+  const userPausedRef = useRef<boolean>(false) // Пользователь явно нажал паузу
   const reconnectAttemptsRef = useRef<number>(0) // Количество попыток переподключения
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null) // Таймер переподключения
   const stallCheckRef = useRef<NodeJS.Timeout | null>(null) // Таймер проверки зависания
@@ -721,18 +722,18 @@ export default function RadioMiniApp() {
     }
 
     const onPause = () => {
-      // Игнорируем паузу во время взаимодействия со слайдером
-      if (isInteractingWithSliderRef.current) {
-        console.log('[AUDIO] Pause ignored - interacting with slider')
-        // Пытаемся продолжить воспроизведение
+      // Если пользователь хочет играть и не нажимал паузу - это системная пауза
+      // Пытаемся восстановить воспроизведение
+      if (shouldPlayRef.current && !userPausedRef.current) {
+        console.log('[AUDIO] Unexpected pause while shouldPlay=true, resuming...')
         setTimeout(() => {
-          if (audioRef.current && shouldPlayRef.current) {
-            audioRef.current.play().catch(() => {})
+          if (audioRef.current && shouldPlayRef.current && !userPausedRef.current) {
+            audioRef.current.play().catch((e) => console.log('[AUDIO] Resume failed:', e.message))
           }
-        }, 100)
+        }, 50)
         return
       }
-      console.log('[AUDIO] Pause event, shouldPlay:', shouldPlayRef.current)
+      console.log('[AUDIO] Pause event, userPaused:', userPausedRef.current)
       setIsPlaying(false)
       isPlayingRef.current = false
       stopVisualization()
@@ -1081,6 +1082,7 @@ export default function RadioMiniApp() {
     if (isPlaying) {
       // Пользователь нажал паузу - останавливаем автопереподключение
       shouldPlayRef.current = false
+      userPausedRef.current = true // Пользователь явно нажал паузу
       reconnectAttemptsRef.current = 0
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
@@ -1095,6 +1097,7 @@ export default function RadioMiniApp() {
     }
 
     // Пользователь хочет играть
+    userPausedRef.current = false // Сбрасываем флаг явной паузы
     shouldPlayRef.current = true
     setError(null)
     setIsLoading(true)
