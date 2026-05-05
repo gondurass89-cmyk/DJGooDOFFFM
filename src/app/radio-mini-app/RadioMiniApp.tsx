@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Play, Pause, Volume2, VolumeX, Loader2, ChevronDown, ChevronUp, Share2, ExternalLink } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Loader2, ChevronDown, ChevronUp, Share2, ExternalLink, Palette, Sun, Moon } from 'lucide-react'
 
 // =====================================================
 // КОНСТАНТЫ
@@ -28,23 +28,66 @@ const REAL_MODE_CHECK_FRAMES = 10
 const REAL_MODE_CHECK_DELAY = 500
 
 // =====================================================
-// ДЕФОЛТНАЯ ЦВЕТОВАЯ СХЕМА (тёмная)
+// ТЕМЫ
 // =====================================================
-const DEFAULT_COLORS = {
-  primary: '#1a1a2e',
-  secondary: '#00c730',
-  accent: '#00ff40',
-  text: '#ffffff',
-  textMuted: '#a0a0a0',
-  dark: '#0d0d1a',
-  bass: '#ff0066',
-  mid: '#00c730',
-  high: '#00ffcc',
-  gold: '#D4AF37',
-  glow: 'rgba(0, 199, 48, 0.5)',
-  cardBg: 'rgba(30, 30, 50, 0.8)',
-  border: 'rgba(0, 199, 48, 0.3)',
+type ThemeName = 'dark' | 'light' | 'green' | 'purple'
+
+const THEMES: Record<ThemeName, { name: string; colors: ThemeColors }> = {
+  dark: {
+    name: 'Тёмная',
+    colors: {
+      bg: '#0d0d1a',
+      text: '#ffffff',
+      textMuted: '#a0a0a0',
+      primary: '#1a1a2e',
+      secondary: '#00c730',
+      accent: '#00ff40',
+      cardBg: 'rgba(30, 30, 50, 0.8)',
+      border: 'rgba(0, 199, 48, 0.3)',
+    }
+  },
+  light: {
+    name: 'Светлая',
+    colors: {
+      bg: '#f5f5f5',
+      text: '#1a1a1a',
+      textMuted: '#666666',
+      primary: '#ffffff',
+      secondary: '#00a828',
+      accent: '#00c730',
+      cardBg: 'rgba(255, 255, 255, 0.9)',
+      border: 'rgba(0, 168, 40, 0.3)',
+    }
+  },
+  green: {
+    name: 'Зелёная',
+    colors: {
+      bg: '#0a1f0a',
+      text: '#00ff40',
+      textMuted: '#00c730',
+      primary: '#0f2f0f',
+      secondary: '#00ff40',
+      accent: '#00ff80',
+      cardBg: 'rgba(0, 60, 20, 0.8)',
+      border: 'rgba(0, 255, 64, 0.3)',
+    }
+  },
+  purple: {
+    name: 'Фиолетовая',
+    colors: {
+      bg: '#1a0a2e',
+      text: '#e0c0ff',
+      textMuted: '#a080c0',
+      primary: '#2e0071',
+      secondary: '#c000ff',
+      accent: '#ff00ff',
+      cardBg: 'rgba(46, 0, 113, 0.6)',
+      border: 'rgba(192, 0, 255, 0.3)',
+    }
+  },
 }
+
+const DEFAULT_COLORS = THEMES.dark.colors
 
 const ADMIN_USER_ID = 55068554
 
@@ -170,16 +213,9 @@ export default function RadioMiniApp() {
   const [eqTreble, setEqTreble] = useState(0)
   const [showEq, setShowEq] = useState(false)
   const [isTelegram, setIsTelegram] = useState(false)
-  const [themeColors, setThemeColors] = useState<ThemeColors>({
-    bg: DEFAULT_COLORS.dark,
-    text: DEFAULT_COLORS.text,
-    textMuted: DEFAULT_COLORS.textMuted,
-    primary: DEFAULT_COLORS.primary,
-    secondary: DEFAULT_COLORS.secondary,
-    accent: DEFAULT_COLORS.accent,
-    cardBg: DEFAULT_COLORS.cardBg,
-    border: DEFAULT_COLORS.border,
-  })
+  const [currentTheme, setCurrentTheme] = useState<ThemeName>('dark')
+  const [showThemeSelector, setShowThemeSelector] = useState(false)
+  const [themeColors, setThemeColors] = useState<ThemeColors>(DEFAULT_COLORS)
 
   // =====================================================
   // ССЫЛКИ (useRef)
@@ -214,60 +250,32 @@ export default function RadioMiniApp() {
   }
 
   // =====================================================
-  // TELEGRAM THEME ADAPTATION
+  // THEME MANAGEMENT
+  // =====================================================
+  const changeTheme = useCallback((theme: ThemeName) => {
+    setCurrentTheme(theme)
+    setThemeColors(THEMES[theme].colors)
+    localStorage.setItem('radio_theme', theme)
+  }, [])
+
+  // Load saved theme on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('radio_theme') as ThemeName | null
+    if (savedTheme && THEMES[savedTheme]) {
+      changeTheme(savedTheme)
+    }
+  }, [changeTheme])
+
+  // =====================================================
+  // TELEGRAM INIT
   // =====================================================
   useEffect(() => {
-    const applyTelegramTheme = () => {
-      const tg = window.Telegram?.WebApp
-      if (!tg) return
-
-      const theme = tg.themeParams
-      const isDark = tg.colorScheme === 'dark' || !isLightColor(theme.bg_color || '#000000')
-      
-      if (isDark) {
-        setThemeColors({
-          bg: theme.bg_color || DEFAULT_COLORS.dark,
-          text: theme.text_color || DEFAULT_COLORS.text,
-          textMuted: theme.hint_color || DEFAULT_COLORS.textMuted,
-          primary: theme.secondary_bg_color || DEFAULT_COLORS.primary,
-          secondary: theme.link_color || DEFAULT_COLORS.secondary,
-          accent: theme.button_color || DEFAULT_COLORS.accent,
-          cardBg: `rgba(${hexToRgb(theme.secondary_bg_color || DEFAULT_COLORS.primary)}, 0.8)`,
-          border: `rgba(${hexToRgb(theme.link_color || DEFAULT_COLORS.secondary)}, 0.3)`,
-        })
-      } else {
-        // Light theme
-        setThemeColors({
-          bg: theme.bg_color || '#ffffff',
-          text: theme.text_color || '#000000',
-          textMuted: theme.hint_color || '#666666',
-          primary: theme.secondary_bg_color || '#f0f0f0',
-          secondary: theme.link_color || '#0088cc',
-          accent: theme.button_color || '#2481cc',
-          cardBg: `rgba(${hexToRgb(theme.secondary_bg_color || '#f5f5f5')}, 0.9)`,
-          border: `rgba(${hexToRgb(theme.link_color || '#0088cc')}, 0.3)`,
-        })
-      }
-    }
-
-    function hexToRgb(hex: string): string {
-      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-      return result 
-        ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
-        : '0, 0, 0'
-    }
-
     const initTelegram = () => {
       const tg = window.Telegram?.WebApp
       if (tg) {
         tg.ready()
         tg.expand()
         setIsTelegram(true)
-        applyTelegramTheme()
-        
-        // Listen for theme changes
-        tg.onEvent('themeChanged', applyTelegramTheme)
-        
         const isIOSFromTG = tg.platform === 'ios'
         if (isIOSFromTG) isIOSRef.current = true
         return true
@@ -1202,6 +1210,47 @@ export default function RadioMiniApp() {
                   className="eq-slider-treble w-full"
                 />
               </div>
+            </motion.div>
+          )}
+        </div>
+
+        {/* Theme Selector */}
+        <div className="mt-4">
+          <button
+            onClick={() => setShowThemeSelector(!showThemeSelector)}
+            className="flex items-center justify-center gap-2 w-full py-2 text-sm transition-colors"
+            style={{ color: themeColors.textMuted }}
+          >
+            <Palette className="w-4 h-4" />
+            <span>Тема: {THEMES[currentTheme].name}</span>
+            {showThemeSelector ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+
+          {showThemeSelector && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              className="mt-2 p-3 rounded-xl grid grid-cols-2 gap-2"
+              style={{ backgroundColor: themeColors.cardBg, border: `1px solid ${themeColors.border}` }}
+            >
+              {(Object.keys(THEMES) as ThemeName[]).map((theme) => (
+                <button
+                  key={theme}
+                  onClick={() => {
+                    changeTheme(theme)
+                    setShowThemeSelector(false)
+                  }}
+                  className={`p-3 rounded-lg text-sm font-medium transition-all ${currentTheme === theme ? 'ring-2' : ''}`}
+                  style={{
+                    backgroundColor: THEMES[theme].colors.primary,
+                    color: THEMES[theme].colors.text,
+                    border: `2px solid ${THEMES[theme].colors.secondary}`,
+                    boxShadow: currentTheme === theme ? `0 0 0 2px ${THEMES[theme].colors.secondary}` : 'none',
+                  }}
+                >
+                  {THEMES[theme].name}
+                </button>
+              ))}
             </motion.div>
           )}
         </div>
