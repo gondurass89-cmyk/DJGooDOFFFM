@@ -16,9 +16,8 @@ import { Play, Pause, Volume2, VolumeX, Loader2, ChevronDown, ChevronUp, Share2,
 // =====================================================
 const AZURACAST_URL = 'https://stream.volfrings.ru'
 const STATION_SHORTCODE = 'djgoodofffm'
-const STREAM_URL = '/api/stream'
+const STREAM_URL = `${AZURACAST_URL}/listen/${STATION_SHORTCODE}/radio.mp3` // Прямой HTTPS поток
 const API_URL = '/api/now-playing'
-const DIRECT_STREAM_URL = `${AZURACAST_URL}/listen/${STATION_SHORTCODE}/radio.mp3`
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
 const COVER_API = '/api/cover'
@@ -1181,9 +1180,9 @@ export default function RadioMiniApp() {
   // =====================================================
   const openInPlayer = () => {
     if (isTelegram && window.Telegram?.WebApp?.openLink) {
-      window.Telegram.WebApp.openLink(DIRECT_STREAM_URL)
+      window.Telegram.WebApp.openLink(STREAM_URL)
     } else {
-      window.open(DIRECT_STREAM_URL, '_blank')
+      window.open(STREAM_URL, '_blank')
     }
   }
 
