@@ -237,32 +237,63 @@ export default function RadioMiniApp() {
   }
 
   // =====================================================
-  // TELEGRAM MAIN BUTTON
+  // TELEGRAM INIT + MAIN BUTTON
   // =====================================================
   useEffect(() => {
-    const tg = window.Telegram?.WebApp
-    if (!tg?.MainButton) return
-    
-    // Set initial button text
-    tg.MainButton.text = isPlaying ? '⏸ Пауза' : '▶ Играть'
-    tg.MainButton.show()
-    
-    // Set up click handler
-    const handleMainButtonClick = () => {
-      handlePlay()
+    const initTelegramAndButton = () => {
+      const tg = window.Telegram?.WebApp
+      if (!tg) return false
+
+      // Init Telegram WebApp
+      tg.ready()
+      tg.expand()
+      setIsTelegram(true)
+
+      // Detect iOS
+      if (tg.platform === 'ios') {
+        isIOSRef.current = true
+      }
+
+      // Setup MainButton
+      if (tg.MainButton) {
+        tg.MainButton.text = isPlaying ? '⏸ Пауза' : '▶ Играть'
+        tg.MainButton.show()
+
+        const handleClick = () => {
+          handlePlay()
+        }
+        tg.MainButton.onClick(handleClick)
+
+        console.log('[TELEGRAM] MainButton initialized')
+      }
+
+      return true
     }
-    tg.MainButton.onClick(handleMainButtonClick)
-    
-    return () => {
-      tg.MainButton.hide()
-    }
+
+    // Try immediately
+    if (initTelegramAndButton()) return
+
+    // Wait for Telegram SDK to load
+    let attempts = 0
+    const maxAttempts = 50 // 5 seconds
+    const interval = setInterval(() => {
+      attempts++
+      if (initTelegramAndButton() || attempts >= maxAttempts) {
+        clearInterval(interval)
+        if (attempts >= maxAttempts) {
+          console.log('[TELEGRAM] SDK not loaded after 5s')
+        }
+      }
+    }, 100)
+
+    return () => clearInterval(interval)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  
-  // Update button text when playing state changes
+
+  // Update MainButton text when playing state changes
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     if (!tg?.MainButton) return
-    
+
     tg.MainButton.text = isPlaying ? '⏸ Пауза' : '▶ Играть'
   }, [isPlaying, isLoading])
 
@@ -282,34 +313,6 @@ export default function RadioMiniApp() {
       changeTheme(savedTheme)
     }
   }, [changeTheme])
-
-  // =====================================================
-  // TELEGRAM INIT
-  // =====================================================
-  useEffect(() => {
-    const initTelegram = () => {
-      const tg = window.Telegram?.WebApp
-      if (tg) {
-        tg.ready()
-        tg.expand()
-        setIsTelegram(true)
-        const isIOSFromTG = tg.platform === 'ios'
-        if (isIOSFromTG) isIOSRef.current = true
-        return true
-      }
-      return false
-    }
-    
-    if (initTelegram()) return
-    
-    let attempts = 0
-    const interval = setInterval(() => {
-      attempts++
-      if (initTelegram() || attempts >= 20) clearInterval(interval)
-    }, 100)
-    
-    return () => clearInterval(interval)
-  }, [])
 
   // =====================================================
   // AUDIO CONTEXT
