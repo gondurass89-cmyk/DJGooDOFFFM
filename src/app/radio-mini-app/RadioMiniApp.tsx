@@ -11,15 +11,17 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Play, Pause, Volume2, VolumeX, Loader2, Radio, ChevronDown, ChevronUp, Share2, Heart, ExternalLink } from 'lucide-react'
 
 // =====================================================
-// КОНСТАНТЫ - AzuraCast
+// КОНСТАНТЫ - AzuraCast через локальный прокси (для HTTPS)
 // =====================================================
 const AZURACAST_URL = 'http://178.49.69.37'
 const STATION_SHORTCODE = 'dj_good_off_fm'
-const STREAM_URL = `${AZURACAST_URL}/listen/${STATION_SHORTCODE}/radio.mp3`
-const API_URL = `${AZURACAST_URL}/api/nowplaying/${STATION_SHORTCODE}`
+// Используем локальный прокси для обхода Mixed Content
+const STREAM_URL = '/api/stream'  // Прокси для аудио
+const API_URL = '/api/now-playing'  // Прокси для API
+// Прямой URL для открытия во внешнем плеере
+const DIRECT_STREAM_URL = `${AZURACAST_URL}/listen/${STATION_SHORTCODE}/radio.mp3`
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
-const NOW_PLAYING_API = '/api/now-playing'
 const COVER_API = '/api/cover'
 const HEARTBEAT_INTERVAL = 30000
 const LOAD_TIMEOUT = 30000
@@ -676,7 +678,7 @@ export default function RadioMiniApp() {
   }, [])
 
   // =====================================================
-  // FETCH TRACK INFO FROM AZURACAST
+  // FETCH TRACK INFO FROM AZURACAST (через прокси)
   // =====================================================
   const fetchTrackInfo = useCallback(async () => {
     try {
@@ -688,24 +690,23 @@ export default function RadioMiniApp() {
       })
       
       if (response.ok) {
-        const data: NowPlayingData = await response.json()
+        const data = await response.json()
         
-        setIsOnline(data.is_online)
-        setListeners(data.listeners?.current || 0)
-        setUniqueListeners(data.listeners?.unique || 0)
+        setIsOnline(data.is_online ?? true)
+        setListeners(data.listeners || 0)
+        setUniqueListeners(data.unique_listeners || 0)
         
-        if (data.now_playing?.song) {
-          const song = data.now_playing.song
-          const artistName = song.artist || ''
-          const trackTitle = song.title || ''
-          const fullTitle = song.text || `${artistName} - ${trackTitle}`
+        if (data.artist || data.track_title) {
+          const artistName = data.artist || ''
+          const trackTitle = data.track_title || ''
+          const fullTitle = data.title || `${artistName} - ${trackTitle}`
           
           setCurrentTrack(fullTitle)
           setArtist(artistName)
           setTitle(trackTitle)
           
           // Fetch cover with fallback
-          fetchCover(artistName, trackTitle, song.art)
+          fetchCover(artistName, trackTitle, data.art || null)
         }
       }
     } catch (err) {
@@ -969,13 +970,14 @@ export default function RadioMiniApp() {
   }
 
   // =====================================================
-  // OPEN IN PLAYER
+  // OPEN IN PLAYER (прямой URL для внешнего плеера)
   // =====================================================
   const openInPlayer = () => {
+    // Для внешнего плеера используем прямой URL AzuraCast
     if (isTelegram && window.Telegram?.WebApp?.openLink) {
-      window.Telegram.WebApp.openLink(STREAM_URL)
+      window.Telegram.WebApp.openLink(DIRECT_STREAM_URL)
     } else {
-      window.open(STREAM_URL, '_blank')
+      window.open(DIRECT_STREAM_URL, '_blank')
     }
   }
 
