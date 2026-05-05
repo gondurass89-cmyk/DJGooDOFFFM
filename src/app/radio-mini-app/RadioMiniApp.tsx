@@ -1152,14 +1152,14 @@ export default function RadioMiniApp() {
   // =====================================================
   const shareInTelegram = () => {
     const text = `🎵 Слушаю ${STATION_NAME}!\n\nСейчас играет: ${currentTrack}\n\n🎧 Присоединяйся:`
-    const url = window.location.href
-    
+    const shareUrl = 'https://t.me/RadioGoodOFF_bot?startapp=play'
+
     if (isTelegram && window.Telegram?.WebApp?.openTelegramLink) {
       window.Telegram.WebApp.openTelegramLink(
-        `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
+        `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`
       )
     } else {
-      window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank')
+      window.open(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`, '_blank')
     }
   }
 
