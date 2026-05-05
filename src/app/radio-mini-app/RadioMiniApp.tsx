@@ -716,12 +716,8 @@ export default function RadioMiniApp() {
       isPlayingRef.current = false
       stopVisualization()
       resetStallCheck()
-
-      // Если пауза не по желанию пользователя - пробуем переподключиться
-      if (shouldPlayRef.current) {
-        console.log('[AUDIO] Unexpected pause, attempting reconnect...')
-        attemptReconnect()
-      }
+      // Не переподключаемся автоматически при паузе - это может быть вызвано изменением громкости
+      // Автопереподключение сработает через stall-check если поток реально остановился
     }
 
     const onWaiting = () => {
