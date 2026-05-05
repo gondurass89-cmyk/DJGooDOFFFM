@@ -102,12 +102,29 @@ async function getAppleMusicCover(artist: string, title: string): Promise<string
   return null
 }
 
+// Validate if AzuraCast art URL is usable (not a placeholder)
+function isValidAzuraCastArt(artUrl: string | null): boolean {
+  if (!artUrl) return false
+  
+  // Skip empty strings
+  if (artUrl.trim() === '') return false
+  
+  // Skip AzuraCast default placeholders
+  if (artUrl.includes('/api/internal-radio-art')) return false
+  if (artUrl.includes('default_album_art')) return false
+  if (artUrl.includes('placeholder')) return false
+  
+  return true
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const artist = searchParams.get('artist') || ''
   const title = searchParams.get('title') || ''
+  const azuracastArt = searchParams.get('azuracast_art') || ''
   
   console.log(`[COVER] Searching for: ${artist} - ${title}`)
+  console.log(`[COVER] AzuraCast art: ${azuracastArt || 'none'}`)
   
   const result: CoverResult = {
     cover: null,
@@ -134,7 +151,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result)
   }
   
-  // 3. Не нашли - возвращаем null (фронтенд покажет логотип)
+  // 3. Пробуем AzuraCast art (если валидный URL)
+  if (isValidAzuraCastArt(azuracastArt)) {
+    console.log('[COVER] Using AzuraCast art:', azuracastArt)
+    result.cover = azuracastArt
+    result.source = 'azuracast'
+    return NextResponse.json(result)
+  }
+  
+  // 4. Не нашли - возвращаем null (фронтенд покажет логотип)
   console.log('[COVER] No cover found, will use logo')
   return NextResponse.json(result)
 }

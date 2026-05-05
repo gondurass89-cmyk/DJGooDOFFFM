@@ -1029,7 +1029,7 @@ export default function RadioMiniApp() {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="absolute top-12 left-0 p-2 rounded-lg grid grid-cols-1 gap-1 min-w-[120px]"
+            className="absolute top-12 left-0 p-2 rounded-lg grid grid-cols-1 gap-1 min-w-[130px]"
             style={{
               backgroundColor: themeColors.cardBg,
               border: `1px solid ${themeColors.border}`,
@@ -1039,7 +1039,7 @@ export default function RadioMiniApp() {
               <button
                 key={theme}
                 onClick={() => { changeTheme(theme); setShowThemeSelector(false) }}
-                className={`py-2 px-4 rounded text-sm font-medium transition-all text-center w-full ${currentTheme === theme ? 'ring-2' : ''}`}
+                className={`py-2 px-3 rounded text-sm font-medium transition-all w-full whitespace-nowrap ${currentTheme === theme ? 'ring-2' : ''}`}
                 style={{
                   backgroundColor: currentTheme === theme ? THEMES[theme].colors.secondary : THEMES[theme].colors.primary,
                   color: currentTheme === theme ? '#000' : THEMES[theme].colors.text,
@@ -1053,11 +1053,11 @@ export default function RadioMiniApp() {
         )}
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center w-full px-4 py-2">
+      <div className="flex-1 flex flex-col items-center justify-center w-full px-4 pt-1 pb-2">
 
-        {/* Cover Art - компактный размер */}
+        {/* Cover Art - увеличенный размер */}
         <motion.div
-          className="w-32 h-32 rounded-2xl overflow-hidden relative shadow-xl"
+          className="w-52 h-52 rounded-2xl overflow-hidden relative shadow-xl"
           animate={isPlaying ? { scale: [1, 1.02, 1] } : {}}
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
           style={{
@@ -1077,13 +1077,13 @@ export default function RadioMiniApp() {
             />
           ) : (
             <div
-              className="w-full h-full flex items-center justify-center"
+              className="w-full h-full flex items-center justify-center p-4"
               style={{ backgroundColor: themeColors.primary }}
             >
               <img
                 src={STATION_LOGO}
                 alt={STATION_NAME}
-                className="w-20 h-20 object-contain opacity-80"
+                className="w-full h-full object-contain opacity-90"
                 onError={(e) => { e.currentTarget.style.display = 'none' }}
               />
             </div>
@@ -1096,7 +1096,7 @@ export default function RadioMiniApp() {
         </motion.div>
 
         {/* Track Info - "Сейчас в эфире:" + название */}
-        <div className="mt-3 w-full text-center">
+        <div className="mt-4 w-full text-center">
           <p className="text-xs" style={{ color: themeColors.textMuted }}>
             Сейчас в эфире:
           </p>
@@ -1121,12 +1121,12 @@ export default function RadioMiniApp() {
           </div>
         </div>
 
-        {/* Visualizer - компактный */}
-        <div className="mt-2 h-12 w-full max-w-xs">
+        {/* Visualizer */}
+        <div className="mt-3 h-16 w-full max-w-sm">
           <canvas
             ref={canvasRef}
-            width={280}
-            height={48}
+            width={320}
+            height={64}
             className="w-full h-full"
           />
         </div>
