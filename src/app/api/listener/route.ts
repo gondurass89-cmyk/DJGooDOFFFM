@@ -8,14 +8,10 @@ const WORKER_SECRET = process.env.WORKER_SECRET || 'djgoodoff-fm-secret-2024'
 
 // =====================================================
 // GET /api/listener
-// Получить количество активных слушателей
-// Query params: telegram_only=true - только Telegram пользователи
+// Получить количество активных слушателей (только Telegram)
 // =====================================================
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const telegramOnly = searchParams.get('telegram_only') === 'true'
-
     const response = await fetch(LISTENERS_WORKER_URL, {
       method: 'GET',
       headers: {
@@ -29,16 +25,7 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json()
-
-    // Если запрашиваем только Telegram пользователей, фильтруем
-    if (telegramOnly && data.listeners) {
-      const telegramListeners = data.listeners.filter((l: { isTelegram?: boolean }) => l.isTelegram === true)
-      return NextResponse.json({
-        total: telegramListeners.length,
-        listeners: telegramListeners
-      })
-    }
-
+    // Worker уже возвращает только Telegram пользователей
     return NextResponse.json(data)
 
   } catch (error) {

@@ -838,7 +838,7 @@ export default function RadioMiniApp() {
 
   const fetchListenersCount = useCallback(async () => {
     try {
-      const res = await fetch('/api/listener?telegram_only=true')
+      const res = await fetch('/api/listener')
       if (res.ok) {
         const data = await res.json()
         setUniqueListeners(data.total || 0)
