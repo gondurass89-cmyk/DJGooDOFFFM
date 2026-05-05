@@ -1323,6 +1323,31 @@ export default function RadioMiniApp() {
             <Loader2 className="w-6 h-6 animate-spin" style={{ color: themeColors.secondary }} />
           </div>
         )}
+
+        {/* Play Button - ONLY on website (not in Telegram) */}
+        {!isTelegram && (
+          <motion.button
+            onClick={handlePlay}
+            className="mt-4 w-16 h-16 rounded-full flex items-center justify-center shadow-lg"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            style={{
+              backgroundColor: isPlaying ? themeColors.cardBg : themeColors.secondary,
+              border: `2px solid ${themeColors.secondary}`,
+              boxShadow: isPlaying
+                ? `0 0 15px ${themeColors.secondary}60`
+                : `0 4px 20px ${themeColors.secondary}40`,
+            }}
+          >
+            {isLoading ? (
+              <Loader2 className="w-8 h-8 animate-spin" style={{ color: isPlaying ? themeColors.secondary : themeColors.bg }} />
+            ) : isPlaying ? (
+              <Pause className="w-8 h-8" style={{ color: themeColors.secondary }} />
+            ) : (
+              <Play className="w-8 h-8 ml-1" style={{ color: themeColors.bg }} />
+            )}
+          </motion.button>
+        )}
       </div>
 
       {/* Bottom Controls */}
