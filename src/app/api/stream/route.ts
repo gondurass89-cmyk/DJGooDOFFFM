@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 // AzuraCast stream URL
 const AZURACAST_URL = 'https://stream.volfrings.ru'
-const STATION_SHORTCODE = 'dj_good_off_fm'
+const STATION_SHORTCODE = 'djgoodofffm'
 const STREAM_URL = `${AZURACAST_URL}/listen/${STATION_SHORTCODE}/radio.mp3`
 
 export async function GET(request: NextRequest) {

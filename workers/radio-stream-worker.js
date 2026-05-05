@@ -19,7 +19,7 @@
 // ИСХОДНЫЙ URL АУДИО ПОТОКА
 // =====================================================
 // AzuraCast MP3 поток (HTTPS)
-const UPSTREAM_URL = 'https://stream.volfrings.ru/listen/dj_good_off_fm/radio.mp3';
+const UPSTREAM_URL = 'https://stream.volfrings.ru/listen/djgoodofffm/radio.mp3';
 // ^^^^ HTTPS URL AzuraCast потока
 
 // =====================================================

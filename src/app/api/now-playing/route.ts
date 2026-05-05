@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 // AzuraCast API
 const AZURACAST_URL = 'https://stream.volfrings.ru'
-const STATION_SHORTCODE = 'dj_good_off_fm'
+const STATION_SHORTCODE = 'djgoodofffm'
 const API_URL = `${AZURACAST_URL}/api/nowplaying/${STATION_SHORTCODE}`
 
 // Cache for 5 seconds
