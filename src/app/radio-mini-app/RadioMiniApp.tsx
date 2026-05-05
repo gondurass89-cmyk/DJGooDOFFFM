@@ -30,7 +30,7 @@ const REAL_MODE_CHECK_DELAY = 500
 // =====================================================
 // ТЕМЫ
 // =====================================================
-type ThemeName = 'dark' | 'light' | 'green' | 'purple'
+type ThemeName = 'dark' | 'light' | 'custom'
 
 const THEMES: Record<ThemeName, { name: string; colors: ThemeColors }> = {
   dark: {
@@ -59,21 +59,8 @@ const THEMES: Record<ThemeName, { name: string; colors: ThemeColors }> = {
       border: 'rgba(0, 168, 40, 0.3)',
     }
   },
-  green: {
-    name: 'Зелёная',
-    colors: {
-      bg: '#0a1f0a',
-      text: '#00ff40',
-      textMuted: '#00c730',
-      primary: '#0f2f0f',
-      secondary: '#00ff40',
-      accent: '#00ff80',
-      cardBg: 'rgba(0, 60, 20, 0.8)',
-      border: 'rgba(0, 255, 64, 0.3)',
-    }
-  },
-  purple: {
-    name: 'Фиолетовая',
+  custom: {
+    name: 'Кастомная',
     colors: {
       bg: '#1a0a2e',
       text: '#e0c0ff',
@@ -248,6 +235,36 @@ export default function RadioMiniApp() {
     mid: '#00c730',
     high: '#00ffcc',
   }
+
+  // =====================================================
+  // TELEGRAM MAIN BUTTON
+  // =====================================================
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp
+    if (!tg?.MainButton) return
+    
+    // Set initial button text
+    tg.MainButton.text = isPlaying ? '⏸ Пауза' : '▶ Играть'
+    tg.MainButton.show()
+    
+    // Set up click handler
+    const handleMainButtonClick = () => {
+      handlePlay()
+    }
+    tg.MainButton.onClick(handleMainButtonClick)
+    
+    return () => {
+      tg.MainButton.hide()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  
+  // Update button text when playing state changes
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp
+    if (!tg?.MainButton) return
+    
+    tg.MainButton.text = isPlaying ? '⏸ Пауза' : '▶ Играть'
+  }, [isPlaying, isLoading])
 
   // =====================================================
   // THEME MANAGEMENT
@@ -1093,27 +1110,12 @@ export default function RadioMiniApp() {
           </div>
         )}
 
-        {/* Play Button */}
-        <div className="mt-6 flex justify-center">
-          <motion.button
-            onClick={handlePlay}
-            disabled={isLoading && !isPlaying}
-            className="w-20 h-20 rounded-full flex items-center justify-center shadow-lg transition-all duration-200"
-            style={{
-              backgroundColor: themeColors.secondary,
-              boxShadow: isPlaying ? `0 0 20px ${themeColors.secondary}60` : '0 4px 15px rgba(0,0,0,0.2)',
-            }}
-            whileTap={{ scale: 0.95 }}
-          >
-            {isLoading && !isPlaying ? (
-              <Loader2 className="w-8 h-8 animate-spin text-white" />
-            ) : isPlaying ? (
-              <Pause className="w-8 h-8 text-white" />
-            ) : (
-              <Play className="w-8 h-8 text-white ml-1" />
-            )}
-          </motion.button>
-        </div>
+        {/* Loading indicator - only show in Telegram mode when loading */}
+        {isLoading && !isPlaying && isTelegram && (
+          <div className="mt-6 flex justify-center">
+            <Loader2 className="w-8 h-8 animate-spin" style={{ color: themeColors.secondary }} />
+          </div>
+        )}
 
         {/* Volume Control */}
         <div className="mt-6 flex items-center gap-3 px-4">
