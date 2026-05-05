@@ -187,6 +187,7 @@ export default function RadioMiniApp() {
   const [volume, setVolume] = useState(100)
   const [isMuted, setIsMuted] = useState(false)
   const [currentTrack, setCurrentTrack] = useState('Загрузка...')
+  const [displayTrack, setDisplayTrack] = useState('Загрузка...') // То что показываем (синхронизировано с обложкой)
   const [artist, setArtist] = useState('')
   const [title, setTitle] = useState('')
   const [coverUrl, setCoverUrl] = useState<string | null>(null)
@@ -711,13 +712,15 @@ export default function RadioMiniApp() {
   }, [eqTreble])
 
   // =====================================================
-  // FETCH COVER
+  // FETCH COVER - с синхронизацией названия
   // =====================================================
-  const fetchCover = useCallback(async (artistName: string, trackTitle: string, azuracastArt: string | null) => {
+  const fetchCover = useCallback(async (artistName: string, trackTitle: string, fullTitle: string, azuracastArt: string | null) => {
     const cacheKey = `${artistName}-${trackTitle}`
     
     if (coverCacheRef.current.has(cacheKey)) {
-      setCoverUrl(coverCacheRef.current.get(cacheKey)!)
+      const cachedCover = coverCacheRef.current.get(cacheKey)!
+      setCoverUrl(cachedCover)
+      setDisplayTrack(fullTitle) // Синхронно обновляем название
       return
     }
     
@@ -734,12 +737,16 @@ export default function RadioMiniApp() {
         } else {
           setCoverUrl(null)
         }
+        // Обновляем название ТОЛЬКО после загрузки обложки
+        setDisplayTrack(fullTitle)
       } else {
         setCoverUrl(null)
+        setDisplayTrack(fullTitle)
       }
     } catch (e) {
       console.error('[COVER] Fetch error:', e)
       setCoverUrl(null)
+      setDisplayTrack(fullTitle)
     }
     
     setIsLoadingCover(false)
@@ -766,11 +773,13 @@ export default function RadioMiniApp() {
           const trackTitle = data.track_title || ''
           const fullTitle = data.title || `${artistName} - ${trackTitle}`
           
+          // Обновляем внутреннее состояние
           setCurrentTrack(fullTitle)
           setArtist(artistName)
           setTitle(trackTitle)
           
-          fetchCover(artistName, trackTitle, data.art || null)
+          // Загружаем обложку и синхронизируем с названием
+          fetchCover(artistName, trackTitle, fullTitle, data.art || null)
         }
       }
     } catch (err) {
@@ -993,7 +1002,7 @@ export default function RadioMiniApp() {
 
   // Длина названия трека для бегущей строки
   const TRACK_MAX_LENGTH = 40
-  const shouldMarquee = currentTrack.length > TRACK_MAX_LENGTH
+  const shouldMarquee = displayTrack.length > TRACK_MAX_LENGTH
 
   return (
     <div
@@ -1020,7 +1029,7 @@ export default function RadioMiniApp() {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="absolute top-12 left-0 p-2 rounded-lg grid grid-cols-1 gap-1 min-w-[100px]"
+            className="absolute top-12 left-0 p-2 rounded-lg grid grid-cols-1 gap-1 min-w-[120px]"
             style={{
               backgroundColor: themeColors.cardBg,
               border: `1px solid ${themeColors.border}`,
@@ -1030,7 +1039,7 @@ export default function RadioMiniApp() {
               <button
                 key={theme}
                 onClick={() => { changeTheme(theme); setShowThemeSelector(false) }}
-                className={`py-2 px-3 rounded text-sm font-medium transition-all ${currentTheme === theme ? 'ring-2' : ''}`}
+                className={`py-2 px-4 rounded text-sm font-medium transition-all text-center w-full ${currentTheme === theme ? 'ring-2' : ''}`}
                 style={{
                   backgroundColor: currentTheme === theme ? THEMES[theme].colors.secondary : THEMES[theme].colors.primary,
                   color: currentTheme === theme ? '#000' : THEMES[theme].colors.text,
@@ -1098,7 +1107,7 @@ export default function RadioMiniApp() {
                   className="track-marquee text-sm font-bold"
                   style={{ color: trackTitleColor, minWidth: '100%' }}
                 >
-                  {currentTrack}&nbsp;&nbsp;&nbsp;&nbsp;{currentTrack}&nbsp;&nbsp;&nbsp;&nbsp;
+                  {displayTrack}&nbsp;&nbsp;&nbsp;&nbsp;{displayTrack}&nbsp;&nbsp;&nbsp;&nbsp;
                 </span>
               </div>
             ) : (
@@ -1106,7 +1115,7 @@ export default function RadioMiniApp() {
                 className="text-sm font-bold"
                 style={{ color: trackTitleColor }}
               >
-                {currentTrack}
+                {displayTrack}
               </span>
             )}
           </div>
