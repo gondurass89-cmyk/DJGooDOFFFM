@@ -3,32 +3,25 @@ import { NextRequest, NextResponse } from 'next/server'
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
 
-// Last.fm API key (free tier)
-const LASTFM_API_KEY = process.env.LASTFM_API_KEY || ''
-
 interface CoverResult {
   cover: string | null
   source: string
 }
 
-// Try to get cover from AzuraCast
+// Proxy AzuraCast cover art (HTTP -> HTTPS)
 async function getAzuraCastCover(artUrl: string | null): Promise<string | null> {
   if (!artUrl) return null
   
   try {
-    // If it's a relative URL, prepend AzuraCast base URL
+    // If it's already a full URL, use it
     const fullUrl = artUrl.startsWith('http') 
       ? artUrl 
       : `http://178.49.69.37${artUrl}`
     
-    const response = await fetch(fullUrl, { 
-      method: 'HEAD',
-      signal: AbortSignal.timeout(5000)
-    })
-    
-    if (response.ok && response.headers.get('content-type')?.startsWith('image/')) {
-      return fullUrl
-    }
+    // For HTTPS compatibility, we return the proxy URL instead of direct HTTP
+    // The frontend will use this proxied URL
+    const encodedUrl = encodeURIComponent(fullUrl)
+    return `/api/cover-proxy?url=${encodedUrl}`
   } catch (e) {
     console.error('[COVER] AzuraCast error:', e)
   }
@@ -55,7 +48,6 @@ async function getAppleMusicCover(artist: string, title: string): Promise<string
     if (response.ok) {
       const data = await response.json()
       if (data.results && data.results.length > 0) {
-        // Get high-res artwork (replace 100x100 with 600x600)
         const artwork = data.results[0].artworkUrl100
         if (artwork) {
           return artwork.replace('100x100', '600x600')
@@ -69,22 +61,14 @@ async function getAppleMusicCover(artist: string, title: string): Promise<string
   return null
 }
 
-// Try to get cover from Last.fm
-async function getLastFmCover(artist: string, title: string): Promise<string | null> {
-  if (!LASTFM_API_KEY || (!artist && !title)) return null
+// Try to get cover from Deezer (good fallback)
+async function getDeezerCover(artist: string, title: string): Promise<string | null> {
+  if (!artist && !title) return null
   
   try {
-    // Try track.getInfo first
-    const params = new URLSearchParams({
-      method: 'track.getInfo',
-      api_key: LASTFM_API_KEY,
-      artist: artist || 'Unknown',
-      track: title || 'Unknown',
-      format: 'json',
-    })
-    
+    const query = encodeURIComponent(`${artist} ${title}`.trim())
     const response = await fetch(
-      `https://ws.audioscrobbler.com/2.0/?${params}`,
+      `https://api.deezer.com/search?q=${query}&limit=1`,
       {
         signal: AbortSignal.timeout(5000),
         headers: {
@@ -95,53 +79,15 @@ async function getLastFmCover(artist: string, title: string): Promise<string | n
     
     if (response.ok) {
       const data = await response.json()
-      const images = data?.track?.album?.image
-      if (images && images.length > 0) {
-        // Get the largest image (extralarge or mega)
-        const largeImage = images.find((img: any) => img.size === 'extralarge')?.['#text']
-          || images.find((img: any) => img.size === 'mega')?.['#text']
-          || images[images.length - 1]?.['#text']
-        
-        if (largeImage) {
-          return largeImage
-        }
-      }
-    }
-    
-    // Try album.getInfo if track search failed
-    const albumParams = new URLSearchParams({
-      method: 'album.getInfo',
-      api_key: LASTFM_API_KEY,
-      artist: artist || 'Unknown',
-      album: title || 'Unknown',
-      format: 'json',
-    })
-    
-    const albumResponse = await fetch(
-      `https://ws.audioscrobbler.com/2.0/?${albumParams}`,
-      {
-        signal: AbortSignal.timeout(5000),
-        headers: {
-          'Accept': 'application/json',
-        }
-      }
-    )
-    
-    if (albumResponse.ok) {
-      const data = await albumResponse.json()
-      const images = data?.album?.image
-      if (images && images.length > 0) {
-        const largeImage = images.find((img: any) => img.size === 'extralarge')?.['#text']
-          || images.find((img: any) => img.size === 'mega')?.['#text']
-          || images[images.length - 1]?.['#text']
-        
-        if (largeImage) {
-          return largeImage
+      if (data.data && data.data.length > 0) {
+        const cover = data.data[0].album?.cover_xl || data.data[0].album?.cover_big
+        if (cover) {
+          return cover
         }
       }
     }
   } catch (e) {
-    console.error('[COVER] Last.fm error:', e)
+    console.error('[COVER] Deezer error:', e)
   }
   
   return null
@@ -158,7 +104,7 @@ export async function GET(request: NextRequest) {
     source: 'none'
   }
   
-  // Try AzuraCast first
+  // Try AzuraCast first (through proxy)
   if (azuracastArt) {
     const cover = await getAzuraCastCover(azuracastArt)
     if (cover) {
@@ -176,11 +122,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result)
   }
   
-  // Try Last.fm
-  const lastFmCover = await getLastFmCover(artist, title)
-  if (lastFmCover) {
-    result.cover = lastFmCover
-    result.source = 'lastfm'
+  // Try Deezer
+  const deezerCover = await getDeezerCover(artist, title)
+  if (deezerCover) {
+    result.cover = deezerCover
+    result.source = 'deezer'
     return NextResponse.json(result)
   }
   

@@ -13,6 +13,63 @@ let cachedData: any = null
 let lastFetch = 0
 const CACHE_TTL = 5000 // 5 seconds
 
+// Clean artist name from AzuraCast garbage
+function cleanArtistName(artist: string): string {
+  if (!artist) return ''
+  
+  // AzuraCast sometimes puts multiple artists separated by " - "
+  // Take only the first one if there are multiple
+  const parts = artist.split(' - ')
+  
+  // If only one part, return it
+  if (parts.length === 1) return artist.trim()
+  
+  // If multiple parts, usually the last one is the actual artist
+  // But often the first one is correct too
+  // Let's return the first part as it's usually the main artist
+  return parts[0].trim()
+}
+
+// Clean title from AzuraCast garbage  
+function cleanTitle(title: string): string {
+  if (!title) return ''
+  
+  // Sometimes title contains "Artist - Title" pattern
+  // Remove artist part if present
+  if (title.includes(' - ')) {
+    const parts = title.split(' - ')
+    // If more than 2 parts, take the last one (actual title)
+    if (parts.length > 2) {
+      return parts[parts.length - 1].trim()
+    }
+    // If 2 parts, second one is title
+    return parts[1].trim()
+  }
+  
+  return title.trim()
+}
+
+// Parse track info from messy AzuraCast data
+function parseTrackInfo(text: string, artist: string, title: string): { artist: string; title: string } {
+  // If text contains "Artist - Title", parse it properly
+  if (text && text.includes(' - ')) {
+    const parts = text.split(' - ')
+    if (parts.length >= 2) {
+      // First part is artist(s), last part is title
+      return {
+        artist: parts[0].trim(),
+        title: parts[parts.length - 1].trim()
+      }
+    }
+  }
+  
+  // Otherwise use provided artist and title with cleaning
+  return {
+    artist: cleanArtistName(artist),
+    title: cleanTitle(title)
+  }
+}
+
 export async function GET() {
   const now = Date.now()
   
@@ -36,7 +93,6 @@ export async function GET() {
     
     if (!response.ok) {
       console.error('AzuraCast API error:', response.status)
-      // Return cached data if available
       if (cachedData) {
         return NextResponse.json(cachedData, {
           headers: {
@@ -49,21 +105,43 @@ export async function GET() {
     
     const data = await response.json()
     
-    // Extract track info
+    // Extract track info with proper parsing
     let title = 'Загрузка...'
+    let artist = ''
+    let trackTitle = ''
     
     if (data.now_playing?.song) {
       const song = data.now_playing.song
-      const artist = song.artist || ''
-      const trackTitle = song.title || ''
-      title = song.text || `${artist} - ${trackTitle}`.trim()
-      if (title === ' - ') title = 'Неизвестный трек'
+      const rawText = song.text || ''
+      const rawArtist = song.artist || ''
+      const rawTitle = song.title || ''
+      
+      // Parse the track info properly
+      const parsed = parseTrackInfo(rawText, rawArtist, rawTitle)
+      artist = parsed.artist
+      trackTitle = parsed.title
+      
+      // Build display title
+      if (artist && trackTitle) {
+        title = `${artist} - ${trackTitle}`
+      } else if (trackTitle) {
+        title = trackTitle
+        artist = ''
+      } else if (artist) {
+        title = artist
+        trackTitle = ''
+      } else {
+        title = 'Неизвестный трек'
+      }
+      
+      // Get art URL - we'll proxy it through our API
+      const artUrl = song.art || null
     }
     
     const result = {
       title,
-      artist: data.now_playing?.song?.artist || '',
-      track_title: data.now_playing?.song?.title || '',
+      artist,
+      track_title: trackTitle,
       album: data.now_playing?.song?.album || '',
       art: data.now_playing?.song?.art || null,
       listeners: data.listeners?.current || 0,
@@ -85,7 +163,6 @@ export async function GET() {
   } catch (error) {
     console.error('Now playing fetch error:', error)
     
-    // Return cached data if available
     if (cachedData) {
       return NextResponse.json(cachedData, {
         headers: {
