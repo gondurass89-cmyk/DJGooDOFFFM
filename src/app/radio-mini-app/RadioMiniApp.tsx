@@ -235,7 +235,6 @@ export default function RadioMiniApp() {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null) // Таймер переподключения
   const stallCheckRef = useRef<NodeJS.Timeout | null>(null) // Таймер проверки зависания
   const lastProgressRef = useRef<number>(0) // Последняя позиция воспроизведения
-  const isInteractingWithSliderRef = useRef<boolean>(false) // Взаимодействие со слайдером
 
   const SMOOTHING_FACTOR = 0.25
   const MAX_RECONNECT_ATTEMPTS = 5
@@ -1387,17 +1386,19 @@ export default function RadioMiniApp() {
             min="0"
             max="100"
             value={isMuted ? 0 : volume}
-            onChange={(e) => { e.stopPropagation(); setVolume(Number(e.target.value)); setIsMuted(false) }}
-            onMouseDown={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = true }}
-            onMouseUp={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = false }}
+            onChange={(e) => { 
+              e.stopPropagation(); 
+              const newVol = Number(e.target.value);
+              setVolume(newVol); 
+              if (newVol > 0) setIsMuted(false);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseUp={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            onTouchStart={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = true }}
-            onTouchEnd={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = false }}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
             className="volume-slider flex-1 h-1"
-            style={{
-              background: `linear-gradient(90deg, ${themeColors.secondary} ${isMuted ? 0 : volume}%, ${themeColors.primary} ${isMuted ? 0 : volume}%)`,
-            }}
           />
         </div>
 
@@ -1444,11 +1445,11 @@ export default function RadioMiniApp() {
                 max="12"
                 value={eqBass}
                 onChange={(e) => { e.stopPropagation(); setEqBass(Number(e.target.value)) }}
-                onMouseDown={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = true }}
-                onMouseUp={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = false }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onMouseUp={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
-                onTouchStart={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = true }}
-                onTouchEnd={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = false }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
                 onTouchMove={(e) => e.stopPropagation()}
                 className="eq-slider-bass w-full"
               />
@@ -1465,11 +1466,11 @@ export default function RadioMiniApp() {
                 max="12"
                 value={eqMid}
                 onChange={(e) => { e.stopPropagation(); setEqMid(Number(e.target.value)) }}
-                onMouseDown={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = true }}
-                onMouseUp={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = false }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onMouseUp={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
-                onTouchStart={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = true }}
-                onTouchEnd={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = false }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
                 onTouchMove={(e) => e.stopPropagation()}
                 className="eq-slider-mid w-full"
               />
@@ -1486,11 +1487,11 @@ export default function RadioMiniApp() {
                 max="12"
                 value={eqTreble}
                 onChange={(e) => { e.stopPropagation(); setEqTreble(Number(e.target.value)) }}
-                onMouseDown={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = true }}
-                onMouseUp={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = false }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onMouseUp={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
-                onTouchStart={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = true }}
-                onTouchEnd={(e) => { e.stopPropagation(); isInteractingWithSliderRef.current = false }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
                 onTouchMove={(e) => e.stopPropagation()}
                 className="eq-slider-treble w-full"
               />

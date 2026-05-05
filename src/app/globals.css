@@ -47,6 +47,7 @@ html, body {
   height: 6px !important;
   border-radius: 3px;
   cursor: pointer;
+  background: linear-gradient(90deg, #00e640 50%, #1a1a2e 50%);
 }
 
 .volume-slider::-webkit-slider-thumb {
