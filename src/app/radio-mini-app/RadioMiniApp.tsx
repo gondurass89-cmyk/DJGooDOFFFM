@@ -256,6 +256,15 @@ export default function RadioMiniApp() {
       const tg = window.Telegram?.WebApp
       if (!tg) return false
 
+      // Проверяем, что мы реально в Telegram Mini App (есть initData)
+      // На обычном сайте SDK загружен, но initData пустой
+      const isRealTelegram = !!tg.initData && tg.initData.length > 0
+
+      if (!isRealTelegram) {
+        console.log('[TELEGRAM] SDK loaded but not in Telegram Mini App (no initData)')
+        return false
+      }
+
       // Init Telegram WebApp
       tg.ready()
       tg.expand()
@@ -293,7 +302,7 @@ export default function RadioMiniApp() {
       if (initTelegramAndButton() || attempts >= maxAttempts) {
         clearInterval(interval)
         if (attempts >= maxAttempts) {
-          console.log('[TELEGRAM] SDK not loaded after 5s')
+          console.log('[TELEGRAM] SDK not loaded after 5s - running as website')
         }
       }
     }, 100)
@@ -1367,6 +1376,8 @@ export default function RadioMiniApp() {
             max="100"
             value={isMuted ? 0 : volume}
             onChange={(e) => { setVolume(Number(e.target.value)); setIsMuted(false) }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             className="volume-slider flex-1 h-1"
             style={{
               background: `linear-gradient(90deg, ${themeColors.secondary} ${isMuted ? 0 : volume}%, ${themeColors.primary} ${isMuted ? 0 : volume}%)`,
@@ -1417,6 +1428,8 @@ export default function RadioMiniApp() {
                 max="12"
                 value={eqBass}
                 onChange={(e) => setEqBass(Number(e.target.value))}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
                 className="eq-slider-bass w-full"
               />
             </div>
@@ -1432,6 +1445,8 @@ export default function RadioMiniApp() {
                 max="12"
                 value={eqMid}
                 onChange={(e) => setEqMid(Number(e.target.value))}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
                 className="eq-slider-mid w-full"
               />
             </div>
@@ -1447,6 +1462,8 @@ export default function RadioMiniApp() {
                 max="12"
                 value={eqTreble}
                 onChange={(e) => setEqTreble(Number(e.target.value))}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
                 className="eq-slider-treble w-full"
               />
             </div>
