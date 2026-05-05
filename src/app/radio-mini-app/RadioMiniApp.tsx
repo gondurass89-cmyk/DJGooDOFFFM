@@ -239,7 +239,7 @@ export default function RadioMiniApp() {
   const SMOOTHING_FACTOR = 0.25
   const MAX_RECONNECT_ATTEMPTS = 5
   const RECONNECT_DELAY = 2000 // 2 секунды
-  const STALL_TIMEOUT = 15000 // 15 секунд без прогресса = зависание
+  const STALL_TIMEOUT = 30000 // 30 секунд без прогресса = зависание
 
   // Colors for visualizer (always vibrant)
   const vizColors = {
@@ -672,11 +672,11 @@ export default function RadioMiniApp() {
       if (!audio || !shouldPlayRef.current) return
 
       // Проверяем, есть ли прогресс воспроизведения
-      const currentTime = audio.currentTime
-      console.log(`[STALL-CHECK] Current time: ${currentTime}, Last: ${lastProgressRef.current}`)
+      const timeSinceLastProgress = Date.now() - lastProgressRef.current
+      console.log(`[STALL-CHECK] Time since last progress: ${timeSinceLastProgress}ms`)
 
-      // Для стрима currentTime может не меняться, проверяем состояние
-      if (audio.paused && shouldPlayRef.current) {
+      // Если давно не было прогресса И аудио на паузе - переподключаемся
+      if (audio.paused && shouldPlayRef.current && timeSinceLastProgress > STALL_TIMEOUT) {
         console.log('[STALL-CHECK] Audio paused unexpectedly, reconnecting...')
         attemptReconnect()
       }
@@ -739,27 +739,15 @@ export default function RadioMiniApp() {
     const onStalled = () => {
       console.log('[AUDIO] Stalled - network issue')
       setBuffering(true)
-      // Stalled часто предшествует разрыву - готовимся к переподключению
-      if (shouldPlayRef.current && !reconnectTimeoutRef.current) {
-        console.log('[AUDIO] Stalled while playing, will monitor...')
-      }
     }
 
     const onSuspend = () => {
       console.log('[AUDIO] Suspended')
-      // Браузер приостановил загрузку
-      if (shouldPlayRef.current) {
-        console.log('[AUDIO] Suspended while should play, reconnecting...')
-        attemptReconnect()
-      }
+      setBuffering(true)
     }
 
     const onEmptied = () => {
       console.log('[AUDIO] Emptied - source lost')
-      // Источник потерян
-      if (shouldPlayRef.current) {
-        attemptReconnect()
-      }
     }
 
     const onError = () => {
@@ -779,8 +767,8 @@ export default function RadioMiniApp() {
             shouldReconnect = true
             break
           case MediaError.MEDIA_ERR_DECODE:
-            errorMsg = 'Ошибка декодирования, переподключение...'
-            shouldReconnect = true
+            errorMsg = 'Ошибка декодирования'
+            // Не переподключаемся при decode ошибке - это может быть проблема с форматом
             break
           case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
             errorMsg = 'Формат не поддерживается'
@@ -796,7 +784,7 @@ export default function RadioMiniApp() {
       resetStallCheck()
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
 
-      // Автопереподключение при сетевых ошибках
+      // Автопереподключение ТОЛЬКО при сетевых ошибках
       if (shouldReconnect && shouldPlayRef.current) {
         attemptReconnect()
       }
