@@ -759,8 +759,7 @@ export default function RadioMiniApp() {
         const data = await response.json()
         
         setIsOnline(data.is_online ?? true)
-        setListeners(data.listeners || 0)
-        setUniqueListeners(data.unique_listeners || 0)
+        // НЕ берём listeners из AzuraCast - используем только Worker
         
         if (data.artist || data.track_title) {
           const artistName = data.artist || ''
