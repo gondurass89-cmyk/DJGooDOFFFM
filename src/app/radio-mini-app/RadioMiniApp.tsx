@@ -3,21 +3,24 @@
 // =====================================================
 // DJ GooD OFF FM - Telegram Mini App
 // Радио-плеер с реальным эквалайзером и визуализатором
-// Архитектура: REAL-FIRST, FALLBACK-ONLY-ON-FAILURE
+// AzuraCast API + Cover Art Fallback (Apple Music, Last.fm)
 // =====================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, ChevronDown, ChevronUp } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Loader2, Radio, ChevronDown, ChevronUp, Share2, Heart, ExternalLink } from 'lucide-react'
 
 // =====================================================
-// КОНСТАНТЫ
+// КОНСТАНТЫ - AzuraCast
 // =====================================================
-const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
+const AZURACAST_URL = 'http://178.49.69.37'
+const STATION_SHORTCODE = 'dj_good_off_fm'
+const STREAM_URL = `${AZURACAST_URL}/listen/${STATION_SHORTCODE}/radio.mp3`
+const API_URL = `${AZURACAST_URL}/api/nowplaying/${STATION_SHORTCODE}`
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
-const LISTENERS_API = 'https://listeners.gondurass89.workers.dev'
 const NOW_PLAYING_API = '/api/now-playing'
+const COVER_API = '/api/cover'
 const HEARTBEAT_INTERVAL = 30000
 const LOAD_TIMEOUT = 30000
 const REAL_MODE_CHECK_FRAMES = 10
@@ -35,6 +38,8 @@ const COLORS = {
   bass: '#ff0066',
   mid: '#00c730',
   high: '#00ffcc',
+  gold: '#D4AF37',
+  glow: 'rgba(0, 199, 48, 0.5)',
 }
 
 const ADMIN_USER_ID = 55068554
@@ -61,10 +66,56 @@ declare global {
         }
         onEvent: (event: string, callback: () => void) => void
         close: () => void
+        openLink: (url: string) => void
+        openTelegramLink: (url: string) => void
+        MainButton: {
+          text: string
+          show: () => void
+          hide: () => void
+          onClick: (callback: () => void) => void
+        }
+        BackButton: {
+          show: () => void
+          hide: () => void
+          onClick: (callback: () => void) => void
+        }
+        themeParams: {
+          bg_color?: string
+          text_color?: string
+          hint_color?: string
+          link_color?: string
+          button_color?: string
+          button_text_color?: string
+        }
       }
     }
     webkitAudioContext?: typeof AudioContext
   }
+}
+
+interface NowPlayingData {
+  station: {
+    name: string
+    listen_url: string
+  }
+  listeners: {
+    total: number
+    unique: number
+    current: number
+  }
+  now_playing: {
+    song: {
+      id: string
+      text: string
+      artist: string
+      title: string
+      album: string
+      art: string
+    }
+    elapsed: number
+    duration: number
+  } | null
+  is_online: boolean
 }
 
 // =====================================================
@@ -103,13 +154,20 @@ export default function RadioMiniApp() {
   const [volume, setVolume] = useState(100)
   const [isMuted, setIsMuted] = useState(false)
   const [currentTrack, setCurrentTrack] = useState('Загрузка...')
+  const [artist, setArtist] = useState('')
+  const [title, setTitle] = useState('')
+  const [coverUrl, setCoverUrl] = useState<string | null>(null)
+  const [isLoadingCover, setIsLoadingCover] = useState(false)
   const [listeners, setListeners] = useState(0)
+  const [uniqueListeners, setUniqueListeners] = useState(0)
+  const [isOnline, setIsOnline] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [buffering, setBuffering] = useState(false)
   const [eqBass, setEqBass] = useState(0)
   const [eqMid, setEqMid] = useState(0)
   const [eqTreble, setEqTreble] = useState(0)
-  const [showEq, setShowEq] = useState(false) // Скрыт/раскрыт эквалайзер
+  const [showEq, setShowEq] = useState(false)
+  const [isTelegram, setIsTelegram] = useState(false)
 
   // =====================================================
   // ССЫЛКИ (useRef)
@@ -132,6 +190,7 @@ export default function RadioMiniApp() {
   const fallbackModeRef = useRef<boolean>(false)
   const realModeCheckCountRef = useRef<number>(0)
   const isPlayingRef = useRef<boolean>(false)
+  const coverCacheRef = useRef<Map<string, string>>(new Map())
   
   const SMOOTHING_FACTOR = 0.25
 
@@ -560,6 +619,7 @@ export default function RadioMiniApp() {
       if (tg) {
         tg.ready()
         tg.expand()
+        setIsTelegram(true)
         const isIOSFromTG = tg.platform === 'ios'
         if (isIOSFromTG) isIOSRef.current = true
         return true
@@ -577,6 +637,88 @@ export default function RadioMiniApp() {
     
     return () => clearInterval(interval)
   }, [])
+
+  // =====================================================
+  // FETCH COVER WITH FALLBACK
+  // =====================================================
+  const fetchCover = useCallback(async (artistName: string, trackTitle: string, azuracastArt: string | null) => {
+    const cacheKey = `${artistName}-${trackTitle}`
+    
+    // Check cache first
+    if (coverCacheRef.current.has(cacheKey)) {
+      setCoverUrl(coverCacheRef.current.get(cacheKey)!)
+      return
+    }
+    
+    setIsLoadingCover(true)
+    
+    try {
+      // Try our cover API which handles fallbacks
+      const response = await fetch(`${COVER_API}?artist=${encodeURIComponent(artistName)}&title=${encodeURIComponent(trackTitle)}&azuracast_art=${encodeURIComponent(azuracastArt || '')}`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.cover) {
+          coverCacheRef.current.set(cacheKey, data.cover)
+          setCoverUrl(data.cover)
+        } else {
+          setCoverUrl(null)
+        }
+      } else {
+        setCoverUrl(null)
+      }
+    } catch (e) {
+      console.error('[COVER] Fetch error:', e)
+      setCoverUrl(null)
+    }
+    
+    setIsLoadingCover(false)
+  }, [])
+
+  // =====================================================
+  // FETCH TRACK INFO FROM AZURACAST
+  // =====================================================
+  const fetchTrackInfo = useCallback(async () => {
+    try {
+      const response = await fetch(API_URL, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      })
+      
+      if (response.ok) {
+        const data: NowPlayingData = await response.json()
+        
+        setIsOnline(data.is_online)
+        setListeners(data.listeners?.current || 0)
+        setUniqueListeners(data.listeners?.unique || 0)
+        
+        if (data.now_playing?.song) {
+          const song = data.now_playing.song
+          const artistName = song.artist || ''
+          const trackTitle = song.title || ''
+          const fullTitle = song.text || `${artistName} - ${trackTitle}`
+          
+          setCurrentTrack(fullTitle)
+          setArtist(artistName)
+          setTitle(trackTitle)
+          
+          // Fetch cover with fallback
+          fetchCover(artistName, trackTitle, song.art)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch track info:', err)
+    }
+  }, [fetchCover])
+
+  // Poll track info
+  useEffect(() => {
+    fetchTrackInfo()
+    const interval = setInterval(fetchTrackInfo, 10000)
+    return () => clearInterval(interval)
+  }, [fetchTrackInfo])
 
   // =====================================================
   // LISTENER TRACKING
@@ -607,9 +749,8 @@ export default function RadioMiniApp() {
     }
     
     try {
-      await fetch(LISTENERS_API, {
+      await fetch('/api/listener', {
         method: 'POST',
-        mode: 'cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
@@ -643,7 +784,7 @@ export default function RadioMiniApp() {
 
   const fetchListenersCount = useCallback(async () => {
     try {
-      const res = await fetch(LISTENERS_API, { mode: 'cors' })
+      const res = await fetch('/api/listener')
       if (res.ok) {
         const data = await res.json()
         setListeners(data.total || 0)
@@ -658,29 +799,6 @@ export default function RadioMiniApp() {
     const interval = setInterval(fetchListenersCount, 10000)
     return () => clearInterval(interval)
   }, [fetchListenersCount])
-
-  // =====================================================
-  // CURRENT TRACK
-  // =====================================================
-  const fetchCurrentTrack = useCallback(async () => {
-    try {
-      const res = await fetch(NOW_PLAYING_API, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.title && data.title !== currentTrack) {
-          setCurrentTrack(data.title)
-        }
-      }
-    } catch (e) {
-      console.error('[TRACK] Fetch error:', e)
-    }
-  }, [currentTrack])
-
-  useEffect(() => {
-    fetchCurrentTrack()
-    const interval = setInterval(fetchCurrentTrack, 5000)
-    return () => clearInterval(interval)
-  }, [fetchCurrentTrack])
 
   // =====================================================
   // CLOSE ON UNLOAD
@@ -711,7 +829,7 @@ export default function RadioMiniApp() {
         }
       }
 
-      navigator.sendBeacon(LISTENERS_API, new Blob([JSON.stringify({
+      navigator.sendBeacon('/api/listener', new Blob([JSON.stringify({
         user_id: userId,
         first_name: firstName,
         last_name: user?.last_name || null,
@@ -835,6 +953,33 @@ export default function RadioMiniApp() {
   }
 
   // =====================================================
+  // SHARE IN TELEGRAM
+  // =====================================================
+  const shareInTelegram = () => {
+    const text = `🎵 Слушаю ${STATION_NAME}!\n\nСейчас играет: ${currentTrack}\n\n🎧 Присоединяйся:`
+    const url = window.location.href
+    
+    if (isTelegram && window.Telegram?.WebApp?.openTelegramLink) {
+      window.Telegram.WebApp.openTelegramLink(
+        `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
+      )
+    } else {
+      window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank')
+    }
+  }
+
+  // =====================================================
+  // OPEN IN PLAYER
+  // =====================================================
+  const openInPlayer = () => {
+    if (isTelegram && window.Telegram?.WebApp?.openLink) {
+      window.Telegram.WebApp.openLink(STREAM_URL)
+    } else {
+      window.open(STREAM_URL, '_blank')
+    }
+  }
+
+  // =====================================================
   // RENDER
   // =====================================================
   const isIOSDevice = isIOSRef.current
@@ -871,7 +1016,6 @@ export default function RadioMiniApp() {
           border: 1px solid rgba(0,199,48,0.2);
           box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
         }
-        /* Слайдеры эквалайзера с цветами частот */
         .eq-slider-bass {
           -webkit-appearance: none;
           height: 6px;
@@ -953,7 +1097,7 @@ export default function RadioMiniApp() {
         
         <div className="relative z-10 w-full max-w-xs">
           
-          {/* Логотип станции - с параллакс эффектом */}
+          {/* Логотип станции / Обложка */}
           <motion.div
             animate={{
               y: showEq ? -180 : 0,
@@ -963,18 +1107,66 @@ export default function RadioMiniApp() {
             transition={{ duration: 0.4, ease: "easeInOut" }}
             style={{ position: showEq ? 'absolute' : 'relative', width: '100%', pointerEvents: showEq ? 'none' : 'auto' }}
           >
-            <motion.img
-              src={STATION_LOGO}
-              alt={STATION_NAME}
-              className="mx-auto mb-3"
-              style={{
-                width: '150px',
-                height: '150px',
-                filter: isPlaying ? 'drop-shadow(0 0 30px rgba(0,199,48,0.6))' : 'drop-shadow(0 0 15px rgba(0,199,48,0.3))'
-              }}
+            <motion.div 
+              className="w-40 h-40 mx-auto rounded-full overflow-hidden relative"
               animate={isPlaying ? { scale: [1, 1.03, 1] } : {}}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            />
+              style={{
+                boxShadow: isPlaying 
+                  ? `0 0 50px ${COLORS.glow}, 0 0 80px rgba(212,175,55,0.3)` 
+                  : `0 5px 20px rgba(0,0,0,0.5)`,
+                border: `3px solid ${isPlaying ? COLORS.gold : COLORS.secondary}`,
+                background: `linear-gradient(145deg, ${COLORS.gold} 0%, #B8860B 100%)`
+              }}
+            >
+              {coverUrl ? (
+                <img 
+                  src={coverUrl} 
+                  alt={currentTrack}
+                  className="w-full h-full object-cover"
+                  onError={() => setCoverUrl(null)}
+                />
+              ) : (
+                <img 
+                  src={STATION_LOGO} 
+                  alt={STATION_NAME}
+                  className="w-full h-full object-cover"
+                />
+              )}
+              
+              {/* Loading overlay for cover */}
+              <AnimatePresence>
+                {isLoadingCover && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 bg-black/50 flex items-center justify-center"
+                  >
+                    <Loader2 className="w-8 h-8 animate-spin" style={{ color: COLORS.gold }} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+            
+            {/* LIVE индикатор */}
+            <AnimatePresence>
+              {isPlaying && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  className="absolute top-0 right-4 px-2 py-0.5 rounded-full text-xs font-bold"
+                  style={{
+                    background: `linear-gradient(145deg, ${COLORS.secondary}, ${COLORS.accent})`,
+                    color: COLORS.dark,
+                    boxShadow: '0 0 15px rgba(0,199,48,0.8)'
+                  }}
+                >
+                  LIVE
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
           
           {/* Визуализатор */}
@@ -983,25 +1175,6 @@ export default function RadioMiniApp() {
             transition={{ duration: 0.4, ease: "easeInOut" }}
             className="skeuo-card rounded-xl p-2 mb-3 relative"
           >
-            {/* Индикатор LIVE */}
-            <AnimatePresence>
-              {isPlaying && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  className="absolute -top-2 right-2 px-2 py-0.5 rounded-full text-xs font-bold z-20"
-                  style={{
-                    background: `linear-gradient(145deg, ${COLORS.secondary}, ${COLORS.accent})`,
-                    color: '#0d0026',
-                    boxShadow: '0 0 15px rgba(0,199,48,0.8)'
-                  }}
-                >
-                  LIVE
-                </motion.div>
-              )}
-            </AnimatePresence>
-            
             <canvas ref={canvasRef} width={280} height={60} className="w-full rounded" style={{ background: 'transparent' }} />
             
             {!isIOSDevice && (
@@ -1112,134 +1285,133 @@ export default function RadioMiniApp() {
             </AnimatePresence>
           )}
           
-          {/* Уведомление о режиме совместимости */}
-          {isFallbackActive && !isIOSDevice && (
-            <div className="text-xs text-center mb-3 p-2 rounded-xl skeuo-card" style={{ color: COLORS.text }}>
-              ⚠️ Режим совместимости: EQ недоступен
+          {/* Информация о треке */}
+          <motion.div 
+            className="text-center mb-3"
+            animate={{ y: showEq ? 60 : 0 }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
+          >
+            <div className="flex items-center justify-center gap-1.5 mb-0.5">
+              <Radio className="w-3.5 h-3.5" style={{ color: COLORS.secondary }} />
+              <span className="text-xs uppercase tracking-wider" style={{ color: COLORS.secondary }}>
+                Онлайн-радио
+              </span>
             </div>
-          )}
-          
-          {/* Информация о станции */}
-          <motion.div
-            animate={{ y: showEq ? -15 : 0 }}
-            transition={{ duration: 0.4, ease: "easeInOut" }}
-            className="skeuo-card rounded-xl p-2 text-center mb-3"
-          >
-            <div className="flex items-center justify-center gap-1 mb-0.5">
-              <Radio className="w-3 h-3" style={{ color: COLORS.secondary }} />
-              <span className="text-xs uppercase tracking-wider" style={{ color: COLORS.secondary }}>Онлайн-радио</span>
+            <h1 className="text-lg font-bold text-white mb-1">{STATION_NAME}</h1>
+            
+            <motion.p 
+              key={currentTrack}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{ color: COLORS.text }}
+              className="text-sm"
+            >
+              {currentTrack}
+            </motion.p>
+            
+            {listeners > 0 && (
+              <p className="text-xs mt-1" style={{ color: COLORS.text, opacity: 0.7 }}>
+                👥 {listeners} слушают{uniqueListeners > 0 && ` (${uniqueListeners} уникальных)`}
+              </p>
+            )}
+            
+            {/* Online/Offline статус */}
+            <div className="flex items-center justify-center gap-1 mt-1">
+              <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'}`} />
+              <span className="text-xs text-gray-500">{isOnline ? 'В эфире' : 'Оффлайн'}</span>
             </div>
-            <h1 className="text-base font-bold text-white">{STATION_NAME}</h1>
-            <p className="text-xs text-center" style={{ color: COLORS.secondary, marginTop: '4px' }}>Сейчас в эфире:</p>
-            <p className="text-xs text-center" style={{ color: '#fff' }}>{currentTrack}</p>
-            <p className="text-xs mt-0.5" style={{ color: COLORS.accent }}>
-              👥 {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
-            </p>
-          </motion.div>
-          
-          {/* Индикатор буферизации */}
-          {buffering && (
-            <motion.div
-              animate={{ y: showEq ? -15 : 0 }}
-              transition={{ duration: 0.4, ease: "easeInOut" }}
-              className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl skeuo-card"
-            >
-              <Wifi className="w-3 h-3 animate-pulse" style={{ color: COLORS.secondary }} />
-              <span className="text-xs" style={{ color: COLORS.secondary }}>Буферизация...</span>
-            </motion.div>
-          )}
-          
-          {/* Сообщение об ошибке */}
-          {error && (
-            <motion.div
-              animate={{ y: showEq ? -15 : 0 }}
-              transition={{ duration: 0.4, ease: "easeInOut" }}
-              className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl"
-              style={{ background: 'rgba(255,0,102,0.1)' }}
-            >
-              <AlertCircle className="w-3 h-3" style={{ color: COLORS.bass }} />
-              <span className="text-xs" style={{ color: '#ff6699' }}>{error}</span>
-            </motion.div>
-          )}
-          
-          {/* Кнопка Play/Pause */}
-          <motion.div
-            animate={{ y: showEq ? -15 : 0 }}
-            transition={{ duration: 0.4, ease: "easeInOut" }}
-            className="flex justify-center mb-3"
-          >
-            <motion.button
-              onClick={handlePlay}
-              disabled={isLoading && !buffering}
-              whileTap={{ scale: 0.95 }}
-              className="rounded-full flex items-center justify-center"
-              style={{
-                width: '56px',
-                height: '56px',
-                background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.secondary})`,
-                boxShadow: '0 4px 15px rgba(0,199,48,0.5)'
-              }}
-            >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" style={{ color: COLORS.dark }} />
-              ) : isPlaying ? (
-                <Pause className="w-5 h-5" style={{ color: COLORS.dark }} />
-              ) : (
-                <Play className="w-5 h-5 ml-0.5" style={{ color: COLORS.dark }} />
-              )}
-            </motion.button>
-          </motion.div>
-          
-          {/* Регулятор громкости */}
-          <motion.div
-            animate={{ y: showEq ? -15 : 0 }}
-            transition={{ duration: 0.4, ease: "easeInOut" }}
-          >
-            {!isIOSDevice ? (
-              <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-xl skeuo-card">
-                <button
-                  onClick={() => setIsMuted(!isMuted)}
-                  className="p-1.5 rounded-lg"
-                  style={{ background: 'rgba(255,255,255,0.05)' }}
-                >
-                  {isMuted ? (
-                    <VolumeX className="w-4 h-4" style={{ color: '#666' }} />
-                  ) : (
-                    <Volume2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
-                  )}
-                </button>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={isMuted ? 0 : volume}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value, 10)
-                    setVolume(v)
-                    if (v > 0) setIsMuted(false)
-                  }}
-                  className="volume-slider flex-1 cursor-pointer"
-                />
-                <span className="text-xs w-8 text-right" style={{ color: COLORS.secondary }}>
-                  {isMuted ? 0 : volume}%
-                </span>
-              </div>
-            ) : (
-              <div className="text-xs text-center mb-3 p-2 rounded-xl skeuo-card" style={{ color: COLORS.text }}>
-                🍎 Управляйте громкостью кнопками телефона
-              </div>
+            
+            {error && (
+              <p className="text-xs mt-1" style={{ color: '#ff6666' }}>{error}</p>
             )}
           </motion.div>
           
-          {/* Футер */}
-          <motion.p
-            animate={{ y: showEq ? -15 : 0 }}
-            transition={{ duration: 0.4, ease: "easeInOut" }}
-            className="text-center text-xs mt-2"
-            style={{ color: '#555' }}
-          >
-            Powered by <span style={{ color: COLORS.secondary }}>DJ GooD OFF</span>
-          </motion.p>
+          {/* Кнопка Play */}
+          <div className="flex justify-center mb-3">
+            <motion.button
+              onClick={handlePlay}
+              disabled={isLoading}
+              whileTap={{ scale: 0.95 }}
+              className="w-16 h-16 rounded-full flex items-center justify-center"
+              style={{
+                background: `linear-gradient(135deg, ${COLORS.secondary} 0%, ${COLORS.accent} 100%)`,
+                boxShadow: `0 3px 20px ${COLORS.secondary}60`
+              }}
+            >
+              {isLoading || buffering ? (
+                <Loader2 className="w-6 h-6 animate-spin" style={{ color: COLORS.dark }} />
+              ) : isPlaying ? (
+                <Pause className="w-6 h-6" style={{ color: COLORS.dark }} />
+              ) : (
+                <Play className="w-6 h-6 ml-0.5" style={{ color: COLORS.dark }} />
+              )}
+            </motion.button>
+          </div>
+          
+          {/* Громкость */}
+          <div className="flex items-center gap-2 mb-3 px-2">
+            <button onClick={() => setIsMuted(!isMuted)}>
+              {isMuted ? (
+                <VolumeX className="w-4 h-4" style={{ color: COLORS.text, opacity: 0.5 }} />
+              ) : (
+                <Volume2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
+              )}
+            </button>
+            <div 
+              className="flex-1 h-2 rounded-full relative cursor-pointer"
+              style={{ background: 'rgba(255,255,255,0.1)' }}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                setVolume(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)))
+                setIsMuted(false)
+              }}
+            >
+              <div 
+                className="absolute left-0 top-0 h-full rounded-full"
+                style={{ 
+                  width: `${(isMuted ? 0 : volume)}%`, 
+                  background: `linear-gradient(90deg, ${COLORS.bass} 0%, ${COLORS.secondary} 50%, ${COLORS.high} 100%)`
+                }}
+              />
+            </div>
+          </div>
+          
+          {/* Кнопки действий */}
+          <div className="flex justify-center gap-3 mb-3">
+            <motion.button
+              onClick={shareInTelegram}
+              whileTap={{ scale: 0.95 }}
+              className="p-2.5 rounded-xl"
+              style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${COLORS.secondary}40` }}
+              title="Поделиться"
+            >
+              <Share2 className="w-4 h-4" style={{ color: COLORS.secondary }} />
+            </motion.button>
+            
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              className="p-2.5 rounded-xl"
+              style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${COLORS.secondary}40` }}
+              title="В избранное"
+            >
+              <Heart className="w-4 h-4" style={{ color: COLORS.secondary }} />
+            </motion.button>
+            
+            <motion.button
+              onClick={openInPlayer}
+              whileTap={{ scale: 0.95 }}
+              className="p-2.5 rounded-xl"
+              style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${COLORS.gold}40` }}
+              title="Открыть в плеере"
+            >
+              <ExternalLink className="w-4 h-4" style={{ color: COLORS.gold }} />
+            </motion.button>
+          </div>
+          
+          {/* Footer */}
+          <p className="text-center text-xs" style={{ color: COLORS.text, opacity: 0.5 }}>
+            Powered by <span style={{ color: COLORS.gold }}>AzuraCast</span>
+          </p>
         </div>
       </div>
     </>
