@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server'
 export const dynamic = 'force-dynamic'
 
 // AzuraCast stream URL
-const AZURACAST_URL = 'http://178.49.69.37'
+const AZURACAST_URL = 'https://stream.volfrings.ru'
 const STATION_SHORTCODE = 'dj_good_off_fm'
 const STREAM_URL = `${AZURACAST_URL}/listen/${STATION_SHORTCODE}/radio.mp3`
 

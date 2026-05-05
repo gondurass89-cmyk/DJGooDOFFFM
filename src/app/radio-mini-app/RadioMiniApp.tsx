@@ -14,7 +14,7 @@ import { Play, Pause, Volume2, VolumeX, Loader2, ChevronDown, ChevronUp, Share2,
 // =====================================================
 // КОНСТАНТЫ
 // =====================================================
-const AZURACAST_URL = 'http://178.49.69.37'
+const AZURACAST_URL = 'https://stream.volfrings.ru'
 const STATION_SHORTCODE = 'dj_good_off_fm'
 const STREAM_URL = '/api/stream'
 const API_URL = '/api/now-playing'
