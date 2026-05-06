@@ -10,6 +10,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Play, Pause, Volume2, VolumeX, Loader2, AlertCircle, Wifi, ChevronDown, ChevronUp } from 'lucide-react'
 import MatrixBackground from './MatrixBackground'
+import MatrixText from './MatrixText'
 
 // =====================================================
 // КОНСТАНТЫ
@@ -1416,13 +1417,15 @@ export default function RadioMiniApp() {
             {currentTrack.length > 58 ? (
               <div className="track-marquee-container">
                 <div className="track-marquee-inner track-marquee-animate" style={{ '--marquee-duration': `${Math.max(8, currentTrack.length / 8)}s` } as React.CSSProperties}>
-                  <span className="text-xs" style={{ color: '#fff' }}>{currentTrack}</span>
-                  <span style={{ color: '#fff', margin: '0 2em' }}>•</span>
-                  <span className="text-xs" style={{ color: '#fff' }}>{currentTrack}</span>
+                  <MatrixText text={currentTrack} className="text-xs" duration={2000} />
+                  <span style={{ color: '#0F0', margin: '0 2em', textShadow: '0 0 5px #0F0' }}>•</span>
+                  <MatrixText text={currentTrack} className="text-xs" duration={2000} />
                 </div>
               </div>
             ) : (
-              <p className="text-xs track-static" style={{ color: '#fff' }}>{currentTrack}</p>
+              <p className="text-xs track-static">
+                <MatrixText text={currentTrack} duration={2000} />
+              </p>
             )}
             <p className="text-xs mt-1.5" style={{ color: COLORS.accent }}>
               👥 {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
