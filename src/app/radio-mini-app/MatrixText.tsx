@@ -12,19 +12,18 @@ interface MatrixTextProps {
   text: string
   className?: string
   duration?: number // длительность эффекта в мс
+  animateOnMount?: boolean // запускать анимацию при монтировании (даже если текст не менялся)
 }
 
-export default function MatrixText({ text, className = '', duration = 2000 }: MatrixTextProps) {
-  const [displayText, setDisplayText] = useState(text)
+export default function MatrixText({ text, className = '', duration = 2000, animateOnMount = false }: MatrixTextProps) {
+  const [displayText, setDisplayText] = useState(animateOnMount ? '' : text)
   const [isAnimating, setIsAnimating] = useState(false)
-  const prevTextRef = useRef(text)
+  const prevTextRef = useRef<string | null>(null)
   const animationRef = useRef<NodeJS.Timeout | null>(null)
+  const mountedRef = useRef(false)
 
-  useEffect(() => {
-    // Если текст не изменился - ничего не делаем
-    if (text === prevTextRef.current) return
-
-    prevTextRef.current = text
+  // Функция запуска анимации
+  const startAnimation = (targetText: string) => {
     setIsAnimating(true)
 
     // Очищаем предыдущую анимацию
@@ -33,7 +32,7 @@ export default function MatrixText({ text, className = '', duration = 2000 }: Ma
     }
 
     const startTime = Date.now()
-    const textLength = text.length
+    const textLength = targetText.length
 
     // Массив индексов символов, которые уже "раскрылись"
     const revealedIndices = new Set<number>()
@@ -62,7 +61,7 @@ export default function MatrixText({ text, className = '', duration = 2000 }: Ma
       let result = ''
       for (let i = 0; i < textLength; i++) {
         if (revealedIndices.has(i)) {
-          result += text[i]
+          result += targetText[i]
         } else {
           // Случайный символ
           result += MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)]
@@ -74,19 +73,40 @@ export default function MatrixText({ text, className = '', duration = 2000 }: Ma
       // Завершаем анимацию
       if (progress >= 1) {
         clearInterval(interval)
-        setDisplayText(text)
+        setDisplayText(targetText)
         setIsAnimating(false)
       }
     }, 30) // Обновление каждые 30мс
 
     animationRef.current = interval
+  }
 
+  useEffect(() => {
+    // Первый рендер - запускаем анимацию если animateOnMount
+    if (!mountedRef.current) {
+      mountedRef.current = true
+      prevTextRef.current = text
+      if (animateOnMount && text) {
+        startAnimation(text)
+      }
+      return
+    }
+
+    // Если текст не изменился - ничего не делаем
+    if (text === prevTextRef.current) return
+
+    prevTextRef.current = text
+    startAnimation(text)
+  }, [text, duration, animateOnMount])
+
+  // Очистка при размонтировании
+  useEffect(() => {
     return () => {
       if (animationRef.current) {
         clearInterval(animationRef.current)
       }
     }
-  }, [text, duration])
+  }, [])
 
   return (
     <span

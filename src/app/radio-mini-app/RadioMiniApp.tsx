@@ -1607,11 +1607,12 @@ export default function RadioMiniApp() {
             className="skeuo-card rounded-xl p-2 text-center mb-3"
           >
             {/* Бегущая строка если текст не помещается */}
+            {/* key включает needsMarquee для запуска анимации при переключении режима */}
             {needsMarquee ? (
-              <MarqueeText text={currentTrack} speed={40} className="text-xs" />
+              <MarqueeText key={`marquee-${needsMarquee}-${currentTrack}`} text={currentTrack} speed={40} className="text-xs" matrixDuration={1500} />
             ) : (
               <p className="text-xs track-static">
-                <MatrixText text={currentTrack} duration={2000} />
+                <MatrixText key={`static-${needsMarquee}-${currentTrack}`} text={currentTrack} duration={2000} animateOnMount={true} />
               </p>
             )}
             <p className="text-xs mt-1.5" style={{ color: COLORS.accent }}>
