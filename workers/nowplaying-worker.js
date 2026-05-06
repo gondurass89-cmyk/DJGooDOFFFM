@@ -1,140 +1,165 @@
 // =====================================================
 // CLOUDFLARE WORKER: NOW PLAYING
-// Хранение названия текущего трека через D1 Database
+// Получение текущего трека из AzuraCast API
 // =====================================================
-// 
+//
 // НАЗНАЧЕНИЕ:
-// - Приём POST запросов с названием текущего трека от RadioBoss
-// - Отдача GET запросов с названием текущего трека
-// - Поддержка кириллицы (UTF-8)
+// - Получает название текущего трека из AzuraCast API
+// - Очищает техническую информацию (Camelot keys, Energy)
+// - Отдаёт чистое название для отображения в приложении
 //
 // РАЗМЕЩЕНИЕ:
 // - Cloudflare Dashboard -> Workers -> Create Worker
 // - Имя: nowplaying
 // - URL: https://nowplaying.gondurass89.workers.dev
-// - D1 Binding: DB -> nowplaying-db
-//
-// SQL ТАБЛИЦА (выполнить в D1 Console):
-// CREATE TABLE track (id INTEGER PRIMARY KEY CHECK (id = 1), title TEXT);
-// INSERT INTO track (id, title) VALUES (1, 'DJ GooD OFF FM - Загрузка...');
 // =====================================================
+
+// AzuraCast API endpoint
+const AZURACAST_API = 'https://stream.volfrings.ru/api/nowplaying/djgoodofffm';
+
+// =====================================================
+// ОЧИСТКА НАЗВАНИЯ ТРЕКА
+// =====================================================
+function cleanTrackTitle(text, returnNull = false) {
+  if (!text) return returnNull ? null : 'DJ GooD OFF FM';
+
+  let title = text.trim();
+
+  // Удаляем BOM и невидимые символы
+  title = title.replace(/^[\uFEFF\u200B\u200C\u200D]/g, '');
+
+  // Удаляем Camelot keys в начале (1A-12A, 1B-12B)
+  title = title.replace(/^\d{1,2}[AB]\s*[-–—]\s*/i, '');
+
+  // Удаляем Energy levels (Energy 1-11)
+  title = title.replace(/Energy\s*\d{1,2}\s*[-–—]\s*/gi, '');
+
+  // Удаляем Camelot keys в любом месте
+  title = title.replace(/\d{1,2}[AB]\s*[-–—]\s*/gi, '');
+
+  // Удаляем Energy levels в любом месте
+  title = title.replace(/\s*Energy\s*\d{1,2}/gi, '');
+
+  // Удаляем лишние разделители в начале
+  title = title.replace(/^[\s\-–—:]+/, '');
+
+  // Удаляем дублирующиеся разделители
+  title = title.replace(/\s*[-–—]\s*/g, ' - ');
+
+  // Удаляем лишние пробелы
+  title = title.replace(/\s+/g, ' ').trim();
+
+  // Удаляем сайты в скобках
+  title = title.replace(/\s*\([^)]*www\.[^)]*\)/gi, '');
+  title = title.replace(/\s*\([^)]*\.com[^)]*\)/gi, '');
+  title = title.replace(/\s*\([^)]*\.ru[^)]*\)/gi, '');
+
+  // Если после очистки пусто
+  if (!title || title.length < 2) {
+    return returnNull ? null : 'DJ GooD OFF FM';
+  }
+
+  return title;
+}
 
 // =====================================================
 // ГЛАВНЫЙ ОБРАБОТЧИК ЗАПРОСОВ
 // =====================================================
-/**
- * Обрабатывает входящие HTTP запросы
- * @param request - Входящий Request объект
- * @param env - Переменные окружения (bindings), включает DB для D1
- * @param ctx - Контекст выполнения
- * @returns Response объект
- */
 export default {
   async fetch(request, env, ctx) {
-    
-    // =====================================================
-    // CORS ЗАГОЛОВКИ (общие для всех ответов)
-    // =====================================================
+
+    // CORS заголовки
     const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',                    // Разрешаем с любого источника
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',  // Разрешённые методы
-      'Access-Control-Allow-Headers': 'Content-Type',        // Разрешённые заголовки
-      'Content-Type': 'text/plain; charset=utf-8',           // UTF-8 для кириллицы!
-      'Cache-Control': 'no-store, no-cache, must-revalidate', // Не кешировать
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
     };
-    
-    // =====================================================
-    // ОБРАБОТКА OPTIONS (CORS preflight)
-    // =====================================================
+
+    // OPTIONS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
         headers: corsHeaders
       });
     }
-    
-    // =====================================================
-    // ОБРАБОТКА POST ЗАПРОСОВ (сохранение трека)
-    // =====================================================
-    if (request.method === 'POST') {
-      try {
-        // Читаем тело запроса как plain text
-        let track = await request.text();
 
-        // =====================================================
-        // НОРМАЛИЗАЦИЯ АПОСТРОФОВ
-        // =====================================================
-        // Разные источники используют разные символы для апострофа
-        // Приводим всё к стандартному ASCII апострофу (U+0027)
-        track = track
-          .replace(/[\u2018\u2019\u201A\u201B]/g, "'")  // ' ' ‚ ‛ -> '
-          .replace(/[\u0060\u00B4]/g, "'")               // ` ´ -> '
-          .replace(/[\u201C\u201D\u201E\u201F]/g, '"')   // " " „ ‟ -> "
-          .replace(/\u2026/g, '...')                     // … -> ...
-          .replace(/\u2013\u2014/g, '-')                 // – — -> -
-
-        // Логируем для отладки
-        console.log('[NOWPLAYING] Received track:', track);
-
-        // =====================================================
-        // СОХРАНЕНИЕ В D1 DATABASE
-        // =====================================================
-        // Обновляем единственную запись с id = 1
-        await env.DB.prepare(`
-          UPDATE track SET title = ? WHERE id = 1
-        `).bind(track).run();
-        
-        // Возвращаем подтверждение
-        return new Response('OK: ' + track, {
-          headers: corsHeaders
-        });
-        
-      } catch (error) {
-        console.error('[NOWPLAYING] POST Error:', error);
-        return new Response('Error: ' + error.message, {
-          status: 500,
-          headers: corsHeaders
-        });
-      }
+    // Только GET
+    if (request.method !== 'GET') {
+      return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+        status: 405,
+        headers: corsHeaders
+      });
     }
-    
-    // =====================================================
-    // ОБРАБОТКА GET ЗАПРОСОВ (получение трека)
-    // =====================================================
-    if (request.method === 'GET') {
-      try {
-        // =====================================================
-        // ЧТЕНИЕ ИЗ D1 DATABASE
-        // =====================================================
-        const result = await env.DB.prepare(`
-          SELECT title FROM track WHERE id = 1
-        `).first();
-        
-        // Если запись найдена - возвращаем название трека
-        const track = result?.title || 'DJ GooD OFF FM - Загрузка...';
-        
-        // Логируем для отладки
-        console.log('[NOWPLAYING] Returning track:', track);
-        
-        return new Response(track, {
-          headers: corsHeaders
-        });
-        
-      } catch (error) {
-        console.error('[NOWPLAYING] GET Error:', error);
-        return new Response('DJ GooD OFF FM - Ошибка', {
-          status: 500,
-          headers: corsHeaders
-        });
+
+    try {
+      // Запрос к AzuraCast API
+      const response = await fetch(AZURACAST_API, {
+        headers: {
+          'User-Agent': 'DJGooDOFF-FM-NowPlaying/1.0'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`AzuraCast API error: ${response.status}`);
       }
+
+      const data = await response.json();
+
+      // Извлекаем информацию о треке
+      const nowPlaying = data.now_playing || {};
+      const song = nowPlaying.song || {};
+      const station = data.station || {};
+
+      // Получаем сырой текст трека
+      const rawTitle = song.text || song.title || '';
+
+      // Очищаем название
+      const cleanTitle = cleanTrackTitle(rawTitle);
+
+      // Очищаем артиста (не заменяем на дефолт если пусто)
+      let cleanArtist = cleanTrackTitle(song.artist || '', true);
+      if (!cleanArtist) {
+        // Если artist пустой, пытаемся извлечь из title
+        const parts = cleanTitle.split(' - ');
+        if (parts.length >= 2) {
+          cleanArtist = parts[0];
+        }
+      }
+
+      // Формируем ответ
+      const result = {
+        title: cleanTitle,
+        artist: cleanArtist || '',
+        track: cleanTrackTitle(song.title || ''),
+        listeners: data.listeners?.total || 0,
+        online: data.is_online || false,
+        station: station.name || 'DJ GooD OFF FM',
+        art: song.art || null,
+        duration: nowPlaying.duration || 0,
+        elapsed: nowPlaying.elapsed || 0
+      };
+
+      console.log('[NOWPLAYING] Track:', cleanTitle, '| Listeners:', result.listeners);
+
+      return new Response(JSON.stringify(result), {
+        headers: corsHeaders
+      });
+
+    } catch (error) {
+      console.error('[NOWPLAYING] Error:', error.message);
+
+      return new Response(JSON.stringify({
+        title: 'DJ GooD OFF FM',
+        artist: '',
+        listeners: 0,
+        online: false,
+        error: error.message
+      }), {
+        status: 200, // Возвращаем 200 чтобы не ломать клиент
+        headers: corsHeaders
+      });
     }
-    
-    // =====================================================
-    // НЕПОДДЕРЖИВАЕМЫЙ МЕТОД
-    // =====================================================
-    return new Response('Method not allowed', {
-      status: 405,
-      headers: corsHeaders
-    });
   }
 };
