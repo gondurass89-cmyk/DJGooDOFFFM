@@ -179,6 +179,11 @@ export default function RadioMiniApp() {
   const midFilterRef = useRef<BiquadFilterNode | null>(null)
   const trebleFilterRef = useRef<BiquadFilterNode | null>(null)
   const gainNodeRef = useRef<GainNode | null>(null)  // GainNode для управления громкостью в WebAudio
+  const volumeRef = useRef<number>(100)  // Ref для текущей громкости (избегаем stale closure)
+  const isMutedRef = useRef<boolean>(false)  // Ref для состояния mute
+  const eqBassRef = useRef<number>(0)  // Ref для Bass эквалайзера
+  const eqMidRef = useRef<number>(0)  // Ref для Mid эквалайзера
+  const eqTrebleRef = useRef<number>(0)  // Ref для Treble эквалайзера
   const realModeCheckRef = useRef<boolean>(false)
   const fallbackModeRef = useRef<boolean>(false)
   const realModeCheckCountRef = useRef<number>(0)
@@ -451,26 +456,29 @@ export default function RadioMiniApp() {
       // КРИТИЧНО: audio.volume не работает когда WebAudio активен!
       // Усиление 2.5x - на 100% громкость будет в 2.5 раза выше исходной
       const gainNode = ctx.createGain()
-      gainNode.gain.value = isMuted ? 0 : (volume / 100) * 2.5
+      // Используем refs для получения актуальных значений (избегаем stale closure)
+      const currentVolume = isMutedRef.current ? 0 : (volumeRef.current / 100) * 2.5
+      gainNode.gain.setValueAtTime(currentVolume, ctx.currentTime)
       gainNodeRef.current = gainNode
+      console.log('[AUDIO] GainNode создан с громкостью:', currentVolume)
       
       const bassFilter = ctx.createBiquadFilter()
       bassFilter.type = 'lowshelf'
       bassFilter.frequency.value = 250
-      bassFilter.gain.value = eqBass
+      bassFilter.gain.setValueAtTime(eqBassRef.current, ctx.currentTime)
       bassFilterRef.current = bassFilter
       
       const midFilter = ctx.createBiquadFilter()
       midFilter.type = 'peaking'
       midFilter.frequency.value = 1000
       midFilter.Q.value = 0.5
-      midFilter.gain.value = eqMid
+      midFilter.gain.setValueAtTime(eqMidRef.current, ctx.currentTime)
       midFilterRef.current = midFilter
       
       const trebleFilter = ctx.createBiquadFilter()
       trebleFilter.type = 'highshelf'
       trebleFilter.frequency.value = 4000
-      trebleFilter.gain.value = eqTreble
+      trebleFilter.gain.setValueAtTime(eqTrebleRef.current, ctx.currentTime)
       trebleFilterRef.current = trebleFilter
       
       const analyser = ctx.createAnalyser()
@@ -490,13 +498,13 @@ export default function RadioMiniApp() {
       gainNode.connect(ctx.destination)
       
       isSourceConnectedRef.current = true
-      console.log('[AUDIO] Аудио-цепь подключена с GainNode для громкости')
+      console.log('[AUDIO] Аудио-цепь подключена: source -> bass -> mid -> treble -> analyser -> gainNode -> destination')
       return true
     } catch (e) {
       console.error('[AUDIO] Ошибка подключения аудио-цепи:', e)
       return false
     }
-  }, [getAudioContext, eqBass, eqMid, eqTreble, volume, isMuted])
+  }, [getAudioContext])  // Все значения берём из refs
 
   // =====================================================
   // ИНИЦИАЛИЗАЦИЯ АУДИО
@@ -654,19 +662,26 @@ export default function RadioMiniApp() {
   // ГРОМКОСТЬ
   // =====================================================
   useEffect(() => {
+    // Обновляем refs для использования в других местах
+    volumeRef.current = volume
+    isMutedRef.current = isMuted
+
     // WebAudio: коэффициент усиления 2.5x (100% = исходная * 2.5)
     // Direct audio: максимум 1.0 (ограничение HTMLMediaElement)
     const webAudioVolume = isMuted ? 0 : (volume / 100) * 2.5
     const directVolume = isMuted ? 0 : volume / 100
 
     // Приоритет: GainNode (WebAudio) > audio.volume (прямой)
-    if (gainNodeRef.current) {
+    if (gainNodeRef.current && audioContextRef.current) {
       // WebAudio режим - используем GainNode с усилением
-      gainNodeRef.current.gain.value = webAudioVolume
-      console.log('[VOLUME] GainNode volume:', webAudioVolume)
+      // КРИТИЧНО: Используем setValueAtTime для немедленного применения!
+      const ctx = audioContextRef.current
+      gainNodeRef.current.gain.setValueAtTime(webAudioVolume, ctx.currentTime)
+      console.log('[VOLUME] GainNode.setValueAtTime:', webAudioVolume, 'context time:', ctx.currentTime)
     } else if (audioRef.current) {
       // Прямой режим - используем audio.volume (макс 1.0)
       audioRef.current.volume = directVolume
+      console.log('[VOLUME] Direct audio.volume:', directVolume)
     }
 
     // Сохранение в localStorage
@@ -677,17 +692,30 @@ export default function RadioMiniApp() {
   // ЭКВАЛАЙЗЕР - обновление фильтров и сохранение
   // =====================================================
   useEffect(() => {
-    if (bassFilterRef.current) bassFilterRef.current.gain.value = eqBass
+    eqBassRef.current = eqBass  // Обновляем ref
+    if (bassFilterRef.current && audioContextRef.current) {
+      // Используем setValueAtTime для немедленного применения
+      bassFilterRef.current.gain.setValueAtTime(eqBass, audioContextRef.current.currentTime)
+      console.log('[EQ] Bass gain:', eqBass)
+    }
     localStorage.setItem('radio_eq_bass', String(eqBass))
   }, [eqBass])
   
   useEffect(() => {
-    if (midFilterRef.current) midFilterRef.current.gain.value = eqMid
+    eqMidRef.current = eqMid  // Обновляем ref
+    if (midFilterRef.current && audioContextRef.current) {
+      midFilterRef.current.gain.setValueAtTime(eqMid, audioContextRef.current.currentTime)
+      console.log('[EQ] Mid gain:', eqMid)
+    }
     localStorage.setItem('radio_eq_mid', String(eqMid))
   }, [eqMid])
   
   useEffect(() => {
-    if (trebleFilterRef.current) trebleFilterRef.current.gain.value = eqTreble
+    eqTrebleRef.current = eqTreble  // Обновляем ref
+    if (trebleFilterRef.current && audioContextRef.current) {
+      trebleFilterRef.current.gain.setValueAtTime(eqTreble, audioContextRef.current.currentTime)
+      console.log('[EQ] Treble gain:', eqTreble)
+    }
     localStorage.setItem('radio_eq_treble', String(eqTreble))
   }, [eqTreble])
 
