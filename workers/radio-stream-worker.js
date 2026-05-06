@@ -18,9 +18,9 @@
 // =====================================================
 // ИСХОДНЫЙ URL АУДИО ПОТОКА
 // =====================================================
-// RadioHeart MP3 поток (HTTP)
-const UPSTREAM_URL = 'http://s0.radioheart.ru:8000/RH84200';
-// ^^^^ HTTP URL который нужно проксировать через HTTPS
+// AzuraCast MP3 поток (HTTPS)
+const UPSTREAM_URL = 'https://stream.volfrings.ru/listen/djgoodofffm/radio.mp3';
+// ^^^^ HTTPS URL AzuraCast потока
 
 // =====================================================
 // ГЛАВНЫЙ ОБРАБОТЧИК ЗАПРОСОВ

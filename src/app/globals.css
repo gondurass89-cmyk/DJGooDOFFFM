@@ -6,9 +6,163 @@ html, body {
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Telegram Mini App safe areas */
+.tma-container {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Бегущая строка для названия трека */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.track-marquee {
+  animation: marquee 15s linear infinite;
+}
+
+.track-marquee-container {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* =====================================================
+   ПОЛЗУНКИ (Volume & Equalizer) - адаптивные под тему
+   ===================================================== */
+
+/* Volume slider */
+.volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px !important;
+  border-radius: 3px;
+  cursor: pointer;
+  background: linear-gradient(90deg, #00e640 50%, #1a1a2e 50%);
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #00e640;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(0, 230, 64, 0.5);
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #00e640;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 6px rgba(0, 230, 64, 0.5);
+}
+
+/* EQ Sliders - Bass (розовый) */
+.eq-slider-bass {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px !important;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ff0066 0%, #ff3399 100%) !important;
+  cursor: pointer;
+}
+
+.eq-slider-bass::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ff0066;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 0 8px rgba(255, 0, 102, 0.6);
+}
+
+.eq-slider-bass::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ff0066;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 0 8px rgba(255, 0, 102, 0.6);
+}
+
+/* EQ Sliders - Mid (зелёный) */
+.eq-slider-mid {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px !important;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #00c730 0%, #00ffcc 100%) !important;
+  cursor: pointer;
+}
+
+.eq-slider-mid::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #00c730;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 0 8px rgba(0, 199, 48, 0.6);
+}
+
+.eq-slider-mid::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #00c730;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 0 8px rgba(0, 199, 48, 0.6);
+}
+
+/* EQ Sliders - Treble (голубой) */
+.eq-slider-treble {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px !important;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #00ffcc 0%, #66ffee 100%) !important;
+  cursor: pointer;
+}
+
+.eq-slider-treble::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #00ffcc;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 0 8px rgba(0, 255, 204, 0.6);
+}
+
+.eq-slider-treble::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #00ffcc;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 0 8px rgba(0, 255, 204, 0.6);
 }
