@@ -61,24 +61,18 @@ function formatPart(text, isFirstPart) {
   let result = '';
   let i = 0;
   let wordStart = 0;
-  let inBrackets = false;
-  let bracketChar = '';
 
   while (i <= text.length) {
     const char = text[i];
-    const isWordEnd = i === text.length ||
-                      char === ' ' ||
-                      (char === '(' || char === '[' || char === '{') ||
-                      (char === ')' || char === ']' || char === '}');
 
-    // Обработка скобок
     if (char === '(' || char === '[' || char === '{') {
       if (i > wordStart) {
         result += formatWord(text.slice(wordStart, i), isFirstPart && wordStart === 0);
       }
       result += char;
       wordStart = i + 1;
-      isFirstPart = false;
+      // Внутри скобок - первое слово тоже с заглавной
+      isFirstPart = true;
     } else if (char === ')' || char === ']' || char === '}') {
       if (i > wordStart) {
         result += formatWord(text.slice(wordStart, i), false);
@@ -113,7 +107,11 @@ function formatWord(word, isFirstWord) {
   }
 
   // Аббревиатуры (DJ, MC, TV, USA, UK, NYC, LA и т.д.)
-  if (/^[A-Z]{2,}$/.test(word) || ['dj', 'mc', 'tv', 'uk', 'usa', 'nyc', 'la', 'dc'].includes(lowerWord)) {
+  // НО: не считаем аббревиатурами слова из LOWERCASE_WORDS (MIX, REMIX и т.д.)
+  const isAbbreviation = /^[A-Z]{2,}$/.test(word) || 
+                         ['dj', 'mc', 'tv', 'uk', 'usa', 'nyc', 'la', 'dc'].includes(lowerWord);
+  
+  if (isAbbreviation && !LOWERCASE_WORDS.has(lowerWord)) {
     return word.toUpperCase();
   }
 
@@ -124,6 +122,31 @@ function formatWord(word, isFirstWord) {
 
   // Обычное слово - первая буква заглавная, остальные строчные
   return lowerWord.charAt(0).toUpperCase() + lowerWord.slice(1);
+}
+
+// =====================================================
+// УДАЛЕНИЕ ДУБЛИКАТОВ
+// =====================================================
+function removeDuplicates(text) {
+  // Разбиваем по " - "
+  const parts = text.split(' - ');
+  
+  if (parts.length < 2) return text;
+  
+  // Удаляем дублирующиеся соседние части
+  const uniqueParts = [];
+  let prevLower = '';
+  
+  for (const part of parts) {
+    const lowerPart = part.toLowerCase().trim();
+    // Пропускаем если такая же как предыдущая
+    if (lowerPart !== prevLower) {
+      uniqueParts.push(part);
+      prevLower = lowerPart;
+    }
+  }
+  
+  return uniqueParts.join(' - ');
 }
 
 // =====================================================
@@ -177,6 +200,9 @@ function cleanTrackTitle(text, returnNull = false) {
   if (!title || title.length < 2) {
     return returnNull ? null : 'DJ GooD OFF FM';
   }
+
+  // Удаляем дублирующиеся части (Artist - Title - Title)
+  title = removeDuplicates(title);
 
   // Форматируем в Title Case
   title = toTitleCase(title);
