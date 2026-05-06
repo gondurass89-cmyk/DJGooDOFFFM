@@ -159,6 +159,7 @@ export default function RadioMiniApp() {
   const [reconnecting, setReconnecting] = useState(false) // Статус переподключения
   const [isTelegramMiniApp, setIsTelegramMiniApp] = useState(false) // Запущено ли в Telegram
   const [coverUrl, setCoverUrl] = useState<string | null>(null) // URL обложки трека
+  const [isFallbackMode, setIsFallbackMode] = useState(false) // Fallback режим (без WebAudio)
 
   // =====================================================
   // ССЫЛКИ (useRef)
@@ -511,6 +512,8 @@ export default function RadioMiniApp() {
     audio.setAttribute('webkit-playsinline', 'true')
     audio.setAttribute('x5-video-player-type', 'h5')
     audio.setAttribute('x5-video-player-fullscreen', 'true')
+    // Начальная громкость (будет обновлена через useEffect)
+    audio.volume = isMuted ? 0 : volume / 100
     audioRef.current = audio
     
     const onPlaying = () => {
@@ -588,6 +591,7 @@ export default function RadioMiniApp() {
         if (isIOSRef.current && !fallbackModeRef.current) {
           console.log('[AUDIO] Переключение в FALLBACK MODE')
           fallbackModeRef.current = true
+          setIsFallbackMode(true)
         }
       }
       
@@ -954,6 +958,7 @@ export default function RadioMiniApp() {
     if (isIOS) {
       console.log('[PLAY] iOS - using FALLBACK mode')
       fallbackModeRef.current = true
+      setIsFallbackMode(true)
     }
     
     timeoutRef.current = setTimeout(() => {
@@ -966,7 +971,8 @@ export default function RadioMiniApp() {
     }, LOAD_TIMEOUT)
     
     try {
-      audio.volume = isMuted ? 0 : volume / 100
+      // Громкость управляется через useEffect (WebAudio GainNode или audio.volume)
+      // НЕ устанавливаем audio.volume здесь - это перезапишет усиление
       
       if (!audio.src || audio.src !== STREAM_URL) {
         audio.src = STREAM_URL
@@ -1006,9 +1012,11 @@ export default function RadioMiniApp() {
             }, REAL_MODE_CHECK_DELAY)
           } else {
             fallbackModeRef.current = true
+            setIsFallbackMode(true)
           }
         } else {
           fallbackModeRef.current = true
+          setIsFallbackMode(true)
         }
       }
       
@@ -1033,6 +1041,7 @@ export default function RadioMiniApp() {
       
       if (isIOS && !fallbackModeRef.current) {
         fallbackModeRef.current = true
+        setIsFallbackMode(true)
       }
     }
   }
@@ -1099,7 +1108,7 @@ export default function RadioMiniApp() {
   // RENDER
   // =====================================================
   const isIOSDevice = isIOSRef.current
-  const isFallbackActive = fallbackModeRef.current
+  const isFallbackActive = isFallbackMode
 
   return (
     <>
