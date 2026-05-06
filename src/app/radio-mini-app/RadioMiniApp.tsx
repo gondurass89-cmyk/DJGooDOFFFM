@@ -735,6 +735,7 @@ export default function RadioMiniApp() {
           username: user?.username || null,
           action,
           isAdmin: user?.id === ADMIN_USER_ID,
+          isTelegram: !!user,  // true если это Telegram пользователь
         }),
       })
     } catch (e) {
@@ -835,6 +836,7 @@ export default function RadioMiniApp() {
         username: user?.username || null,
         action: 'close',
         isAdmin: user?.id === ADMIN_USER_ID,
+        isTelegram: !!user,  // true если это Telegram пользователь
       })], { type: 'application/json' }))
     }
     window.addEventListener('beforeunload', sendClose)
