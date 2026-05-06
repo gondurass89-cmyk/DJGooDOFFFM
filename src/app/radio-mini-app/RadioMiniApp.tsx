@@ -13,7 +13,8 @@ import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, Chevr
 // =====================================================
 // КОНСТАНТЫ
 // =====================================================
-const STREAM_URL = 'https://radio-stream.gondurass89.workers.dev'
+// ПРЯМОЙ HTTPS ПОТОК AZURACAST - надежнее чем Worker!
+const STREAM_URL = 'https://stream.volfrings.ru/listen/djgoodofffm/radio.mp3'
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
 const LISTENERS_API = 'https://listeners.gondurass89.workers.dev'
