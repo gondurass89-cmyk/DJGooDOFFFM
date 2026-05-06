@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DJ GooD OFF FM — Документация</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg:       #050510;
+  --bg2:      #090918;
+  --bg3:      #0d0d22;
+  --cyan:     #00f5ff;
+  --magenta:  #ff00aa;
+  --purple:   #9d00ff;
+  --green:    #00ff88;
+  --yellow:   #f5e642;
+  --text:     #c8d8f0;
+  --muted:    #4a6080;
+  --border:   rgba(0,245,255,0.18);
+  --glow-c:   0 0 8px #00f5ff, 0 0 24px rgba(0,245,255,0.35);
+  --glow-m:   0 0 8px #ff00aa, 0 0 24px rgba(255,0,170,0.35);
+  --glow-g:   0 0 8px #00ff88, 0 0 24px rgba(0,255,136,0.35);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+#matrix-canvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+  opacity: 0.07;
+  pointer-events: none;
+}
+
+.page-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  background: rgba(5,5,16,0.97);
+  border-right: 1px solid var(--border);
+  padding: 28px 0;
+  backdrop-filter: blur(12px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--cyan) transparent;
+}
+.sidebar::-webkit-scrollbar { width: 3px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--cyan); }
+
+.sidebar-logo {
+  padding: 0 22px 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.sidebar-logo .logo-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--cyan);
+  text-shadow: var(--glow-c);
+  letter-spacing: 1px;
+  line-height: 1.3;
+}
+.sidebar-logo .logo-sub {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.nav-section {
+  padding: 0 12px;
+  margin-bottom: 8px;
+}
+.nav-section-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 10px;
+  margin-bottom: 2px;
+}
+.nav-item {
+  display: block;
+  padding: 7px 10px;
+  border-radius: 4px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 12.5px;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+  margin-bottom: 1px;
+}
+.nav-item:hover, .nav-item.active {
+  background: rgba(0,245,255,0.07);
+  border-color: var(--border);
+  color: var(--cyan);
+  text-shadow: 0 0 6px rgba(0,245,255,0.5);
+}
+.nav-item .nav-num {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+.content {
+  padding: 0;
+  max-width: 1000px;
+}
+
+.hero {
+  padding: 60px 56px 48px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(ellipse at 30% 50%, rgba(0,245,255,0.05) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 20%, rgba(157,0,255,0.06) 0%, transparent 50%);
+}
+.hero-badge {
+  display: inline-block;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--green);
+  border: 1px solid var(--green);
+  padding: 3px 10px;
+  margin-bottom: 18px;
+  text-shadow: var(--glow-g);
+  box-shadow: var(--glow-g);
+  animation: pulse-green 2s ease-in-out infinite;
+}
+@keyframes pulse-green {
+  0%,100% { box-shadow: 0 0 6px rgba(0,255,136,0.4); }
+  50% { box-shadow: 0 0 16px rgba(0,255,136,0.7), 0 0 30px rgba(0,255,136,0.3); }
+}
+.hero h1 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 38px;
+  font-weight: 900;
+  color: var(--cyan);
+  text-shadow: var(--glow-c);
+  letter-spacing: 2px;
+  line-height: 1.15;
+  margin-bottom: 10px;
+}
+.hero h1 span { color: var(--magenta); text-shadow: var(--glow-m); }
+.hero-desc {
+  font-size: 15px;
+  color: var(--muted);
+  max-width: 560px;
+  margin-bottom: 28px;
+  line-height: 1.6;
+}
+.hero-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+.tag {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  padding: 4px 10px;
+  border: 1px solid;
+  border-radius: 2px;
+}
+.tag-cyan  { color: var(--cyan);    border-color: rgba(0,245,255,0.4);  background: rgba(0,245,255,0.06); }
+.tag-mag   { color: var(--magenta); border-color: rgba(255,0,170,0.4);  background: rgba(255,0,170,0.06); }
+.tag-purple{ color: var(--purple);  border-color: rgba(157,0,255,0.4);  background: rgba(157,0,255,0.06); }
+.tag-green { color: var(--green);   border-color: rgba(0,255,136,0.4);  background: rgba(0,255,136,0.06); }
+
+.section {
+  padding: 52px 56px;
+  border-bottom: 1px solid var(--border);
+}
+.section:last-child { border-bottom: none; }
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 32px;
+}
+.section-num {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: var(--cyan);
+  background: rgba(0,245,255,0.08);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  letter-spacing: 2px;
+  flex-shrink: 0;
+}
+.section-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #e8f4ff;
+  letter-spacing: 1px;
+}
+
+.section-subtitle {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 14px;
+  color: var(--cyan);
+  letter-spacing: 2px;
+  margin: 24px 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 28px; }
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  padding: 20px;
+  position: relative;
+  transition: all 0.25s;
+}
+.card::before, .card::after {
+  content: '';
+  position: absolute;
+  width: 10px; height: 10px;
+  border-color: var(--cyan);
+  border-style: solid;
+}
+.card::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+.card::after  { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+.card:hover { background: rgba(0,245,255,0.04); border-color: rgba(0,245,255,0.35); }
+
+.card-icon { font-size: 22px; margin-bottom: 10px; }
+.card-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  margin-bottom: 7px;
+}
+.card-desc { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+/* Реальный скриншот интерфейса */
+.ui-showcase {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 40px;
+  align-items: start;
+  margin-top: 8px;
+}
+.screenshot-wrap { flex-shrink: 0; }
+.screenshot-frame {
+  background: #111120;
+  border: 1px solid rgba(0,245,255,0.3);
+  border-radius: 12px;
+  overflow: hidden;
+  width: 280px;
+  box-shadow: var(--glow-c), 0 20px 60px rgba(0,0,0,0.6);
+}
+.screenshot-titlebar {
+  background: #1a1a2e;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--text);
+}
+.titlebar-dots { display: flex; gap: 5px; }
+.titlebar-dots span { width: 8px; height: 8px; border-radius: 50%; }
+.dot-r { background: #ff5f57; }
+.dot-y { background: #febc2e; }
+.dot-g { background: #28c840; }
+.screenshot-img {
+  width: 100%;
+  display: block;
+}
+.ui-features { display: flex; flex-direction: column; gap: 14px; }
+.ui-feature {
+  display: flex;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--cyan);
+}
+.ui-feature-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.ui-feature-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  margin-bottom: 4px;
+}
+.ui-feature-desc { font-size: 12.5px; color: var(--muted); }
+
+.tech-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+}
+.tech-table th {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-align: left;
+  padding: 10px 14px;
+  background: rgba(0,245,255,0.05);
+  border-bottom: 1px solid var(--cyan);
+}
+.tech-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(0,245,255,0.07);
+  font-size: 13px;
+  vertical-align: top;
+}
+.tech-table tr:hover td { background: rgba(0,245,255,0.03); }
+.tech-table td:first-child {
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--magenta);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.tech-table td:nth-child(2) { color: var(--cyan); font-weight: 500; }
+.tech-table td:nth-child(3) { color: var(--muted); }
+
+.arch-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 8px 0;
+}
+.arch-node {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  padding: 16px 20px;
+  position: relative;
+}
+.arch-node.primary   { border-color: rgba(0,245,255,0.5); }
+.arch-node.secondary { border-color: rgba(157,0,255,0.4); }
+.arch-node.tertiary  { border-color: rgba(0,255,136,0.4); }
+.arch-node-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+.arch-node.primary   .arch-node-title { color: var(--cyan); text-shadow: var(--glow-c); }
+.arch-node.secondary .arch-node-title { color: var(--purple); }
+.arch-node.tertiary  .arch-node-title { color: var(--green); }
+.arch-node-sub { font-size: 12px; color: var(--muted); }
+.arch-arrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 20px;
+  color: var(--muted);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+}
+.arch-arrow::before {
+  content: '';
+  width: 1px;
+  height: 28px;
+  background: linear-gradient(to bottom, var(--cyan), var(--purple));
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.steps { display: flex; flex-direction: column; gap: 16px; margin-top: 8px; }
+.step-item { display: flex; gap: 18px; }
+.step-num {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--cyan);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cyan);
+  text-shadow: var(--glow-c);
+  flex-shrink: 0;
+  box-shadow: var(--glow-c);
+}
+.step-content { flex: 1; padding-top: 4px; }
+.step-title {
+  font-weight: 600;
+  color: #e8f4ff;
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+.step-desc { font-size: 13px; color: var(--muted); }
+
+.code-block {
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(0,245,255,0.15);
+  border-left: 2px solid var(--cyan);
+  padding: 16px 18px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: var(--green);
+  overflow-x: auto;
+  margin: 14px 0;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+.code-block .comment { color: var(--muted); }
+.code-block .cmd { color: var(--cyan); }
+.code-block .str { color: var(--yellow); }
+
+.api-cards { display: flex; flex-direction: column; gap: 16px; }
+.api-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+}
+.api-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(0,245,255,0.04);
+  border-bottom: 1px solid var(--border);
+}
+.api-method {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  letter-spacing: 1px;
+}
+.method-get  { background: rgba(0,255,136,0.15); color: var(--green); border: 1px solid rgba(0,255,136,0.4); }
+.method-post { background: rgba(0,245,255,0.15); color: var(--cyan);  border: 1px solid rgba(0,245,255,0.4); }
+.api-path {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px;
+  color: var(--cyan);
+}
+.api-desc { font-size: 12px; color: var(--muted); margin-left: auto; }
+.api-body { padding: 14px 16px; }
+
+.roadmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.roadmap-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  padding: 18px;
+}
+.roadmap-version {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cyan);
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.roadmap-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.roadmap-item::before {
+  content: '◻';
+  color: var(--border);
+  flex-shrink: 0;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.faq { display: flex; flex-direction: column; gap: 10px; }
+.faq-item {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+}
+.faq-q {
+  padding: 14px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  color: #e8f4ff;
+  font-weight: 500;
+  font-size: 13.5px;
+  user-select: none;
+}
+.faq-q::after {
+  content: '▸';
+  color: var(--cyan);
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: transform 0.25s;
+}
+.faq-item.open .faq-q::after { transform: rotate(90deg); }
+.faq-a {
+  display: none;
+  padding: 0 16px 14px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.65;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.faq-item.open .faq-a { display: block; }
+
+.links-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.link-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  transition: all 0.2s;
+  color: inherit;
+}
+.link-card:hover { border-color: rgba(0,245,255,0.4); background: rgba(0,245,255,0.04); }
+.link-icon { font-size: 20px; flex-shrink: 0; }
+.link-name { font-size: 13px; font-weight: 500; color: var(--cyan); margin-bottom: 2px; }
+.link-url  { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--muted); }
+
+.status-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.status-badge {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  padding: 4px 10px;
+  border: 1px solid;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.status-badge::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  animation: pulse-dot 1.5s infinite;
+}
+@keyframes pulse-dot {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.sb-live { color: var(--green); border-color: rgba(0,255,136,0.5); }
+.sb-live::before { background: var(--green); }
+.sb-ver  { color: var(--cyan); border-color: rgba(0,245,255,0.4); }
+.sb-ver::before  { background: var(--cyan); animation: none; }
+
+.trouble-list { display: flex; flex-direction: column; gap: 12px; }
+.trouble-item {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--yellow);
+  padding: 14px 18px;
+}
+.trouble-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--yellow);
+  margin-bottom: 6px;
+}
+.trouble-desc { font-size: 12.5px; color: var(--muted); }
+
+.info-box {
+  background: rgba(0,245,255,0.05);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--cyan);
+  padding: 14px 18px;
+  margin: 16px 0;
+}
+.info-box-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  margin-bottom: 8px;
+}
+.info-box-content { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+.file-tree {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  padding: 16px 20px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  line-height: 1.8;
+  overflow-x: auto;
+}
+.file-tree .folder { color: var(--cyan); }
+.file-tree .file { color: var(--green); }
+.file-tree .comment { color: var(--muted); }
+
+@media (max-width: 900px) {
+  .page-grid { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  .hero, .section { padding: 36px 24px; }
+  .ui-showcase { grid-template-columns: 1fr; }
+  .screenshot-frame { width: 100%; max-width: 280px; margin: 0 auto; }
+  .hero h1 { font-size: 26px; }
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: rgba(0,245,255,0.4); }
+::selection { background: rgba(0,245,255,0.25); color: #fff; }
+</style>
+</head>
+<body>
+
+<canvas id="matrix-canvas"></canvas>
+
+<div class="page-grid">
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-title">DJ GooD OFF FM</div>
+    <div class="logo-sub">Telegram Mini App</div>
+  </div>
+
+  <nav>
+    <div class="nav-section">
+      <div class="nav-section-title">Начало</div>
+      <a class="nav-item active" href="#overview"><span class="nav-num">01</span>Описание проекта</a>
+      <a class="nav-item" href="#interface"><span class="nav-num">02</span>Интерфейс</a>
+      <a class="nav-item" href="#architecture"><span class="nav-num">03</span>Архитектура</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Устройство</div>
+      <a class="nav-item" href="#requirements"><span class="nav-num">04</span>Требования</a>
+      <a class="nav-item" href="#tutorial"><span class="nav-num">05</span>Туториал</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Настройка</div>
+      <a class="nav-item" href="#config"><span class="nav-num">06</span>Конфигурация</a>
+      <a class="nav-item" href="#api"><span class="nav-num">07</span>API</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Справка</div>
+      <a class="nav-item" href="#troubleshoot"><span class="nav-num">08</span>Устранение ошибок</a>
+      <a class="nav-item" href="#faq"><span class="nav-num">09</span>FAQ</a>
+      <a class="nav-item" href="#roadmap"><span class="nav-num">10</span>Roadmap</a>
+      <a class="nav-item" href="#links"><span class="nav-num">11</span>Полезные ссылки</a>
+    </div>
+  </nav>
+</aside>
+
+<main class="content">
+
+<!-- ГЕРОЙ -->
+<section class="hero">
+  <div class="hero-badge">● LIVE DOCUMENTATION v1.0</div>
+  <h1>DJ GooD OFF FM<br><span>Radio</span></h1>
+  <p class="hero-desc">Telegram Mini App для прослушивания онлайн-радио прямо в мессенджере Telegram. Приложение работает как веб-сайт, который открывается внутри Telegram и выглядит как нативное приложение.</p>
+  <div class="hero-tags">
+    <span class="tag tag-cyan">Next.js 14</span>
+    <span class="tag tag-mag">TypeScript</span>
+    <span class="tag tag-purple">Cloudflare Workers</span>
+    <span class="tag tag-green">Telegram Mini App</span>
+    <span class="tag tag-cyan">AzuraCast</span>
+    <span class="tag tag-mag">Web Audio API</span>
+  </div>
+</section>
+
+<!-- 01 ОПИСАНИЕ ПРОЕКТА -->
+<section class="section" id="overview">
+  <div class="section-header">
+    <div class="section-num">01</div>
+    <h2 class="section-title">Описание проекта</h2>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-badge sb-live">Радио в эфире</div>
+    <div class="status-badge sb-ver">Версия 1.0</div>
+  </div>
+
+  <h3 class="section-subtitle">Какие задачи решает</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="card-icon">📻</div>
+      <div class="card-title">Радио в Telegram</div>
+      <div class="card-desc">Прослушивание радио без установки отдельных приложений — пользователь просто открывает Mini App в Telegram</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🎵</div>
+      <div class="card-title">Now Playing</div>
+      <div class="card-desc">Отображение названия текущего трека — автоматически обновляется каждые 5 секунд</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">📊</div>
+      <div class="card-title">Визуальный эквалайзер</div>
+      <div class="card-desc">Показывает частоты звука в реальном времени — 24 полосы визуализации</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🎚️</div>
+      <div class="card-title">Настройка звука</div>
+      <div class="card-desc">3-полосный эквалайзер (Bass/Mid/Treble) + усиление громкости до 250%</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">👥</div>
+      <div class="card-title">Подсчёт слушателей</div>
+      <div class="card-desc">Показывает сколько человек слушают радио прямо сейчас через Cloudflare D1</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🖼️</div>
+      <div class="card-title">Загрузка обложек</div>
+      <div class="card-desc">Автоматический поиск обложек треков в Last.fm и Apple Music</div>
+    </div>
+  </div>
+
+  <h3 class="section-subtitle">Как работает (простым языком)</h3>
+  <div class="arch-flow">
+    <div class="arch-node primary">
+      <div class="arch-node-title">ПОЛЬЗОВАТЕЛЬ</div>
+      <div class="arch-node-sub">Открывает Telegram → нажимает на Bot → открывается Mini App</div>
+    </div>
+    <div class="arch-arrow">Загружается</div>
+    <div class="arch-node secondary">
+      <div class="arch-node-title">MINI APP</div>
+      <div class="arch-node-sub">Мини-приложение загружается с сервера Vercel</div>
+    </div>
+    <div class="arch-arrow">Подключается</div>
+    <div class="arch-node tertiary">
+      <div class="arch-node-title">AZURACAST</div>
+      <div class="arch-node-sub">Приложение подключается к аудиопотоку AzuraCast</div>
+    </div>
+    <div class="arch-arrow">Результат</div>
+    <div class="arch-node primary">
+      <div class="arch-node-title">МУЗЫКА</div>
+      <div class="arch-node-sub">Пользователь слышит музыку и видит название трека</div>
+    </div>
+  </div>
+
+  <div class="info-box">
+    <div class="info-box-title">Важные понятия</div>
+    <div class="info-box-content">
+      <strong>Telegram Mini App</strong> — веб-страница, которая открывается внутри Telegram как приложение<br>
+      <strong>AzuraCast</strong> — программа на сервере, которая вещает радио в интернет<br>
+      <strong>Cloudflare Worker</strong> — маленькая программа в облаке, которая передаёт данные между сервером и приложением
+    </div>
+  </div>
+
+  <h3 class="section-subtitle">Стек технологий</h3>
+  <table class="tech-table">
+    <thead>
+      <tr>
+        <th>Категория</th>
+        <th>Технология</th>
+        <th>Зачем нужна</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Frontend</td><td>Next.js 14</td><td>Фреймворк для создания веб-приложения</td></tr>
+      <tr><td>UI</td><td>React 18</td><td>Библиотека для создания интерфейса</td></tr>
+      <tr><td>Стили</td><td>Tailwind CSS</td><td>Быстрое написание CSS стилей</td></tr>
+      <tr><td>Анимации</td><td>Framer Motion</td><td>Плавные анимации интерфейса</td></tr>
+      <tr><td>Иконки</td><td>Lucide React</td><td>Красивые иконки</td></tr>
+      <tr><td>Аудио</td><td>Web Audio API</td><td>Обработка звука в браузере</td></tr>
+      <tr><td>Backend</td><td>Next.js API Routes</td><td>Серверные функции</td></tr>
+      <tr><td>Workers</td><td>Cloudflare Workers</td><td>Обработка запросов в облаке</td></tr>
+      <tr><td>База данных</td><td>Cloudflare D1</td><td>Хранение данных о слушателях</td></tr>
+      <tr><td>Радио-сервер</td><td>AzuraCast</td><td>Вещание аудиопотока</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 02 ИНТЕРФЕЙС -->
+<section class="section" id="interface">
+  <div class="section-header">
+    <div class="section-num">02</div>
+    <h2 class="section-title">Интерфейс</h2>
+  </div>
+
+  <div class="ui-showcase">
+    <div class="screenshot-wrap">
+      <div class="screenshot-frame">
+        <div class="screenshot-titlebar">
+          <div class="titlebar-dots">
+            <span class="dot-r"></span>
+            <span class="dot-y"></span>
+            <span class="dot-g"></span>
+          </div>
+          <span style="font-size:9px;color:var(--muted);">DJ GooD OFF FM</span>
+          <span style="font-size:9px;color:var(--muted);">✕</span>
+        </div>
+        <img
+          src="interface-screenshot.png"
+          style="width:100%;display:block;"
+          alt="DJ GooD OFF FM интерфейс"
+        />
+      </div>
+      <div style="margin-top:10px;text-align:center;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);">TELEGRAM WEBVIEW</div>
+    </div>
+
+    <div class="ui-features">
+      <div class="ui-feature">
+        <div class="ui-feature-icon">🎨</div>
+        <div>
+          <div class="ui-feature-title">Matrix Background</div>
+          <div class="ui-feature-desc">Анимированный фон с падающими японскими и латинскими символами</div>
+        </div>
+      </div>
+      <div class="ui-feature" style="border-left-color:var(--magenta);">
+        <div class="ui-feature-icon">📊</div>
+        <div>
+          <div class="ui-feature-title" style="color:var(--magenta);">Визуализатор 24 полосы</div>
+          <div class="ui-feature-desc">Bass (розовый) · Mid (зелёный) · Treble (голубой)</div>
+        </div>
+      </div>
+      <div class="ui-feature" style="border-left-color:var(--green);">
+        <div class="ui-feature-icon">🖼️</div>
+        <div>
+          <div class="ui-feature-title" style="color:var(--green);">Обложка альбома</div>
+          <div class="ui-feature-desc">Автоматический поиск через Last.fm и Apple Music</div>
+        </div>
+      </div>
+      <div class="ui-feature">
+        <div class="ui-feature-icon">📜</div>
+        <div>
+          <div class="ui-feature-title">Бегущая строка</div>
+          <div class="ui-feature-desc">Название трека с эффектом Matrix-перебора символов</div>
+        </div>
+      </div>
+      <div class="ui-feature" style="border-left-color:var(--magenta);">
+        <div class="ui-feature-icon">🎚️</div>
+        <div>
+          <div class="ui-feature-title" style="color:var(--magenta);">Эквалайзер</div>
+          <div class="ui-feature-desc">Bass / Mid / Treble от −12 до +12 dB · 6 пресетов (Flat, Bass, Electronic, Rock, Vocal, Club)</div>
+        </div>
+      </div>
+      <div class="ui-feature" style="border-left-color:var(--green);">
+        <div class="ui-feature-icon">🔊</div>
+        <div>
+          <div class="ui-feature-title" style="color:var(--green);">Громкость 0–250%</div>
+          <div class="ui-feature-desc">Усиление через Web Audio API GainNode</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="section-subtitle">Основные функции</h3>
+  <div class="steps">
+    <div class="step-item">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <div class="step-title">Play/Pause</div>
+        <div class="step-desc">Запуск и остановка воспроизведения</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <div class="step-title">Громкость</div>
+        <div class="step-desc">Регулировка от 0% до 250% (с усилением)</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <div class="step-title">Эквалайзер</div>
+        <div class="step-desc">Настройка Bass/Mid/Treble от -12 до +12 dB</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <div class="step-title">Пресеты</div>
+        <div class="step-desc">Готовые настройки: Flat, Bass, Electronic, Rock, Vocal, Club</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <div class="step-title">Бегущая строка</div>
+        <div class="step-desc">Показывает название трека с эффектом Matrix</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">6</div>
+      <div class="step-content">
+        <div class="step-title">Обложка</div>
+        <div class="step-desc">Автоматический поиск обложки альбома</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 03 АРХИТЕКТУРА -->
+<section class="section" id="architecture">
+  <div class="section-header">
+    <div class="section-num">03</div>
+    <h2 class="section-title">Архитектура</h2>
+  </div>
+
+  <h3 class="section-subtitle">Как устроен проект</h3>
+  <div class="arch-flow">
+    <div class="arch-node primary">
+      <div class="arch-node-title">TELEGRAM</div>
+      <div class="arch-node-sub">Пользователь открывает Mini App через бота</div>
+    </div>
+    <div class="arch-arrow">Загружает веб-приложение</div>
+    <div class="arch-node primary">
+      <div class="arch-node-title">FRONTEND — Next.js на Vercel</div>
+      <div class="arch-node-sub">RadioMiniApp.tsx · MatrixBackground · MarqueeText · Web Audio API · Telegram WebApp API</div>
+    </div>
+    <div class="arch-arrow">API запросы</div>
+    <div class="arch-node secondary">
+      <div class="arch-node-title">CLOUDFLARE WORKERS</div>
+      <div class="arch-node-sub">nowplaying-worker — текущий трек · listeners-worker + D1 — счётчик слушателей · radio-stream — HTTPS прокси аудио</div>
+    </div>
+    <div class="arch-arrow">Метаданные радио</div>
+    <div class="arch-node tertiary">
+      <div class="arch-node-title">AZURACAST</div>
+      <div class="arch-node-sub">Liquidsoap + Icecast · MP3 поток 24/7 · API /api/nowplaying · Метаданные треков</div>
+    </div>
+  </div>
+
+  <h3 class="section-subtitle">Связь между частями</h3>
+  <table class="tech-table">
+    <thead>
+      <tr><th>Откуда</th><th>Куда</th><th>Что передаётся</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Frontend</td><td>/api/now-playing</td><td>GET запрос текущего трека</td></tr>
+      <tr><td>/api/now-playing</td><td>Cloudflare Worker</td><td>GET запрос к AzuraCast</td></tr>
+      <tr><td>Frontend</td><td>/api/listener</td><td>POST (регистрация/heartbeat)</td></tr>
+      <tr><td>Frontend</td><td>AzuraCast Stream</td><td>Аудиопоток MP3</td></tr>
+      <tr><td>Frontend</td><td>/api/cover</td><td>GET запрос обложки</td></tr>
+      <tr><td>/api/cover</td><td>Last.fm / Apple Music</td><td>Поиск обложки</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="section-subtitle">Схема данных</h3>
+  <div class="code-block"><span class="comment">// AzuraCast API Response:</span>
+{
+  <span class="str">"now_playing"</span>: {
+    <span class="str">"song"</span>: {
+      <span class="str">"text"</span>: <span class="str">"Artist - Title (Mix)"</span>,
+      <span class="str">"art"</span>: <span class="str">"https://..."</span>
+    },
+    <span class="str">"duration"</span>: 240,
+    <span class="str">"elapsed"</span>: 120
+  },
+  <span class="str">"listeners"</span>: { <span class="str">"total"</span>: 5 },
+  <span class="str">"is_online"</span>: true
+}
+
+<span class="comment">// Worker обрабатывает:</span>
+<span class="comment">// - Удаляет мусор из названия (Camelot keys, URLs, etc.)</span>
+<span class="comment">// - Форматирует в Title Case</span>
+<span class="comment">// - Возвращает JSON</span>
+
+<span class="comment">// Frontend получает:</span>
+{
+  <span class="str">"title"</span>: <span class="str">"Artist - Title (Mix)"</span>,
+  <span class="str">"artist"</span>: <span class="str">"Artist"</span>,
+  <span class="str">"listeners"</span>: 5,
+  <span class="str">"online"</span>: true
+}</div>
+</section>
+
+<!-- 04 ТРЕБОВАНИЯ -->
+<section class="section" id="requirements">
+  <div class="section-header">
+    <div class="section-num">04</div>
+    <h2 class="section-title">Требования</h2>
+  </div>
+
+  <h3 class="section-subtitle">Минимальные требования</h3>
+  <table class="tech-table">
+    <thead>
+      <tr><th>Компонент</th><th>Требование</th><th>Как проверить</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Компьютер</td><td>Любой современный ПК/ноутбук</td><td>—</td></tr>
+      <tr><td>ОС</td><td>Windows 10+, macOS 10.15+, Linux</td><td>—</td></tr>
+      <tr><td>RAM</td><td>4 GB минимум</td><td>—</td></tr>
+      <tr><td>Место на диске</td><td>2 GB</td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="section-subtitle">Программное обеспечение</h3>
+  <div class="cards" style="margin-bottom:20px;">
+    <div class="card">
+      <div class="card-icon">💻</div>
+      <div class="card-title">Node.js 18+</div>
+      <div class="card-desc">Для запуска JavaScript. Скачать: nodejs.org</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">📦</div>
+      <div class="card-title">npm 9+</div>
+      <div class="card-desc">Входит в состав Node.js. Для установки зависимостей</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🐙</div>
+      <div class="card-title">Git 2+</div>
+      <div class="card-desc">Для клонирования репозитория. Скачать: git-scm.com</div>
+    </div>
+  </div>
+
+  <h3 class="section-subtitle">Для production (публичный доступ)</h3>
+  <table class="tech-table">
+    <thead>
+      <tr><th>Сервис</th><th>Зачем нужен</th><th>Цена</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Vercel</td><td>Хостинг фронтенда + автодеплой</td><td>Бесплатно</td></tr>
+      <tr><td>Cloudflare Workers</td><td>Workers + D1 база данных</td><td>100k запросов/день — бесплатно</td></tr>
+      <tr><td>AzuraCast</td><td>Вещание радио (self-hosted)</td><td>Бесплатно</td></tr>
+      <tr><td>Домен</td><td>Красивый адрес (опционально)</td><td>От $10/год</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 05 ТУТОРИАЛ -->
+<section class="section" id="tutorial">
+  <div class="section-header">
+    <div class="section-num">05</div>
+    <h2 class="section-title">Полный туториал для новичка</h2>
+  </div>
+
+  <div class="info-box">
+    <div class="info-box-title">Важно</div>
+    <div class="info-box-content">Этот туториал написан для человека, который никогда не поднимал сервер и не работал с радио. Каждый шаг объясняется подробно.</div>
+  </div>
+
+  <h3 class="section-subtitle">ШАГ 1 — Установка нужных программ</h3>
+  <div class="steps">
+    <div class="step-item">
+      <div class="step-num">1.1</div>
+      <div class="step-content">
+        <div class="step-title">Установка Node.js</div>
+        <div class="step-desc"><strong>Windows:</strong> Скачайте LTS версию с nodejs.org, запустите установщик<br><strong>macOS:</strong> brew install node<br><strong>Linux:</strong> sudo apt install nodejs npm</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">1.2</div>
+      <div class="step-content">
+        <div class="step-title">Установка Git</div>
+        <div class="step-desc"><strong>Windows:</strong> Скачайте с git-scm.com/download/win<br><strong>macOS/Linux:</strong> git --version (обычно уже установлен)</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">1.3</div>
+      <div class="step-content">
+        <div class="step-title">Регистрация на сервисах</div>
+        <div class="step-desc"><strong>Vercel:</strong> vercel.com → Sign Up → Continue with GitHub<br><strong>Cloudflare:</strong> dash.cloudflare.com/sign-up</div>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="section-subtitle">ШАГ 2 — Настройка радио (AzuraCast)</h3>
+  <div class="info-box">
+    <div class="info-box-title">Примечание</div>
+    <div class="info-box-content">Если у вас уже есть работающий радио-сервер, пропустите этот шаг.</div>
+  </div>
+
+  <p style="color:var(--muted);margin-bottom:16px;">AzuraCast — это бесплатная программа для создания интернет-радио. Она включает Liquidsoap (вещание), Icecast (сервер раздачи) и Web-интерфейс.</p>
+
+  <div class="code-block"><span class="comment"># Вариант А: Свой сервер (рекомендуется для production)</span>
+<span class="cmd">ssh</span> root@IP_АДРЕС_СЕРВЕРА
+<span class="cmd">curl</span> -fsSL https://get.docker.com | sh
+<span class="cmd">mkdir</span> -p /var/azuracast <span class="cmd">&& cd</span> /var/azuracast
+<span class="cmd">curl</span> -fsSL https://raw.githubusercontent.com/AzuraCast/azuracast/main/docker.sh > docker.sh
+<span class="cmd">chmod</span> a+x docker.sh <span class="cmd">&&</span> ./docker.sh install
+
+<span class="comment"># Вариант Б: VirtualBox (рекомендуется для Windows)</span>
+<span class="comment"># 1. Скачайте VirtualBox с virtualbox.org</span>
+<span class="comment"># 2. Создайте VM с Ubuntu Server</span>
+<span class="comment"># 3. Настройте сеть: NAT + Bridged Adapter</span>
+<span class="comment"># 4. Установите Docker и AzuraCast как выше</span></div>
+
+  <h3 class="section-subtitle">ШАГ 3 — Настройка станции в AzuraCast</h3>
+  <div class="steps">
+    <div class="step-item">
+      <div class="step-num">3.1</div>
+      <div class="step-content">
+        <div class="step-title">Создайте станцию</div>
+        <div class="step-desc">Add New Station → Name: DJ GooD OFF FM → Save</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">3.2</div>
+      <div class="step-content">
+        <div class="step-title">Загрузите музыку</div>
+        <div class="step-desc">Music Files → Upload → выберите MP3 файлы</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">3.3</div>
+      <div class="step-content">
+        <div class="step-title">Настройте плейлист</div>
+        <div class="step-desc">Playlists → Создайте General Rotation → добавьте файлы</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">3.4</div>
+      <div class="step-content">
+        <div class="step-title">Получите URL потока</div>
+        <div class="step-desc">Public Pages → Stream URL (например: https://server.com/listen/station/radio.mp3)</div>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="section-subtitle">ШАГ 4 — Telegram Bot</h3>
+  <div class="steps">
+    <div class="step-item">
+      <div class="step-num">4.1</div>
+      <div class="step-content">
+        <div class="step-title">Создайте бота</div>
+        <div class="step-desc">@BotFather → /newbot → введите имя и username</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">4.2</div>
+      <div class="step-content">
+        <div class="step-title">Настройте Mini App</div>
+        <div class="step-desc">@BotFather → /newapp → введите название, описание, URL вашего приложения</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">4.3</div>
+      <div class="step-content">
+        <div class="step-title">Получите ссылку</div>
+        <div class="step-desc">BotFather пришлёт ссылку: https://t.me/ВашБот?startapp</div>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="section-subtitle">ШАГ 5 — Запуск фронтенда</h3>
+  <div class="code-block"><span class="comment"># Клонируйте репозиторий</span>
+<span class="cmd">git clone</span> https://github.com/gondurass89-cmyk/DJGooDOFFFM
+<span class="cmd">cd</span> DJGooDOFFFM
+<span class="cmd">npm install</span>
+
+<span class="comment"># Создайте .env.local</span>
+NEXT_PUBLIC_STREAM_URL=<span class="str">https://ваш-сервер/listen/station/radio.mp3</span>
+NEXT_PUBLIC_NOWPLAYING_WORKER=<span class="str">https://nowplaying.ваш-аккаунт.workers.dev</span>
+NEXT_PUBLIC_LISTENERS_WORKER=<span class="str">https://listeners.ваш-аккаунт.workers.dev</span>
+
+<span class="comment"># Запуск локально</span>
+<span class="cmd">npm run dev</span>
+
+<span class="comment"># Деплой на Vercel</span>
+<span class="cmd">git push</span> origin main  <span class="comment"># Vercel автоматически задеплоит</span></div>
+
+  <h3 class="section-subtitle">ШАГ 6 — Деплой Cloudflare Workers</h3>
+  <div class="code-block"><span class="comment"># Установите wrangler</span>
+<span class="cmd">npm install</span> -g wrangler
+<span class="cmd">wrangler login</span>
+
+<span class="comment"># Задеплойте workers</span>
+<span class="cmd">npx wrangler deploy</span> workers/nowplaying-worker.js --name nowplaying
+<span class="cmd">npx wrangler deploy</span> workers/listeners-worker.js --name listeners
+<span class="cmd">npx wrangler deploy</span> workers/radio-stream-worker.js --name radio-stream
+
+<span class="comment"># Создайте D1 базу данных</span>
+<span class="cmd">npx wrangler d1 create</span> nowplaying-db</div>
+</section>
+
+<!-- 06 КОНФИГУРАЦИЯ -->
+<section class="section" id="config">
+  <div class="section-header">
+    <div class="section-num">06</div>
+    <h2 class="section-title">Конфигурация</h2>
+  </div>
+
+  <h3 class="section-subtitle">Файлы проекта</h3>
+  <div class="file-tree">
+<span class="folder">djgoodoff-fm/</span>
+├── <span class="folder">src/app/</span>
+│   ├── <span class="folder">radio-mini-app/</span>
+│   │   ├── <span class="file">RadioMiniApp.tsx</span>    <span class="comment">← ГЛАВНЫЙ КОМПОНЕНТ (1100+ строк)</span>
+│   │   ├── <span class="file">MatrixBackground.tsx</span> <span class="comment">← Анимация падающих символов</span>
+│   │   ├── <span class="file">MatrixText.tsx</span>       <span class="comment">← Эффект перебора символов</span>
+│   │   └── <span class="file">MarqueeText.tsx</span>      <span class="comment">← Бегущая строка</span>
+│   ├── <span class="folder">api/</span>
+│   │   ├── <span class="file">now-playing/route.ts</span> <span class="comment">← API: текущий трек</span>
+│   │   ├── <span class="file">cover/route.ts</span>       <span class="comment">← API: поиск обложки</span>
+│   │   └── <span class="file">listener/route.ts</span>    <span class="comment">← API: трекинг слушателей</span>
+│   └── <span class="file">layout.tsx</span>           <span class="comment">← Telegram SDK</span>
+├── <span class="folder">workers/</span>
+│   ├── <span class="file">nowplaying-worker.js</span>  <span class="comment">← Трек из AzuraCast</span>
+│   ├── <span class="file">listeners-worker.js</span>    <span class="comment">← Счётчик слушателей</span>
+│   └── <span class="file">radio-stream-worker.js</span> <span class="comment">← Прокси потока</span>
+└── <span class="file">package.json</span>          <span class="comment">← Зависимости</span>
+  </div>
+
+  <h3 class="section-subtitle">Настройка аудиопотока</h3>
+  <div class="code-block"><span class="comment">// В файле RadioMiniApp.tsx, строка 20-21:</span>
+<span class="cmd">const</span> STREAM_URL = <span class="str">'https://your-radio-server.com/listen/station-name/radio.mp3'</span>
+
+<span class="comment">// Замените на свой URL:</span>
+<span class="cmd">const</span> STREAM_URL = <span class="str">'https://ваш-домен/listen/название_станции/radio.mp3'</span></div>
+
+  <h3 class="section-subtitle">Настройка стилей</h3>
+  <div class="code-block"><span class="comment">// Цветовая схема (RadioMiniApp.tsx, строки 33-42):</span>
+<span class="cmd">const</span> COLORS = {
+  <span class="str">primary</span>: <span class="str">'#2e0071'</span>,    <span class="comment">// Основной цвет (фиолетовый)</span>
+  <span class="str">secondary</span>: <span class="str">'#00c730'</span>, <span class="comment">// Вторичный цвет (зелёный)</span>
+  <span class="str">accent</span>: <span class="str">'#00ff40'</span>,    <span class="comment">// Акцентный цвет (ярко-зелёный)</span>
+  <span class="str">bass</span>: <span class="str">'#ff0066'</span>,      <span class="comment">// Цвет басов (розовый)</span>
+  <span class="str">mid</span>: <span class="str">'#00c730'</span>,       <span class="comment">// Цвет средних частот (зелёный)</span>
+  <span class="str">high</span>: <span class="str">'#00ffcc'</span>,      <span class="comment">// Цвет высоких частот (голубой)</span>
+}</div>
+</section>
+
+<!-- 07 API -->
+<section class="section" id="api">
+  <div class="section-header">
+    <div class="section-num">07</div>
+    <h2 class="section-title">API</h2>
+  </div>
+
+  <div class="api-cards">
+    <div class="api-card">
+      <div class="api-header">
+        <span class="api-method method-get">GET</span>
+        <span class="api-path">/api/now-playing</span>
+        <span class="api-desc">Текущий трек</span>
+      </div>
+      <div class="api-body">
+        <div class="code-block">{
+  <span class="str">"title"</span>: <span class="str">"Artist - Title (Mix)"</span>,
+  <span class="str">"artist"</span>: <span class="str">"Artist"</span>,
+  <span class="str">"listeners"</span>: 5,
+  <span class="str">"online"</span>: true,
+  <span class="str">"art"</span>: <span class="str">"https://..."</span>,
+  <span class="str">"duration"</span>: 240,
+  <span class="str">"elapsed"</span>: 120
+}</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-header">
+        <span class="api-method method-get">GET</span>
+        <span class="api-path">/api/cover?artist=…&amp;title=…</span>
+        <span class="api-desc">Обложка трека</span>
+      </div>
+      <div class="api-body">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Параметры: <code style="color:var(--cyan)">artist</code>, <code style="color:var(--cyan)">title</code>, <code style="color:var(--cyan)">azuracast_art</code> (опц.)</div>
+        <div class="code-block">{ <span class="str">"cover"</span>: <span class="str">"https://..."</span>, <span class="str">"source"</span>: <span class="str">"lastfm"</span> }</div>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-header">
+        <span class="api-method method-post">POST</span>
+        <span class="api-path">/api/listener</span>
+        <span class="api-desc">Регистрация слушателя</span>
+      </div>
+      <div class="api-body">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Действия: <code style="color:var(--green)">open</code> · <code style="color:var(--cyan)">heartbeat</code> (каждые 30 сек) · <code style="color:var(--magenta)">close</code></div>
+        <div class="code-block"><span class="comment">// Request</span>
+{ <span class="str">"user_id"</span>: 123, <span class="str">"first_name"</span>: <span class="str">"Иван"</span>, <span class="str">"action"</span>: <span class="str">"open"</span> }
+
+<span class="comment">// Response</span>
+{ <span class="str">"success"</span>: true, <span class="str">"total"</span>: 5 }</div>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="section-subtitle">Схема D1 базы данных</h3>
+  <div class="code-block"><span class="comment">-- Таблица слушателей</span>
+<span class="cmd">CREATE TABLE</span> listeners (
+  user_id         <span class="str">INTEGER PRIMARY KEY</span>,
+  first_name      <span class="str">TEXT</span>,
+  last_name       <span class="str">TEXT</span>,
+  username        <span class="str">TEXT</span>,
+  is_admin        <span class="str">INTEGER DEFAULT 0</span>,
+  is_telegram     <span class="str">INTEGER DEFAULT 0</span>,
+  last_heartbeat  <span class="str">INTEGER</span>
+);</div>
+</section>
+
+<!-- 08 УСТРАНЕНИЕ ОШИБОК -->
+<section class="section" id="troubleshoot">
+  <div class="section-header">
+    <div class="section-num">08</div>
+    <h2 class="section-title">Устранение ошибок</h2>
+  </div>
+
+  <div class="trouble-list">
+    <div class="trouble-item">
+      <div class="trouble-title">Ошибка: "Таймаут загрузки"</div>
+      <div class="trouble-desc"><strong>Причины:</strong> Аудиопоток недоступен, проблема с HTTPS, CORS ошибка<br><strong>Решение:</strong> Проверьте URL потока в браузере, убедитесь что SSL валидный</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-title">Ошибка: "Ошибка сети"</div>
+      <div class="trouble-desc"><strong>Причины:</strong> Нет интернета, сервер недоступен, блокировка провайдером<br><strong>Решение:</strong> Проверьте соединение, статус AzuraCast, попробуйте VPN</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-title">Telegram Mini App не открывается</div>
+      <div class="trouble-desc"><strong>Причины:</strong> URL не HTTPS, URL не добавлен в BotFather, Telegram старой версии<br><strong>Решение:</strong> Используйте HTTPS, выполните /newapp в @BotFather, обновите Telegram</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-title">Визуализатор не работает</div>
+      <div class="trouble-desc"><strong>Причины:</strong> iOS устройство (это нормально — fallback режим), WebAudio не инициализирован<br><strong>Решение:</strong> На iOS используется симуляция, на других устройствах нажмите Play ещё раз</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-title">Эквалайзер не влияет на звук</div>
+      <div class="trouble-desc"><strong>Причины:</strong> iOS устройство — WebAudio ограничен на iOS<br><strong>Решение:</strong> К сожалению, это ограничение Apple/Safari</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-title">Счётчик слушателей не работает</div>
+      <div class="trouble-desc"><strong>Причины:</strong> Worker не развёрнут, D1 база не создана, CORS ошибка<br><strong>Решение:</strong> Разверните listeners-worker, создайте D1 database</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-title">Название трека не обновляется</div>
+      <div class="trouble-desc"><strong>Причины:</strong> Worker не отвечает, AzuraCast API недоступен, кеширование<br><strong>Решение:</strong> Проверьте статус nowplaying-worker, добавьте _t=timestamp к запросу</div>
+    </div>
+  </div>
+</section>
+
+<!-- 09 FAQ -->
+<section class="section" id="faq">
+  <div class="section-header">
+    <div class="section-num">09</div>
+    <h2 class="section-title">FAQ</h2>
+  </div>
+
+  <div class="faq">
+    <div class="faq-item">
+      <div class="faq-q">Как добавить свой логотип?</div>
+      <div class="faq-a">Замените файл public/logo.png на свой. Рекомендуемый размер: 512x512 пикселей.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Как изменить название станции?</div>
+      <div class="faq-a">В файле RadioMiniApp.tsx измените STATION_NAME = 'DJ GooD OFF FM' на своё.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Как изменить частоту обновления трека?</div>
+      <div class="faq-a">В RadioMiniApp.tsx найдите setInterval(fetchCurrentTrack, 5000) — измените 5000 (миллисекунды) на нужное значение.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Почему на iOS нет эквалайзера?</div>
+      <div class="faq-a">Safari на iOS ограничивает Web Audio API — нельзя использовать createMediaElementSource с элементами из другого домена. Это ограничение Apple.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Как увеличить максимальную громкость?</div>
+      <div class="faq-a">Измените коэффициент в строке (volume / 100) * 2.5. 2.5 = 250%, 3.0 = 300% и т.д.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Как добавить новый пресет эквалайзера?</div>
+      <div class="faq-a">В RadioMiniApp.tsx найдите EQ_PRESETS и добавьте: myPreset: { name: 'Мой Пресет', bass: 4, mid: 2, treble: -2 }</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Сколько стоит хостинг?</div>
+      <div class="faq-a">Vercel (frontend) — бесплатно для personal проектов. Cloudflare Workers — 100,000 запросов/день бесплатно. AzuraCast нужен свой сервер (от $4-12/мес).</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Можно ли убрать рекламу из метаданных трека?</div>
+      <div class="faq-a">Worker автоматически очищает URL, Camelot keys, Energy levels и другой мусор. Если остались проблемы — добавьте паттерны в cleanTrackTitle() в nowplaying-worker.js.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 10 ROADMAP -->
+<section class="section" id="roadmap">
+  <div class="section-header">
+    <div class="section-num">10</div>
+    <h2 class="section-title">Roadmap</h2>
+  </div>
+
+  <div class="roadmap">
+    <div class="roadmap-card">
+      <div class="roadmap-version">Версия 1.2</div>
+      <div class="roadmap-item">Оффлайн режим с Service Worker</div>
+      <div class="roadmap-item">PWA manifest для установки</div>
+      <div class="roadmap-item">История прослушанных треков</div>
+      <div class="roadmap-item">Ссылка на трек в Spotify</div>
+    </div>
+    <div class="roadmap-card">
+      <div class="roadmap-version">Версия 1.3</div>
+      <div class="roadmap-item">Чат слушателей</div>
+      <div class="roadmap-item">Запросы песен</div>
+      <div class="roadmap-item">Голосование за треки</div>
+      <div class="roadmap-item">Интеграция с Last.fm</div>
+    </div>
+    <div class="roadmap-card">
+      <div class="roadmap-version">Версия 2.0</div>
+      <div class="roadmap-item">Несколько станций</div>
+      <div class="roadmap-item">Персональные рекомендации</div>
+      <div class="roadmap-item">Подкасты и записи эфиров</div>
+      <div class="roadmap-item">Монетизация</div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 ПОЛЕЗНЫЕ ССЫЛКИ -->
+<section class="section" id="links">
+  <div class="section-header">
+    <div class="section-num">11</div>
+    <h2 class="section-title">Полезные ссылки</h2>
+  </div>
+
+  <div class="links-grid">
+    <a href="https://nextjs.org/docs" class="link-card" target="_blank">
+      <div class="link-icon">📚</div>
+      <div>
+        <div class="link-name">Next.js документация</div>
+        <div class="link-url">nextjs.org/docs</div>
+      </div>
+    </a>
+    <a href="https://core.telegram.org/bots/webapps" class="link-card" target="_blank">
+      <div class="link-icon">🤖</div>
+      <div>
+        <div class="link-name">Telegram Mini Apps</div>
+        <div class="link-url">core.telegram.org/bots/webapps</div>
+      </div>
+    </a>
+    <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API" class="link-card" target="_blank">
+      <div class="link-icon">🎵</div>
+      <div>
+        <div class="link-name">Web Audio API</div>
+        <div class="link-url">developer.mozilla.org</div>
+      </div>
+    </a>
+    <a href="https://www.azuracast.com/docs" class="link-card" target="_blank">
+      <div class="link-icon">📻</div>
+      <div>
+        <div class="link-name">AzuraCast документация</div>
+        <div class="link-url">azuracast.com/docs</div>
+      </div>
+    </a>
+    <a href="https://developers.cloudflare.com/workers/" class="link-card" target="_blank">
+      <div class="link-icon">☁️</div>
+      <div>
+        <div class="link-name">Cloudflare Workers</div>
+        <div class="link-url">developers.cloudflare.com</div>
+      </div>
+    </a>
+    <a href="https://tailwindcss.com/docs" class="link-card" target="_blank">
+      <div class="link-icon">🎨</div>
+      <div>
+        <div class="link-name">Tailwind CSS</div>
+        <div class="link-url">tailwindcss.com/docs</div>
+      </div>
+    </a>
+  </div>
+
+  <div style="margin-top:40px;padding-top:20px;border-top:1px solid var(--border);text-align:center;color:var(--muted);font-size:12px;">
+    <div style="font-family:'Share Tech Mono',monospace;letter-spacing:2px;margin-bottom:8px;">DOCUMENTATION v1.0</div>
+    <div>Создано: 2026-05-06 · GitHub: <a href="https://github.com/gondurass89-cmyk/DJGooDOFFFM" style="color:var(--cyan);text-decoration:none;">gondurass89-cmyk/DJGooDOFFFM</a></div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+// Matrix rain effect
+const canvas = document.getElementById('matrix-canvas');
+const ctx = canvas.getContext('2d');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const charArray = chars.split('');
+
+const fontSize = 14;
+const columns = canvas.width / fontSize;
+
+const drops = [];
+for (let i = 0; i < columns; i++) {
+  drops[i] = Math.random() * canvas.height / fontSize;
+}
+
+function drawMatrix() {
+  ctx.fillStyle = 'rgba(5, 5, 16, 0.05)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#00ff88';
+  ctx.font = fontSize + 'px monospace';
+
+  for (let i = 0; i < drops.length; i++) {
+    const char = charArray[Math.floor(Math.random() * charArray.length)];
+    ctx.fillText(char, i * fontSize, drops[i] * fontSize);
+
+    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+      drops[i] = 0;
+    }
+    drops[i]++;
+  }
+}
+
+setInterval(drawMatrix, 50);
+
+window.addEventListener('resize', () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
+
+// FAQ accordion
+document.querySelectorAll('.faq-q').forEach(q => {
+  q.addEventListener('click', () => {
+    const item = q.parentElement;
+    item.classList.toggle('open');
+  });
+});
+
+// Smooth scroll for nav
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', (e) => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+  });
+});
+</script>
+
+</body>
+</html>
