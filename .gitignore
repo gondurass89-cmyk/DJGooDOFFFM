@@ -1,2 +1,56 @@
-.next/
+# Dependencies
 node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+.next/
+out/
+build/
+dist/
+
+# Cache
+.cache/
+*.tsbuildinfo
+.turbo/
+
+# Environment variables - КРИТИЧНО!
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Debug
+.npm/
+.eslintcache
+
+# Vercel
+.vercel
+
+# Cloudflare
+.wrangler/
+.dev.vars
+
+# Test
+coverage/
+.nyc_output/
+
+# Misc
+*.pem
