@@ -316,15 +316,27 @@ export default function RadioMiniApp() {
       barValues.push(getAverageForBinRange(dataArray, lowBin, highBin))
     }
     
-    // Сглаживание
+    // Сглаживание с учётом громкости
+    // КРИТИЧНО: analyser подключен ПЕРЕД gainNode, поэтому данные не зависят от громкости
+    // Мы вручную масштабируем значения для визуализации
+    const volumeMultiplier = isMutedRef.current ? 0 : volumeRef.current / 100
+    
     for (let i = 0; i < 24; i++) {
-      smoothedBarsRef.current[i] = smoothedBarsRef.current[i] + (barValues[i] - smoothedBarsRef.current[i]) * SMOOTHING_FACTOR
+      const rawValue = barValues[i]
+      const scaledValue = rawValue * volumeMultiplier
+      smoothedBarsRef.current[i] = smoothedBarsRef.current[i] + (scaledValue - smoothedBarsRef.current[i]) * SMOOTHING_FACTOR
     }
     
     // Отрисовка
     const width = canvas.width
     const height = canvas.height
     ctx.clearRect(0, 0, width, height)
+    
+    // Если громкость 0 - не рисуем ничего (столбики исчезают)
+    if (volumeMultiplier === 0) {
+      animationFrameRef.current = requestAnimationFrame(visualizeReal)
+      return
+    }
     
     const gap = 2
     const sectionGap = 8
@@ -334,7 +346,13 @@ export default function RadioMiniApp() {
       const section = Math.floor(i / 8)
       const barInSection = i % 8
       const x = barInSection * (barWidth + gap) + section * (8 * (barWidth + gap) + sectionGap)
-      const barHeight = Math.max(2, smoothedBarsRef.current[i] * (height - 4))
+      // Минимальная высота 2px только если значение > 0
+      const barHeight = smoothedBarsRef.current[i] > 0.01 
+        ? Math.max(2, smoothedBarsRef.current[i] * (height - 4)) 
+        : 0
+      
+      // Пропускаем столбики с нулевой высотой
+      if (barHeight <= 0) continue
       
       let gradient: CanvasGradient
       if (section === 0) {
@@ -384,6 +402,15 @@ export default function RadioMiniApp() {
       const height = canvas.height
       ctx.clearRect(0, 0, width, height)
       
+      // FALLBACK: тоже учитываем громкость для визуализации
+      const volumeMultiplier = isMutedRef.current ? 0 : volumeRef.current / 100
+      
+      // Если громкость 0 - не рисуем ничего
+      if (volumeMultiplier === 0) {
+        animationFrameRef.current = requestAnimationFrame(animate)
+        return
+      }
+      
       const time = Date.now() / 1000
       const gap = 2
       const sectionGap = 8
@@ -394,8 +421,12 @@ export default function RadioMiniApp() {
         const barInSection = i % 8
         const x = barInSection * (barWidth + gap) + section * (8 * (barWidth + gap) + sectionGap)
         
-        const baseHeight = 0.3 + Math.sin(time * 2 + i * 0.5) * 0.2 + Math.sin(time * 3.7 + i * 0.3) * 0.15
-        const barHeight = Math.max(2, baseHeight * (height - 4))
+        // Масштабируем анимацию по громкости
+        const baseHeight = (0.3 + Math.sin(time * 2 + i * 0.5) * 0.2 + Math.sin(time * 3.7 + i * 0.3) * 0.15) * volumeMultiplier
+        const barHeight = baseHeight > 0.01 ? Math.max(2, baseHeight * (height - 4)) : 0
+        
+        // Пропускаем столбики с нулевой высотой
+        if (barHeight <= 0) continue
         
         let gradient: CanvasGradient
         if (section === 0) {
