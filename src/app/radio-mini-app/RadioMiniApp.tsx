@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Pause, Volume2, VolumeX, Loader2, Radio, AlertCircle, Wifi, ChevronDown, ChevronUp } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Loader2, AlertCircle, Wifi, ChevronDown, ChevronUp } from 'lucide-react'
 
 // =====================================================
 // КОНСТАНТЫ
@@ -1215,20 +1215,25 @@ export default function RadioMiniApp() {
             </div>
           )}
           
-          {/* Информация о станции */}
+          {/* Название трека */}
           <motion.div
             animate={{ y: showEq ? -15 : 0 }}
             transition={{ duration: 0.4, ease: "easeInOut" }}
             className="skeuo-card rounded-xl p-2 text-center mb-3"
           >
-            <div className="flex items-center justify-center gap-1 mb-0.5">
-              <Radio className="w-3 h-3" style={{ color: COLORS.secondary }} />
-              <span className="text-xs uppercase tracking-wider" style={{ color: COLORS.secondary }}>Онлайн-радио</span>
-            </div>
-            <h1 className="text-base font-bold text-white">{STATION_NAME}</h1>
-            <p className="text-xs text-center" style={{ color: COLORS.secondary, marginTop: '4px' }}>Сейчас в эфире:</p>
-            <p className="text-xs text-center" style={{ color: '#fff' }}>{currentTrack}</p>
-            <p className="text-xs mt-0.5" style={{ color: COLORS.accent }}>
+            {/* Бегущая строка для длинных названий (> 40 символов) */}
+            {currentTrack.length > 40 ? (
+              <div className="track-marquee-container">
+                <div className="track-marquee-inner track-marquee-animate" style={{ '--marquee-duration': `${Math.max(8, currentTrack.length / 8)}s` } as React.CSSProperties}>
+                  <span className="text-xs" style={{ color: '#fff' }}>{currentTrack}</span>
+                  <span style={{ color: '#fff', margin: '0 2em' }}>•</span>
+                  <span className="text-xs" style={{ color: '#fff' }}>{currentTrack}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs track-static" style={{ color: '#fff' }}>{currentTrack}</p>
+            )}
+            <p className="text-xs mt-1.5" style={{ color: COLORS.accent }}>
               👥 {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
             </p>
           </motion.div>

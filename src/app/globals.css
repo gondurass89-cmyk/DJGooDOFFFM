@@ -22,18 +22,35 @@ html, body {
 }
 
 /* Бегущая строка для названия трека */
-@keyframes marquee {
+/* Анимация: текст уходит влево, скрывается полностью, появляется справа */
+@keyframes marquee-scroll {
   0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  100% { transform: translateX(-100%); }
 }
 
-.track-marquee {
-  animation: marquee 15s linear infinite;
-}
-
+/* Контейнер с overflow hidden */
 .track-marquee-container {
   overflow: hidden;
   white-space: nowrap;
+  width: 100%;
+}
+
+/* Внутренний контейнер для анимации */
+.track-marquee-inner {
+  display: inline-block;
+  padding-right: 2em; /* Отступ между повторениями */
+}
+
+/* Анимированный текст - дублируем текст через JS для бесшовного эффекта */
+.track-marquee-animate {
+  animation: marquee-scroll var(--marquee-duration, 12s) linear infinite;
+}
+
+/* Статичный текст (<= 40 символов) */
+.track-static {
+  display: inline-block;
+  text-align: center;
+  width: 100%;
 }
 
 /* =====================================================
