@@ -1412,8 +1412,8 @@ export default function RadioMiniApp() {
             transition={{ duration: 0.4, ease: "easeInOut" }}
             className="skeuo-card rounded-xl p-2 text-center mb-3"
           >
-            {/* Бегущая строка для длинных названий (> 40 символов) */}
-            {currentTrack.length > 40 ? (
+            {/* Бегущая строка для длинных названий (> 58 символов) */}
+            {currentTrack.length > 58 ? (
               <div className="track-marquee-container">
                 <div className="track-marquee-inner track-marquee-animate" style={{ '--marquee-duration': `${Math.max(8, currentTrack.length / 8)}s` } as React.CSSProperties}>
                   <span className="text-xs" style={{ color: '#fff' }}>{currentTrack}</span>

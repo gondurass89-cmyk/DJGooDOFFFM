@@ -53,9 +53,19 @@ function formatPart(text, isFirstPart) {
 function formatWord(word, isFirstWord) {
   if (!word) return word;
   const lowerWord = word.toLowerCase();
+
+  // Римские цифры
   if (/^[ivxlcdm]+$/i.test(word) && word.length <= 5) return word.toUpperCase();
+
+  // Аббревиатуры (DJ, MC, TV и т.д.) НО не музыкальные термины
+  const musicTerms = ['mix', 'remix', 'edit', 'dub', 'club', 'radio', 'version', 'original', 'extended', 'acoustic', 'instrumental', 'remastered', 'live'];
+  if (musicTerms.includes(lowerWord)) {
+    return lowerWord.charAt(0).toUpperCase() + lowerWord.slice(1);
+  }
+
   const isAbbr = /^[A-Z]{2,}$/.test(word) || ['dj', 'mc', 'tv', 'uk', 'usa', 'nyc', 'la', 'dc'].includes(lowerWord);
   if (isAbbr) return word.toUpperCase();
+
   if (!isFirstWord && LOWERCASE_WORDS.has(lowerWord)) return lowerWord;
   return lowerWord.charAt(0).toUpperCase() + lowerWord.slice(1);
 }
