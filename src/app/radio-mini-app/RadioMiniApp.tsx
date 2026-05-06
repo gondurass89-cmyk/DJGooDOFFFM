@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Play, Pause, Volume2, VolumeX, Loader2, AlertCircle, Wifi, ChevronDown, ChevronUp } from 'lucide-react'
+import MatrixBackground from './MatrixBackground'
 
 // =====================================================
 // КОНСТАНТЫ
@@ -61,7 +62,24 @@ declare global {
           }
         }
         onEvent: (event: string, callback: () => void) => void
+        offEvent: (event: string, callback: () => void) => void
         close: () => void
+        MainButton: {
+          text: string
+          color: string
+          textColor: string
+          isVisible: boolean
+          isActive: boolean
+          show: () => void
+          hide: () => void
+          enable: () => void
+          disable: () => void
+          onClick: (callback: () => void) => void
+          offClick: (callback: () => void) => void
+          setText: (text: string) => void
+          showProgress: (leaveActive?: boolean) => void
+          hideProgress: () => void
+        }
       }
     }
     webkitAudioContext?: typeof AudioContext
@@ -137,6 +155,7 @@ export default function RadioMiniApp() {
   })
   const [showEq, setShowEq] = useState(false) // Скрыт/раскрыт эквалайзер
   const [reconnecting, setReconnecting] = useState(false) // Статус переподключения
+  const [isTelegramMiniApp, setIsTelegramMiniApp] = useState(false) // Запущено ли в Telegram
 
   // =====================================================
   // ССЫЛКИ (useRef)
@@ -648,7 +667,7 @@ export default function RadioMiniApp() {
   }, [eqTreble])
 
   // =====================================================
-  // TELEGRAM WEBAPP
+  // TELEGRAM WEBAPP INIT
   // =====================================================
   useEffect(() => {
     const initTelegram = () => {
@@ -658,6 +677,8 @@ export default function RadioMiniApp() {
         tg.expand()
         const isIOSFromTG = tg.platform === 'ios'
         if (isIOSFromTG) isIOSRef.current = true
+        setIsTelegramMiniApp(true)
+        console.log('[TELEGRAM] Mini App initialized, platform:', tg.platform)
         return true
       }
       return false
@@ -931,6 +952,64 @@ export default function RadioMiniApp() {
   }
 
   // =====================================================
+  // TELEGRAM MAIN BUTTON & AUTOPLAY
+  // =====================================================
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp
+    if (!tg || !isTelegramMiniApp) return
+
+    const mainButton = tg.MainButton
+
+    // Настройка MainButton
+    const updateMainButton = () => {
+      if (isLoading) {
+        mainButton.setText('Загрузка...')
+        mainButton.showProgress()
+      } else if (isPlaying) {
+        mainButton.setText('⏸ Пауза')
+        mainButton.hideProgress()
+      } else {
+        mainButton.setText('▶ Слушать')
+        mainButton.hideProgress()
+      }
+      mainButton.show()
+      mainButton.enable()
+    }
+
+    // Обработчик клика
+    const handleMainButtonClick = () => {
+      handlePlay()
+    }
+
+    mainButton.onClick(handleMainButtonClick)
+    updateMainButton()
+
+    return () => {
+      mainButton.offClick(handleMainButtonClick)
+      mainButton.hide()
+    }
+  }, [isTelegramMiniApp, isPlaying, isLoading, handlePlay])
+
+  // =====================================================
+  // AUTOPLAY IN TELEGRAM MINI APP
+  // =====================================================
+  useEffect(() => {
+    // Автовоспроизведение только в Telegram Mini App
+    if (!isTelegramMiniApp || isPlaying) return
+
+    const tg = window.Telegram?.WebApp
+    if (!tg) return
+
+    // Небольшая задержка для инициализации
+    const timer = setTimeout(() => {
+      console.log('[TELEGRAM] Auto-starting playback')
+      handlePlay()
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [isTelegramMiniApp, isPlaying, handlePlay])
+
+  // =====================================================
   // RENDER
   // =====================================================
   const isIOSDevice = isIOSRef.current
@@ -938,6 +1017,9 @@ export default function RadioMiniApp() {
 
   return (
     <>
+      {/* Matrix Background */}
+      <MatrixBackground />
+      
       {/* Глобальные стили */}
       <style jsx global>{`
         .volume-slider {
@@ -1238,15 +1320,17 @@ export default function RadioMiniApp() {
             </p>
           </motion.div>
           
-          {/* Индикатор буферизации */}
-          {buffering && (
+          {/* Индикатор буферизации / переподключения */}
+          {(buffering || reconnecting) && (
             <motion.div
               animate={{ y: showEq ? -15 : 0 }}
               transition={{ duration: 0.4, ease: "easeInOut" }}
               className="flex items-center justify-center gap-2 mb-2 p-1.5 rounded-xl skeuo-card"
             >
               <Wifi className="w-3 h-3 animate-pulse" style={{ color: COLORS.secondary }} />
-              <span className="text-xs" style={{ color: COLORS.secondary }}>Буферизация...</span>
+              <span className="text-xs" style={{ color: COLORS.secondary }}>
+                {reconnecting ? 'Подождите, переподключение...' : 'Буферизация...'}
+              </span>
             </motion.div>
           )}
           
@@ -1263,33 +1347,35 @@ export default function RadioMiniApp() {
             </motion.div>
           )}
           
-          {/* Кнопка Play/Pause */}
-          <motion.div
-            animate={{ y: showEq ? -15 : 0 }}
-            transition={{ duration: 0.4, ease: "easeInOut" }}
-            className="flex justify-center mb-3"
-          >
-            <motion.button
-              onClick={handlePlay}
-              disabled={isLoading && !buffering}
-              whileTap={{ scale: 0.95 }}
-              className="rounded-full flex items-center justify-center"
-              style={{
-                width: '56px',
-                height: '56px',
-                background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.secondary})`,
-                boxShadow: '0 4px 15px rgba(0,199,48,0.5)'
-              }}
+          {/* Кнопка Play/Pause - только на сайте, в Telegram используется MainButton */}
+          {!isTelegramMiniApp && (
+            <motion.div
+              animate={{ y: showEq ? -15 : 0 }}
+              transition={{ duration: 0.4, ease: "easeInOut" }}
+              className="flex justify-center mb-3"
             >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" style={{ color: COLORS.dark }} />
-              ) : isPlaying ? (
-                <Pause className="w-5 h-5" style={{ color: COLORS.dark }} />
-              ) : (
-                <Play className="w-5 h-5 ml-0.5" style={{ color: COLORS.dark }} />
-              )}
-            </motion.button>
-          </motion.div>
+              <motion.button
+                onClick={handlePlay}
+                disabled={isLoading && !buffering}
+                whileTap={{ scale: 0.95 }}
+                className="rounded-full flex items-center justify-center"
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.secondary})`,
+                  boxShadow: '0 4px 15px rgba(0,199,48,0.5)'
+                }}
+              >
+                {isLoading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" style={{ color: COLORS.dark }} />
+                ) : isPlaying ? (
+                  <Pause className="w-5 h-5" style={{ color: COLORS.dark }} />
+                ) : (
+                  <Play className="w-5 h-5 ml-0.5" style={{ color: COLORS.dark }} />
+                )}
+              </motion.button>
+            </motion.div>
+          )}
           
           {/* Регулятор громкости */}
           <motion.div
