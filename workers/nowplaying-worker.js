@@ -25,19 +25,26 @@ function formatTitle(text) {
 
 function formatPart(text, isFirstPart) {
   let result = '', i = 0, wordStart = 0;
+  let inBrackets = false;  // Отслеживаем, находимся ли внутри скобок
+  
   while (i <= text.length) {
     const char = text[i];
     if (char === '(' || char === '[' || char === '{') {
       if (i > wordStart) result += formatWord(text.slice(wordStart, i), isFirstPart && wordStart === 0);
       result += char;
       wordStart = i + 1;
-      isFirstPart = true;
+      inBrackets = true;  // Вошли в скобки
     } else if (char === ')' || char === ']' || char === '}') {
-      if (i > wordStart) result += formatWord(text.slice(wordStart, i), false);
+      if (i > wordStart) result += formatWord(text.slice(wordStart, i), true);  // В скобках - с большой буквы
       result += char;
       wordStart = i + 1;
+      inBrackets = false;  // Вышли из скобок
     } else if (char === ' ') {
-      if (i > wordStart) result += formatWord(text.slice(wordStart, i), isFirstPart && wordStart === 0);
+      if (i > wordStart) {
+        // Внутри скобок - каждое слово с большой буквы
+        const isStart = inBrackets || (isFirstPart && wordStart === 0);
+        result += formatWord(text.slice(wordStart, i), isStart);
+      }
       result += char;
       wordStart = i + 1;
       isFirstPart = false;
@@ -64,8 +71,8 @@ function formatWord(word, isFirstWord) {
     return word.toUpperCase();
   }
 
-  // Аббревиатуры (DJ, MC, TV и т.д.)
-  const isAbbr = /^[A-Z]{2,}$/.test(word) || ['dj', 'mc', 'tv', 'uk', 'usa', 'nyc', 'la', 'dc'].includes(lowerWord);
+  // Аббревиатуры (DJ, MC, TV, VIP и т.д.)
+  const isAbbr = /^[A-Z]{2,}$/.test(word) || ['dj', 'mc', 'tv', 'uk', 'usa', 'nyc', 'la', 'dc', 'vip', 'lp', 'ep'].includes(lowerWord);
   if (isAbbr) return word.toUpperCase();
 
   if (!isFirstWord && LOWERCASE_WORDS.has(lowerWord)) return lowerWord;
@@ -76,6 +83,35 @@ function formatWord(word, isFirstWord) {
 // ОЧИСТКА НАЗВАНИЯ ТРЕКА
 // Обработка мусора из метатегов MP3 файлов
 // =====================================================
+
+/**
+ * Очищает artist от технического мусора в начале
+ * Например: "4A - Energy 7 - Mechanical Pressure" -> "Mechanical Pressure"
+ */
+function cleanArtistName(artist) {
+  if (!artist) return '';
+  let cleaned = artist.trim();
+  
+  // Удаляем паттерн "11A - Energy 7 - " в начале
+  cleaned = cleaned.replace(/^\d{1,2}[ABab]\s*-\s*Energy\s*\d{1,2}\s*-\s*/i, '');
+  
+  // Удаляем только Camelot key в начале "11A - " или "11A "
+  cleaned = cleaned.replace(/^\d{1,2}[ABab]\s*-\s*/i, '');
+  cleaned = cleaned.replace(/^\d{1,2}[ABab]\s+/i, '');
+  
+  // Удаляем "Energy N - " в начале
+  cleaned = cleaned.replace(/^Energy\s*\d{1,2}\s*-\s*/i, '');
+  
+  // Удаляем "Energy N" если осталось только это (это мусор, не артист)
+  if (/^Energy\s*\d{1,2}$/i.test(cleaned)) {
+    cleaned = '';
+  }
+  
+  // Убираем множественные пробелы
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  return cleaned;
+}
 
 /**
  * Удаляет мусор из отдельной части (artist или title)
@@ -350,15 +386,44 @@ export default {
       const song = nowPlaying.song || {};
       const station = data.station || {};
 
-      const rawText = song.text || '';
-      const cleanText = cleanTrackTitle(rawText);
-
-      let cleanArtist = '', cleanTitle = cleanText;
-      const parts = cleanText.split(' - ');
-      if (parts.length >= 2) {
-        cleanArtist = parts[0].trim();
-        cleanTitle = parts.slice(1).join(' - ').trim();
+      // ИСПОЛЬЗУЕМ ОТДЕЛЬНЫЕ ПОЛЯ ARTIST И TITLE (более точные!)
+      // AzuraCast правильно разделяет artist и title, в отличие от text который может содержать альбом
+      let cleanArtist = '';
+      let cleanTitle = '';
+      
+      if (song.artist && song.title) {
+        // Очищаем artist от Camelot key и Energy в начале
+        cleanArtist = cleanArtistName(song.artist);
+        // Title обычно чистый, но применяем Title Case
+        cleanTitle = song.title.trim();
+        
+        // Если после очистки artist пустой, используем title как есть
+        if (!cleanArtist) {
+          cleanArtist = toTitleCase(cleanTitle);
+          cleanTitle = '';
+        }
       }
+      
+      // Fallback: если отдельные поля пустые, парсим song.text
+      if (!cleanArtist && !cleanTitle) {
+        const rawText = song.text || '';
+        const cleanText = cleanTrackTitle(rawText);
+        const parts = cleanText.split(' - ');
+        if (parts.length >= 2) {
+          cleanArtist = parts[0].trim();
+          cleanTitle = parts.slice(1).join(' - ').trim();
+        } else {
+          cleanArtist = cleanText;
+          cleanTitle = '';
+        }
+      }
+      
+      // Форматируем в Title Case
+      cleanArtist = toTitleCase(cleanArtist);
+      cleanTitle = toTitleCase(cleanTitle);
+      
+      // Итоговая строка
+      const cleanText = cleanTitle ? `${cleanArtist} - ${cleanTitle}` : cleanArtist;
 
       return new Response(JSON.stringify({
         title: cleanText,

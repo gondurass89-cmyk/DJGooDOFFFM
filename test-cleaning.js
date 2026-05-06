@@ -22,19 +22,25 @@ function formatTitle(text) {
 
 function formatPart(text, isFirstPart) {
   let result = '', i = 0, wordStart = 0;
+  let inBrackets = false;
+  
   while (i <= text.length) {
     const char = text[i];
     if (char === '(' || char === '[' || char === '{') {
       if (i > wordStart) result += formatWord(text.slice(wordStart, i), isFirstPart && wordStart === 0);
       result += char;
       wordStart = i + 1;
-      isFirstPart = true;
+      inBrackets = true;
     } else if (char === ')' || char === ']' || char === '}') {
-      if (i > wordStart) result += formatWord(text.slice(wordStart, i), false);
+      if (i > wordStart) result += formatWord(text.slice(wordStart, i), true);
       result += char;
       wordStart = i + 1;
+      inBrackets = false;
     } else if (char === ' ') {
-      if (i > wordStart) result += formatWord(text.slice(wordStart, i), isFirstPart && wordStart === 0);
+      if (i > wordStart) {
+        const isStart = inBrackets || (isFirstPart && wordStart === 0);
+        result += formatWord(text.slice(wordStart, i), isStart);
+      }
       result += char;
       wordStart = i + 1;
       isFirstPart = false;
@@ -50,53 +56,48 @@ function formatWord(word, isFirstWord) {
   if (!word) return word;
   const lowerWord = word.toLowerCase();
 
-  // Музыкальные термины - ПЕРВЫМИ! (до римских цифр, т.к. "mix" = m+i+x все римские)
   const musicTerms = ['mix', 'remix', 'edit', 'dub', 'club', 'radio', 'version', 'original', 'extended', 'acoustic', 'instrumental', 'remastered', 'live', 'bootleg', 'vip', 'intro', 'outro'];
   if (musicTerms.includes(lowerWord)) {
     return lowerWord.charAt(0).toUpperCase() + lowerWord.slice(1);
   }
 
-  // Римские цифры (но не "mix", "dub", "live" и т.д.)
   if (/^[IVXLCDM]+$/.test(word) && word.length <= 5 && !musicTerms.includes(lowerWord)) {
     return word.toUpperCase();
   }
 
-  // Аббревиатуры (DJ, MC, TV и т.д.)
-  const isAbbr = /^[A-Z]{2,}$/.test(word) || ['dj', 'mc', 'tv', 'uk', 'usa', 'nyc', 'la', 'dc'].includes(lowerWord);
+  const isAbbr = /^[A-Z]{2,}$/.test(word) || ['dj', 'mc', 'tv', 'uk', 'usa', 'nyc', 'la', 'dc', 'vip', 'lp', 'ep'].includes(lowerWord);
   if (isAbbr) return word.toUpperCase();
 
   if (!isFirstWord && LOWERCASE_WORDS.has(lowerWord)) return lowerWord;
   return lowerWord.charAt(0).toUpperCase() + lowerWord.slice(1);
 }
 
+function cleanArtistName(artist) {
+  if (!artist) return '';
+  let cleaned = artist.trim();
+  cleaned = cleaned.replace(/^\d{1,2}[ABab]\s*-\s*Energy\s*\d{1,2}\s*-\s*/i, '');
+  cleaned = cleaned.replace(/^\d{1,2}[ABab]\s*-\s*/i, '');
+  cleaned = cleaned.replace(/^\d{1,2}[ABab]\s+/i, '');
+  cleaned = cleaned.replace(/^Energy\s*\d{1,2}\s*-\s*/i, '');
+  // Удаляем "Energy N" если осталось только это (это мусор, не артист)
+  if (/^Energy\s*\d{1,2}$/i.test(cleaned)) {
+    cleaned = '';
+  }
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  return cleaned;
+}
+
 function cleanPart(part) {
   if (!part) return '';
   let cleaned = part.trim();
-  
-  // Заменяем underscores на пробелы
   cleaned = cleaned.replace(/_/g, ' ');
-  
-  // Удаляем паттерн "11A - Energy 7 - Artist" в начале части -> оставляем только Artist
   cleaned = cleaned.replace(/^\d{1,2}[ABab]\s*-\s*Energy\s*\d{1,2}\s*-\s*/i, '');
-  
-  // Удаляем только "11A - Energy 7" (если часть заканчивается этим)
   cleaned = cleaned.replace(/\s*-\s*\d{1,2}[ABab]\s*-\s*Energy\s*\d{1,2}$/i, '');
-  
-  // Удаляем числовой ID в начале (типа 12768025_)
   cleaned = cleaned.replace(/^\d{7,}_?/g, '');
-  
-  // Удаляем watermark (WCM)
   cleaned = cleaned.replace(/\s*\(WCM\)/gi, '');
-  
-  // Удаляем vk.com/bassplace и подобные внутри названия
   cleaned = cleaned.replace(/\s*vk\.com\/[^\s]*/gi, '');
-  
-  // Удаляем год в конце части
   cleaned = cleaned.replace(/\s+\d{4}\s*$/g, '');
-  
-  // Убираем множественные пробелы
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
-  
   return cleaned;
 }
 
@@ -115,48 +116,54 @@ function isTechnicalGarbage(part) {
   return false;
 }
 
+function protectHyphensInBrackets(text) {
+  let result = '';
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '(' || char === '[') depth++;
+    else if (char === ')' || char === ']') depth--;
+    else if ((char === '-' || char === '–' || char === '—') && depth > 0) {
+      result += '\x00HYPHEN\x00';
+      continue;
+    }
+    result += char;
+  }
+  return result;
+}
+
+function restoreHyphensInBrackets(text) {
+  return text.replace(/\x00HYPHEN\x00/g, '-');
+}
+
 function cleanTrackTitle(text, returnNull = false) {
   if (!text) return returnNull ? null : 'DJ GooD OFF FM';
   let title = text.trim();
 
-  // 1. Удаляем BOM и невидимые символы
+  title = title.replace(/_/g, ' ');
   title = title.replace(/^[\uFEFF\u200B\u200C\u200D]/g, '');
-
-  // 2. Удаляем голые URL (www.site.com, https://site.com)
+  title = title.replace(/\.(mp3|wav|flac|aac|ogg|m4a|wma)$/i, '');
   title = title.replace(/\s*www\.[^\s]+/gi, '');
   title = title.replace(/\s*https?:\/\/[^\s]+/gi, '');
-
-  // 3. Удаляем ЛЮБЫЕ теги в квадратных скобках
   title = title.replace(/\s*\[[^\]]*\]/g, '');
-
-  // 4. Удаляем URL внутри круглых скобок
   title = title.replace(/\s*\([^)]*\.[^)]*\)/g, '');
-  
-  // 5. Удаляем vk.com/... внутри круглых скобок
   title = title.replace(/\s*\([^)]*vk\.com[^)]*\)/gi, '');
-
-  // 6. Удаляем watermark (WCM)
   title = title.replace(/\s*\(WCM\)/gi, '');
-
-  // 7. Удаляем год в скобках в конце
+  title = title.replace(/\s*\(\s*v\s*-\s*\d{1,2}[ABab]\s*-\s*\d{2,4}\s*\)\s*$/i, '');
+  title = title.replace(/\s*\(\s*-\s*\d{1,2}[ABab]\s*-\s*\d{2,4}\s*\)\s*$/i, '');
+  title = title.replace(/\s*\(\s*v\s*-\s*\d{2,4}\s*\)\s*$/i, '');
+  title = title.replace(/\s*\(\s*-\s*\d{2,4}\s*\)\s*$/i, '');
+  title = title.replace(/\s*\(\s*\d{1,2}[ABab]\s*-\s*\d{2,4}\s*\)\s*$/i, '');
   title = title.replace(/\s*\(\d{4}\)\s*$/g, '');
-  
-  // 8. Удаляем просто год в конце
   title = title.replace(/\s+\d{4}\s*$/g, '');
-
-  // 9. Нормализуем разделители
+  
+  title = protectHyphensInBrackets(title);
   title = title.replace(/\s*[-–—]\s*/g, ' - ');
-
-  // 10. Убираем множественные пробелы
+  title = restoreHyphensInBrackets(title);
   title = title.replace(/\s+/g, ' ').trim();
-
-  // 11. Разбиваем на части по " - "
+  
   let parts = title.split(' - ').map(p => p.trim()).filter(p => p);
-
-  // 12. Удаляем технический мусор из списка частей
   parts = parts.filter(p => !isTechnicalGarbage(p));
-
-  // 13. Очищаем каждую часть от встроенного мусора
   parts = parts.map(p => cleanPart(p)).filter(p => p);
 
   if (parts.length === 0) return returnNull ? null : 'DJ GooD OFF FM';
@@ -183,6 +190,42 @@ function cleanTrackTitle(text, returnNull = false) {
 
   if (!artist || !trackTitle) return toTitleCase(parts.join(' - '));
   return `${toTitleCase(artist)} - ${toTitleCase(trackTitle)}`;
+}
+
+// =====================================================
+// НОВАЯ ФУНКЦИЯ: Использование отдельных полей artist/title
+// =====================================================
+function processTrackWithSeparateFields(songArtist, songTitle, songText) {
+  let cleanArtist = '';
+  let cleanTitle = '';
+  
+  if (songArtist && songTitle) {
+    cleanArtist = cleanArtistName(songArtist);
+    cleanTitle = songTitle.trim();
+    
+    if (!cleanArtist) {
+      cleanArtist = toTitleCase(cleanTitle);
+      cleanTitle = '';
+    }
+  }
+  
+  // Fallback: если отдельные поля пустые, парсим song.text
+  if (!cleanArtist && !cleanTitle) {
+    const cleanText = cleanTrackTitle(songText || '');
+    const parts = cleanText.split(' - ');
+    if (parts.length >= 2) {
+      cleanArtist = parts[0].trim();
+      cleanTitle = parts.slice(1).join(' - ').trim();
+    } else {
+      cleanArtist = cleanText;
+      cleanTitle = '';
+    }
+  }
+  
+  cleanArtist = toTitleCase(cleanArtist);
+  cleanTitle = toTitleCase(cleanTitle);
+  
+  return cleanTitle ? `${cleanArtist} - ${cleanTitle}` : cleanArtist;
 }
 
 // =====================================================
@@ -228,10 +271,32 @@ const testCases = [
   ['4A - Energy 7 - Abrox - Night', 'Abrox - Night'],
 ];
 
+// Тесты с отдельными полями (новая логика!)
+const separateFieldsTests = [
+  // Реальный случай пользователя
+  {
+    artist: '4A - Energy 7 - Mechanical Pressure',
+    title: 'Red Line (Quadrat Beat Remix)',
+    text: '4A - Energy 7 - Mechanical Pressure - Contact Remixed LP - Red Line (Quadrat Beat Remix)',
+    expected: 'Mechanical Pressure - Red Line (Quadrat Beat Remix)'
+  },
+  // Другой случай из API
+  {
+    artist: '10A - Energy 6',
+    title: 'Мумий Тролль - Утекай (DJ ILYA LAVROV remix)',
+    text: '10A - Energy 6 - Мумий Тролль - Утекай (DJ ILYA LAVROV remix)',
+    expected: 'Мумий Тролль - Утекай (DJ ILYA LAVROV Remix)'
+  }
+];
+
 console.log('='.repeat(80));
 console.log('ТЕСТ ОЧИСТКИ НАЗВАНИЙ ТРЕКОВ');
 console.log('='.repeat(80));
 console.log();
+
+// Тестируем старый метод (song.text)
+console.log('ЧАСТЬ 1: Тестирование cleanTrackTitle (старый метод через song.text)');
+console.log('-'.repeat(80));
 
 let passed = 0;
 let failed = 0;
@@ -253,8 +318,32 @@ testCases.forEach(([input, expected], index) => {
 });
 
 console.log();
+console.log('ЧАСТЬ 2: Тестирование processTrackWithSeparateFields (новый метод)');
+console.log('-'.repeat(80));
+
+separateFieldsTests.forEach((test, index) => {
+  const result = processTrackWithSeparateFields(test.artist, test.title, test.text);
+  const ok = result === test.expected;
+  
+  if (ok) {
+    console.log(`✅ Тест ${index + 1}: PASSED`);
+    console.log(`   Artist: "${test.artist}"`);
+    console.log(`   Title:  "${test.title}"`);
+    console.log(`   Result: "${result}"`);
+    passed++;
+  } else {
+    console.log(`❌ Тест ${index + 1}: FAILED`);
+    console.log(`   Artist:    "${test.artist}"`);
+    console.log(`   Title:     "${test.title}"`);
+    console.log(`   Ожидалось: "${test.expected}"`);
+    console.log(`   Получено:  "${result}"`);
+    failed++;
+  }
+});
+
+console.log();
 console.log('='.repeat(80));
-console.log(`РЕЗУЛЬТАТ: ${passed}/${testCases.length} тестов пройдено`);
+console.log(`РЕЗУЛЬТАТ: ${passed}/${testCases.length + separateFieldsTests.length} тестов пройдено`);
 if (failed > 0) {
   console.log(`❌ ${failed} тестов не пройдено`);
 } else {
