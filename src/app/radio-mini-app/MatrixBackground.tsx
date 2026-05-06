@@ -37,11 +37,11 @@ export default function MatrixBackground() {
 
     // Draw function
     const draw = () => {
-      // Более прозрачный след для более длинного хвоста
-      ctx.fillStyle = 'rgba(13, 0, 38, 0.03)'
+      // Быстрое затухание для коротких хвостов (как капли дождя)
+      ctx.fillStyle = 'rgba(13, 0, 38, 0.1)'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-      // Основной цвет символов - яркий зелёный
+      // Яркий зелёный цвет символов
       ctx.font = `${fontSize}px monospace`
 
       for (let i = 0; i < drops.length; i++) {
@@ -49,15 +49,11 @@ export default function MatrixBackground() {
         const x = i * fontSize
         const y = drops[i] * fontSize
 
-        // Градиент яркости - голова ярче, хвост тусклее
-        const distanceFromTop = y / canvas.height
-        const brightness = Math.max(0.2, 1 - distanceFromTop * 0.5)
-        
-        // Голова (первый символ) - самая яркая с свечением
+        // Голова капли - ярко-зелёная со свечением
         if (drops[i] > 0) {
-          ctx.fillStyle = `rgba(180, 255, 180, ${brightness})` // Яркая голова
+          ctx.fillStyle = '#0F0' // Яркий зелёный
           ctx.shadowColor = '#0F0'
-          ctx.shadowBlur = 10
+          ctx.shadowBlur = 8
           ctx.fillText(text, x, y)
           ctx.shadowBlur = 0
         }
@@ -70,8 +66,8 @@ export default function MatrixBackground() {
       }
     }
 
-    // Animation loop - быстрее анимация
-    const interval = setInterval(draw, 35)
+    // Animation loop
+    const interval = setInterval(draw, 40)
 
     return () => {
       clearInterval(interval)
@@ -89,7 +85,7 @@ export default function MatrixBackground() {
         width: '100%',
         height: '100%',
         zIndex: 0,
-        opacity: 0.6, // Более яркий эффект
+        opacity: 0.7,
         pointerEvents: 'none',
       }}
     />
