@@ -112,27 +112,27 @@ export default {
       const song = nowPlaying.song || {};
       const station = data.station || {};
 
-      // Получаем сырой текст трека
-      const rawTitle = song.text || song.title || '';
-
-      // Очищаем название
-      const cleanTitle = cleanTrackTitle(rawTitle);
-
-      // Очищаем артиста (не заменяем на дефолт если пусто)
-      let cleanArtist = cleanTrackTitle(song.artist || '', true);
-      if (!cleanArtist) {
-        // Если artist пустой, пытаемся извлечь из title
-        const parts = cleanTitle.split(' - ');
-        if (parts.length >= 2) {
-          cleanArtist = parts[0];
-        }
+      // Получаем сырой текст трека (полная строка "Camelot - Energy - Artist - Title")
+      const rawText = song.text || '';
+      
+      // Очищаем полное название от технической информации
+      const cleanText = cleanTrackTitle(rawText);
+      
+      // Парсим Artist - Title из очищенной строки
+      let cleanArtist = '';
+      let cleanTitle = cleanText;
+      
+      const parts = cleanText.split(' - ');
+      if (parts.length >= 2) {
+        cleanArtist = parts[0].trim();
+        cleanTitle = parts.slice(1).join(' - ').trim();
       }
 
       // Формируем ответ
       const result = {
-        title: cleanTitle,
-        artist: cleanArtist || '',
-        track: cleanTrackTitle(song.title || ''),
+        title: cleanText,           // Полное название "Artist - Title"
+        artist: cleanArtist,         // Только артист
+        track: cleanTitle,           // Только название трека
         listeners: data.listeners?.total || 0,
         online: data.is_online || false,
         station: station.name || 'DJ GooD OFF FM',
