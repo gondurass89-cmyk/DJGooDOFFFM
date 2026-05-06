@@ -447,8 +447,9 @@ export default function RadioMiniApp() {
     try {
       // GainNode для управления громкостью в WebAudio цепи
       // КРИТИЧНО: audio.volume не работает когда WebAudio активен!
+      // Усиление 2.5x - на 100% громкость будет в 2.5 раза выше исходной
       const gainNode = ctx.createGain()
-      gainNode.gain.value = isMuted ? 0 : volume / 100
+      gainNode.gain.value = isMuted ? 0 : (volume / 100) * 2.5
       gainNodeRef.current = gainNode
       
       const bassFilter = ctx.createBiquadFilter()
@@ -648,18 +649,21 @@ export default function RadioMiniApp() {
   // ГРОМКОСТЬ
   // =====================================================
   useEffect(() => {
-    const effectiveVolume = isMuted ? 0 : volume / 100
-    
+    // WebAudio: коэффициент усиления 2.5x (100% = исходная * 2.5)
+    // Direct audio: максимум 1.0 (ограничение HTMLMediaElement)
+    const webAudioVolume = isMuted ? 0 : (volume / 100) * 2.5
+    const directVolume = isMuted ? 0 : volume / 100
+
     // Приоритет: GainNode (WebAudio) > audio.volume (прямой)
     if (gainNodeRef.current) {
-      // WebAudio режим - используем GainNode
-      gainNodeRef.current.gain.value = effectiveVolume
-      console.log('[VOLUME] GainNode volume:', effectiveVolume)
+      // WebAudio режим - используем GainNode с усилением
+      gainNodeRef.current.gain.value = webAudioVolume
+      console.log('[VOLUME] GainNode volume:', webAudioVolume)
     } else if (audioRef.current) {
-      // Прямой режим - используем audio.volume
-      audioRef.current.volume = effectiveVolume
+      // Прямой режим - используем audio.volume (макс 1.0)
+      audioRef.current.volume = directVolume
     }
-    
+
     // Сохранение в localStorage
     localStorage.setItem('radio_volume', String(volume))
   }, [volume, isMuted])
