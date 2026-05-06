@@ -148,49 +148,138 @@ function isTechnicalGarbage(part) {
   return false;
 }
 
+/**
+ * Защищает дефисы внутри скобок от превращения в разделители
+ * Заменяет их на временный маркер, который потом восстановим
+ */
+function protectHyphensInBrackets(text) {
+  let result = '';
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '(' || char === '[') depth++;
+    else if (char === ')' || char === ']') depth--;
+    else if ((char === '-' || char === '–' || char === '—') && depth > 0) {
+      result += '\x00HYPHEN\x00'; // Временный маркер
+      continue;
+    }
+    result += char;
+  }
+  return result;
+}
+
+/**
+ * Восстанавливает дефисы после обработки
+ */
+function restoreHyphensInBrackets(text) {
+  return text.replace(/\x00HYPHEN\x00/g, '-');
+}
+
+/**
+ * Удаляет дубликаты артистов (если одна часть содержится в начале другой)
+ * Например: ["50 Cent", "50 Cent Feat. Justin Timberlake"] -> ["50 Cent Feat. Justin Timberlake"]
+ */
+function removeDuplicateArtists(parts) {
+  if (parts.length < 2) return parts;
+  
+  const result = [];
+  let i = 0;
+  
+  while (i < parts.length) {
+    const current = parts[i];
+    const next = parts[i + 1];
+    
+    // Если следующая часть существует и текущая содержится в начале следующей
+    if (next && next.toLowerCase().startsWith(current.toLowerCase())) {
+      // Пропускаем текущую, берём следующую (более полную)
+      result.push(next);
+      i += 2;
+    } else if (next && current.toLowerCase().startsWith(next.toLowerCase())) {
+      // Текущая более полная, берём её, пропускаем следующую
+      result.push(current);
+      i += 2;
+    } else {
+      result.push(current);
+      i++;
+    }
+  }
+  
+  return result;
+}
+
 function cleanTrackTitle(text, returnNull = false) {
   if (!text) return returnNull ? null : 'DJ GooD OFF FM';
   let title = text.trim();
 
+  // 0. Заменяем underscores на пробелы (ДО всех остальных операций!)
+  title = title.replace(/_/g, ' ');
+
   // 1. Удаляем BOM и невидимые символы
   title = title.replace(/^[\uFEFF\u200B\u200C\u200D]/g, '');
 
-  // 2. Удаляем голые URL (www.site.com, https://site.com)
+  // 2. Удаляем расширения файлов (.mp3, .wav, .flac и т.д.)
+  title = title.replace(/\.(mp3|wav|flac|aac|ogg|m4a|wma)$/i, '');
+
+  // 3. Удаляем голые URL (www.site.com, https://site.com)
   title = title.replace(/\s*www\.[^\s]+/gi, '');
   title = title.replace(/\s*https?:\/\/[^\s]+/gi, '');
 
-  // 3. Удаляем ЛЮБЫЕ теги в квадратных скобках (включая [by DragoN_Sky], [vk.com/bassplace])
+  // 4. Удаляем ЛЮБЫЕ теги в квадратных скобках (включая [by DragoN_Sky], [vk.com/bassplace])
   title = title.replace(/\s*\[[^\]]*\]/g, '');
 
-  // 4. Удаляем URL внутри круглых скобок (но сохраняем нормальные скобки типа "Extended Mix")
+  // 5. Удаляем URL внутри круглых скобок (но сохраняем нормальные скобки типа "Extended Mix")
   title = title.replace(/\s*\([^)]*\.[^)]*\)/g, '');
   
-  // 5. Удаляем vk.com/... внутри круглых скобок
+  // 6. Удаляем vk.com/... внутри круглых скобок
   title = title.replace(/\s*\([^)]*vk\.com[^)]*\)/gi, '');
 
-  // 6. Удаляем watermark (WCM)
+  // 7. Удаляем watermark (WCM)
   title = title.replace(/\s*\(WCM\)/gi, '');
 
-  // 7. Удаляем год в скобках в конце: "(2020)" или "(2021)"
+  // 8. Удаляем технический мусор в скобках в конце (ДО защиты дефисов!)
+  // Паттерны: (v - 11A - 125), (- 11A - 125), (v - 128), (- 128), (11A - 125), и т.д.
+  // Также без закрывающей скобки если данные пришли криво
+  title = title.replace(/\s*\(\s*v\s*-\s*\d{1,2}[ABab]\s*-\s*\d{2,4}\s*\)\s*$/i, '');
+  title = title.replace(/\s*\(\s*-\s*\d{1,2}[ABab]\s*-\s*\d{2,4}\s*\)\s*$/i, '');
+  title = title.replace(/\s*\(\s*v\s*-\s*\d{2,4}\s*\)\s*$/i, '');
+  title = title.replace(/\s*\(\s*-\s*\d{2,4}\s*\)\s*$/i, '');
+  title = title.replace(/\s*\(\s*\d{1,2}[ABab]\s*-\s*\d{2,4}\s*\)\s*$/i, '');
+  // Варианты без закрывающей скобки (когда .mp3 был в конце)
+  title = title.replace(/\s*\(\s*v\s*-\s*\d{1,2}[ABab]\s*-\s*\d{2,4}\s*$/i, '');
+  title = title.replace(/\s*\(\s*-\s*\d{1,2}[ABab]\s*-\s*\d{2,4}\s*$/i, '');
+  title = title.replace(/\s*\(\s*v\s*-\s*\d{2,4}\s*$/i, '');
+  title = title.replace(/\s*\(\s*-\s*\d{2,4}\s*$/i, '');
+  title = title.replace(/\s*\(\s*\d{1,2}[ABab]\s*-\s*\d{2,4}\s*$/i, '');
+
+  // 9. Удаляем год в скобках в конце: "(2020)" или "(2021)"
   title = title.replace(/\s*\(\d{4}\)\s*$/g, '');
   
-  // 8. Удаляем просто год в конце (без скобок) - 4 цифры
+  // 10. Удаляем просто год в конце (без скобок) - 4 цифры
   title = title.replace(/\s+\d{4}\s*$/g, '');
 
-  // 9. Нормализуем разделители (разные типы тире -> стандартное)
+  // 11. Защищаем дефисы внутри скобок ПЕРЕД нормализацией разделителей
+  title = protectHyphensInBrackets(title);
+
+  // 12. Нормализуем разделители (разные типы тире -> стандартное)
   title = title.replace(/\s*[-–—]\s*/g, ' - ');
 
-  // 10. Убираем множественные пробелы
+  // 13. Восстанавливаем дефисы в скобках
+  title = restoreHyphensInBrackets(title);
+
+  // 14. Убираем множественные пробелы
   title = title.replace(/\s+/g, ' ').trim();
 
-  // 11. Разбиваем на части по " - "
+  // 15. Разбиваем на части по " - "
   let parts = title.split(' - ').map(p => p.trim()).filter(p => p);
 
-  // 12. Удаляем технический мусор из списка частей
+  // 16. Удаляем технический мусор из списка частей
   parts = parts.filter(p => !isTechnicalGarbage(p));
 
-  // 13. Очищаем каждую часть от встроенного мусора
+  // 17. Очищаем каждую часть от встроенного мусора
   parts = parts.map(p => cleanPart(p)).filter(p => p);
+
+  // 18. Удаляем дубликаты артистов
+  parts = removeDuplicateArtists(parts);
 
   // Если частей 0 - возвращаем дефолт
   if (parts.length === 0) return returnNull ? null : 'DJ GooD OFF FM';

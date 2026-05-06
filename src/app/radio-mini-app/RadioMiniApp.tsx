@@ -160,6 +160,7 @@ export default function RadioMiniApp() {
   const [isTelegramMiniApp, setIsTelegramMiniApp] = useState(false) // Запущено ли в Telegram
   const [coverUrl, setCoverUrl] = useState<string | null>(null) // URL обложки трека
   const [isFallbackMode, setIsFallbackMode] = useState(false) // Fallback режим (без WebAudio)
+  const [needsMarquee, setNeedsMarquee] = useState(false) // Нужна ли бегущая строка
 
   // =====================================================
   // ССЫЛКИ (useRef)
@@ -190,6 +191,7 @@ export default function RadioMiniApp() {
   const isPlayingRef = useRef<boolean>(false)
   const reconnectAttemptsRef = useRef<number>(0)  // Счётчик попыток переподключения
   const prevTrackRef = useRef<string>('')  // Для отслеживания смены трека
+  const trackContainerRef = useRef<HTMLDivElement>(null)  // Контейнер названия трека
   const maxReconnectAttempts = 3  // Максимум попыток
   
   const SMOOTHING_FACTOR = 0.25
@@ -923,17 +925,50 @@ export default function RadioMiniApp() {
   }, [fetchListenersCount])
 
   // =====================================================
-  // CURRENT TRACK
+  // CURRENT TRACK - УМНЫЙ ОПРОС С ЛОКАЛЬНЫМ ТАЙМЕРОМ
   // =====================================================
+  const trackDurationRef = useRef<number>(0)  // Длительность трека (сек)
+  const serverElapsedRef = useRef<number>(0)  // Elapsed с сервера
+  const serverTimeRef = useRef<number>(0)     // Время получения данных с сервера
+  const pollIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const localTimerRef = useRef<number>(0)     // Локальный счётчик времени
+
+  // Получить локальный elapsed (с учётом времени, прошедшего с последнего запроса)
+  const getLocalElapsed = useCallback(() => {
+    const serverElapsed = serverElapsedRef.current
+    const serverTime = serverTimeRef.current
+    if (serverTime === 0) return 0
+    
+    const timePassed = (Date.now() - serverTime) / 1000
+    return serverElapsed + timePassed
+  }, [])
+
+  // Получить оставшееся время трека
+  const getRemainingTime = useCallback(() => {
+    const duration = trackDurationRef.current
+    const localElapsed = getLocalElapsed()
+    return Math.max(0, duration - localElapsed)
+  }, [getLocalElapsed])
+
   const fetchCurrentTrack = useCallback(async () => {
     try {
-      const res = await fetch(NOW_PLAYING_API, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+      const res = await fetch(`${NOW_PLAYING_API}?_t=${Date.now()}`, { 
+        cache: 'no-store', 
+        headers: { 'Cache-Control': 'no-cache' } 
+      })
       if (res.ok) {
         const data = await res.json()
+        
+        // Обновляем refs для умного опроса
+        trackDurationRef.current = data.duration || 0
+        serverElapsedRef.current = data.elapsed || 0
+        serverTimeRef.current = Date.now()
+        
         if (data.title && data.title !== currentTrack) {
           setCurrentTrack(data.title)
           // Загружаем обложку для нового трека
           fetchCover(data.title, data.art)
+          console.log('[TRACK] New track:', data.title, 'duration:', data.duration)
         }
       }
     } catch (e) {
@@ -941,11 +976,95 @@ export default function RadioMiniApp() {
     }
   }, [currentTrack, fetchCover])
 
+  // Расчёт интервала опроса на основе ЛОКАЛЬНОГО оставшегося времени
+  const calculatePollInterval = useCallback(() => {
+    const remaining = getRemainingTime()
+    const duration = trackDurationRef.current
+    
+    // Если длительность неизвестна - опрашиваем каждые 3 сек
+    if (duration <= 0) return 3000
+    
+    // Умный опрос на основе оставшегося времени
+    if (remaining <= 3) return 500    // Последние 3 сек - каждые 0.5 сек
+    if (remaining <= 10) return 1000  // Последние 10 сек - каждую секунду
+    if (remaining <= 30) return 2000  // Последние 30 сек - каждые 2 сек
+    return 5000                        // Остальное - каждые 5 сек
+  }, [getRemainingTime])
+
+  // Функция запуска умного опроса
+  const startSmartPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearTimeout(pollIntervalRef.current)
+    }
+    
+    const poll = () => {
+      fetchCurrentTrack()
+      
+      // Пересчитываем интервал после каждого запроса
+      const interval = calculatePollInterval()
+      pollIntervalRef.current = setTimeout(poll, interval)
+    }
+    
+    poll() // Первый запрос сразу
+  }, [fetchCurrentTrack, calculatePollInterval])
+
   useEffect(() => {
-    fetchCurrentTrack()
-    const interval = setInterval(fetchCurrentTrack, 5000)
-    return () => clearInterval(interval)
-  }, [fetchCurrentTrack])
+    startSmartPolling()
+    
+    return () => {
+      if (pollIntervalRef.current) {
+        clearTimeout(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+    }
+  }, [startSmartPolling])
+
+  // =====================================================
+  // ПРОВЕРКА ШИРИНЫ ТЕКСТА - нужна ли бегущая строка?
+  // =====================================================
+  useEffect(() => {
+    const checkTextWidth = () => {
+      const container = trackContainerRef.current
+      if (!container || !currentTrack) {
+        setNeedsMarquee(false)
+        return
+      }
+      
+      // Создаём временный элемент для измерения ширины текста
+      const measureEl = document.createElement('span')
+      measureEl.style.cssText = `
+        position: absolute;
+        visibility: hidden;
+        white-space: nowrap;
+        font-size: 0.75rem;
+        font-family: monospace;
+        letter-spacing: 0.5px;
+      `
+      measureEl.textContent = currentTrack
+      document.body.appendChild(measureEl)
+      
+      const textWidth = measureEl.scrollWidth
+      const containerWidth = container.offsetWidth - 16 // padding: 8px с каждой стороны
+      
+      document.body.removeChild(measureEl)
+      
+      // Если текст шире контейнера - нужна бегущая строка
+      setNeedsMarquee(textWidth > containerWidth)
+      
+      console.log('[TRACK] Text width:', textWidth, 'Container:', containerWidth, 'Needs marquee:', textWidth > containerWidth)
+    }
+    
+    // Небольшая задержка чтобы контейнер успел отрендериться
+    const timer = setTimeout(checkTextWidth, 50)
+    
+    // Также проверяем при ресайзе окна
+    window.addEventListener('resize', checkTextWidth)
+    
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('resize', checkTextWidth)
+    }
+  }, [currentTrack])
 
   // =====================================================
   // CLOSE ON UNLOAD
@@ -1482,12 +1601,13 @@ export default function RadioMiniApp() {
           
           {/* Название трека */}
           <motion.div
+            ref={trackContainerRef}
             animate={{ y: showEq ? -15 : 0 }}
             transition={{ duration: 0.4, ease: "easeInOut" }}
             className="skeuo-card rounded-xl p-2 text-center mb-3"
           >
-            {/* Бегущая строка для длинных названий (> 58 символов) */}
-            {currentTrack.length > 58 ? (
+            {/* Бегущая строка если текст не помещается */}
+            {needsMarquee ? (
               <MarqueeText text={currentTrack} speed={40} className="text-xs" />
             ) : (
               <p className="text-xs track-static">

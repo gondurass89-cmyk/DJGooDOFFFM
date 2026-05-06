@@ -46,11 +46,13 @@ html, body {
   animation: marquee-scroll var(--marquee-duration, 12s) linear infinite;
 }
 
-/* Статичный текст (<= 40 символов) */
+/* Статичный текст (помещается в контейнер) */
 .track-static {
-  display: inline-block;
+  display: block;
   text-align: center;
   width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 /* =====================================================
