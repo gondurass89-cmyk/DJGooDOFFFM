@@ -156,6 +156,7 @@ export default function RadioMiniApp() {
   const [showEq, setShowEq] = useState(false) // Скрыт/раскрыт эквалайзер
   const [reconnecting, setReconnecting] = useState(false) // Статус переподключения
   const [isTelegramMiniApp, setIsTelegramMiniApp] = useState(false) // Запущено ли в Telegram
+  const [coverUrl, setCoverUrl] = useState<string | null>(null) // URL обложки трека
 
   // =====================================================
   // ССЫЛКИ (useRef)
@@ -180,9 +181,23 @@ export default function RadioMiniApp() {
   const realModeCheckCountRef = useRef<number>(0)
   const isPlayingRef = useRef<boolean>(false)
   const reconnectAttemptsRef = useRef<number>(0)  // Счётчик попыток переподключения
+  const prevTrackRef = useRef<string>('')  // Для отслеживания смены трека
   const maxReconnectAttempts = 3  // Максимум попыток
   
   const SMOOTHING_FACTOR = 0.25
+
+  // =====================================================
+  // ПРЕСЕТЫ ЭКВАЛАЙЗЕРА
+  // =====================================================
+  const EQ_PRESETS = {
+    flat: { name: 'Стандартный', bass: 0, mid: 0, treble: 0 },
+    bass: { name: 'Басы', bass: 8, mid: 0, treble: -2 },
+    electronic: { name: 'Электроника', bass: 6, mid: 2, treble: 4 },
+    rock: { name: 'Рок', bass: 4, mid: 3, treble: 2 },
+    vocal: { name: 'Вокал', bass: -2, mid: 4, treble: 3 },
+    club: { name: 'Клуб', bass: 6, mid: 4, treble: 0 },
+  }
+  type PresetKey = keyof typeof EQ_PRESETS
 
   // =====================================================
   // AUDIO CONTEXT
@@ -667,6 +682,67 @@ export default function RadioMiniApp() {
   }, [eqTreble])
 
   // =====================================================
+  // ФУНКЦИЯ ПРИМЕНЕНИЯ ПРЕСЕТА
+  // =====================================================
+  const applyPreset = useCallback((preset: PresetKey) => {
+    const p = EQ_PRESETS[preset]
+    setEqBass(p.bass)
+    setEqMid(p.mid)
+    setEqTreble(p.treble)
+    console.log('[EQ] Applied preset:', p.name)
+  }, [])
+
+  // =====================================================
+  // ФУНКЦИЯ СБРОСА ЭКВАЛАЙЗЕРА
+  // =====================================================
+  const resetEqualizer = useCallback(() => {
+    setEqBass(0)
+    setEqMid(0)
+    setEqTreble(0)
+    console.log('[EQ] Reset to flat')
+  }, [])
+
+  // =====================================================
+  // ЗАГРУЗКА ОБЛОЖКИ ТРЕКА
+  // =====================================================
+  const fetchCover = useCallback(async (trackTitle: string, azuracastArt?: string) => {
+    if (trackTitle === prevTrackRef.current && coverUrl) return // Уже загружено
+    
+    prevTrackRef.current = trackTitle
+    
+    // Парсим artist и title из строки "Artist - Title"
+    const parts = trackTitle.split(' - ')
+    const artist = parts.length > 1 ? parts[0].trim() : ''
+    const title = parts.length > 1 ? parts.slice(1).join(' - ').trim() : trackTitle
+    
+    try {
+      const params = new URLSearchParams({
+        artist,
+        title,
+        ...(azuracastArt ? { azuracast_art: azuracastArt } : {})
+      })
+      
+      const res = await fetch(`/api/cover?${params}`, {
+        signal: AbortSignal.timeout(10000)
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        if (data.cover) {
+          setCoverUrl(data.cover)
+          console.log('[COVER] Loaded from:', data.source)
+        } else {
+          setCoverUrl(null) // Показываем логотип
+          console.log('[COVER] No cover found, using logo')
+        }
+      }
+    } catch (e) {
+      console.error('[COVER] Error:', e)
+      setCoverUrl(null)
+    }
+  }, [coverUrl])
+
+  // =====================================================
   // TELEGRAM WEBAPP INIT
   // =====================================================
   useEffect(() => {
@@ -787,12 +863,14 @@ export default function RadioMiniApp() {
         const data = await res.json()
         if (data.title && data.title !== currentTrack) {
           setCurrentTrack(data.title)
+          // Загружаем обложку для нового трека
+          fetchCover(data.title, data.art)
         }
       }
     } catch (e) {
       console.error('[TRACK] Fetch error:', e)
     }
-  }, [currentTrack])
+  }, [currentTrack, fetchCover])
 
   useEffect(() => {
     fetchCurrentTrack()
@@ -1133,7 +1211,7 @@ export default function RadioMiniApp() {
         
         <div className="relative z-10 w-full max-w-xs">
           
-          {/* Логотип станции - с параллакс эффектом */}
+          {/* Логотип / Обложка трека - с параллакс эффектом */}
           <motion.div
             animate={{
               y: showEq ? -180 : 0,
@@ -1144,9 +1222,9 @@ export default function RadioMiniApp() {
             style={{ position: showEq ? 'absolute' : 'relative', width: '100%', pointerEvents: showEq ? 'none' : 'auto' }}
           >
             <motion.img
-              src={STATION_LOGO}
-              alt={STATION_NAME}
-              className="mx-auto mb-3"
+              src={coverUrl || STATION_LOGO}
+              alt={currentTrack}
+              className="mx-auto mb-3 rounded-xl object-cover"
               style={{
                 width: '150px',
                 height: '150px',
@@ -1238,6 +1316,35 @@ export default function RadioMiniApp() {
                 >
                   <div className="text-xs text-center mb-3 font-medium" style={{ color: COLORS.secondary }}>
                     Эквалайзер • настрой звук под себя
+                  </div>
+                  
+                  {/* Пресеты */}
+                  <div className="flex flex-wrap gap-1.5 justify-center mb-3">
+                    {(Object.keys(EQ_PRESETS) as PresetKey[]).map((key) => (
+                      <button
+                        key={key}
+                        onClick={() => applyPreset(key)}
+                        className="px-2 py-1 text-xs rounded-lg transition-all"
+                        style={{
+                          background: 'rgba(0,199,48,0.2)',
+                          color: COLORS.secondary,
+                          border: `1px solid ${COLORS.secondary}33`
+                        }}
+                      >
+                        {EQ_PRESETS[key].name}
+                      </button>
+                    ))}
+                    <button
+                      onClick={resetEqualizer}
+                      className="px-2 py-1 text-xs rounded-lg transition-all"
+                      style={{
+                        background: 'rgba(255,0,102,0.2)',
+                        color: COLORS.bass,
+                        border: `1px solid ${COLORS.bass}33`
+                      }}
+                    >
+                      Сброс
+                    </button>
                   </div>
                   
                   {/* Bass slider */}

@@ -26,23 +26,22 @@ export default function MatrixBackground() {
     // Matrix characters (Japanese + numbers + letters)
     const chars = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     const charArray = chars.split('')
-    const fontSize = 14
+    const fontSize = 16
     const columns = Math.floor(canvas.width / fontSize)
     const drops: number[] = []
 
-    // Initialize drops
+    // Initialize drops - начинаем с разных позиций
     for (let i = 0; i < columns; i++) {
-      drops[i] = Math.random() * -100 // Random start positions
+      drops[i] = Math.random() * -50 // Случайная начальная позиция выше экрана
     }
 
     // Draw function
     const draw = () => {
-      // Semi-transparent black for fade effect
-      ctx.fillStyle = 'rgba(13, 0, 38, 0.05)' // Match dark purple background
+      // Более прозрачный след для более длинного хвоста
+      ctx.fillStyle = 'rgba(13, 0, 38, 0.03)'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-      // Green text
-      ctx.fillStyle = '#0F0'
+      // Основной цвет символов - яркий зелёный
       ctx.font = `${fontSize}px monospace`
 
       for (let i = 0; i < drops.length; i++) {
@@ -50,21 +49,29 @@ export default function MatrixBackground() {
         const x = i * fontSize
         const y = drops[i] * fontSize
 
-        // Gradient effect - brighter at the head
-        const alpha = Math.min(1, Math.max(0.1, 1 - (drops[i] * fontSize) / canvas.height))
-        ctx.fillStyle = `rgba(0, 255, 0, ${alpha})`
-        ctx.fillText(text, x, y)
+        // Градиент яркости - голова ярче, хвост тусклее
+        const distanceFromTop = y / canvas.height
+        const brightness = Math.max(0.2, 1 - distanceFromTop * 0.5)
+        
+        // Голова (первый символ) - самая яркая с свечением
+        if (drops[i] > 0) {
+          ctx.fillStyle = `rgba(180, 255, 180, ${brightness})` // Яркая голова
+          ctx.shadowColor = '#0F0'
+          ctx.shadowBlur = 10
+          ctx.fillText(text, x, y)
+          ctx.shadowBlur = 0
+        }
 
-        // Reset drop when it goes off screen
-        if (y > canvas.height && Math.random() > 0.975) {
-          drops[i] = 0
+        // Падение до самого низа экрана
+        if (y > canvas.height && Math.random() > 0.98) {
+          drops[i] = 0 // Сброс наверх
         }
         drops[i]++
       }
     }
 
-    // Animation loop
-    const interval = setInterval(draw, 50)
+    // Animation loop - быстрее анимация
+    const interval = setInterval(draw, 35)
 
     return () => {
       clearInterval(interval)
@@ -82,7 +89,7 @@ export default function MatrixBackground() {
         width: '100%',
         height: '100%',
         zIndex: 0,
-        opacity: 0.3, // Subtle effect
+        opacity: 0.6, // Более яркий эффект
         pointerEvents: 'none',
       }}
     />
