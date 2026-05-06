@@ -1025,13 +1025,26 @@ export default function RadioMiniApp() {
   // ПРОВЕРКА ШИРИНЫ ТЕКСТА - нужна ли бегущая строка?
   // =====================================================
   useEffect(() => {
+    let rafId: number | null = null
+    let retryCount = 0
+    const maxRetries = 10 // Максимум попыток если контейнер ещё не готов
+
     const checkTextWidth = () => {
       const container = trackContainerRef.current
       if (!container || !currentTrack) {
         setNeedsMarquee(false)
         return
       }
-      
+
+      const containerWidth = container.offsetWidth - 16 // padding: 8px с каждой стороны
+
+      // Если контейнер ещё не отрендерился (ширина 0) - пробуем снова
+      if (containerWidth <= 0 && retryCount < maxRetries) {
+        retryCount++
+        rafId = requestAnimationFrame(checkTextWidth)
+        return
+      }
+
       // Создаём временный элемент для измерения ширины текста
       const measureEl = document.createElement('span')
       measureEl.style.cssText = `
@@ -1044,27 +1057,32 @@ export default function RadioMiniApp() {
       `
       measureEl.textContent = currentTrack
       document.body.appendChild(measureEl)
-      
+
       const textWidth = measureEl.scrollWidth
-      const containerWidth = container.offsetWidth - 16 // padding: 8px с каждой стороны
-      
       document.body.removeChild(measureEl)
-      
+
       // Если текст шире контейнера - нужна бегущая строка
-      setNeedsMarquee(textWidth > containerWidth)
-      
-      console.log('[TRACK] Text width:', textWidth, 'Container:', containerWidth, 'Needs marquee:', textWidth > containerWidth)
+      // Добавляем небольшой запас (10px) чтобы избежать граничных случаев
+      const needsScroll = textWidth > containerWidth + 10
+      setNeedsMarquee(needsScroll)
+
+      console.log('[TRACK] Text width:', textWidth, 'Container:', containerWidth, 'Needs marquee:', needsScroll)
     }
-    
-    // Небольшая задержка чтобы контейнер успел отрендериться
-    const timer = setTimeout(checkTextWidth, 50)
-    
+
+    // Используем requestAnimationFrame для надёжного ожидания рендера
+    rafId = requestAnimationFrame(checkTextWidth)
+
     // Также проверяем при ресайзе окна
-    window.addEventListener('resize', checkTextWidth)
-    
+    const handleResize = () => {
+      retryCount = 0
+      if (rafId) cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(checkTextWidth)
+    }
+    window.addEventListener('resize', handleResize)
+
     return () => {
-      clearTimeout(timer)
-      window.removeEventListener('resize', checkTextWidth)
+      if (rafId) cancelAnimationFrame(rafId)
+      window.removeEventListener('resize', handleResize)
     }
   }, [currentTrack])
 

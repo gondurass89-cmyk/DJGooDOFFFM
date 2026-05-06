@@ -27,7 +27,6 @@ export default function MarqueeText({ text, speed = 50, className = '', matrixDu
   const animationRef = useRef<number | null>(null)
   const positionRef = useRef(0)
   const lastTimeRef = useRef(0)
-  const textWidthRef = useRef(0)
 
   // Эффект Matrix при появлении
   const [displayText, setDisplayText] = useState('')
@@ -95,20 +94,29 @@ export default function MarqueeText({ text, speed = 50, className = '', matrixDu
   }, [text, matrixDuration])
 
   // Запускаем бегущую строку
+  // Родительский компонент уже проверил ширину, поэтому просто анимируем
   useEffect(() => {
-    const container = containerRef.current
     const inner = innerRef.current
-    if (!container || !inner) return
+    if (!inner || !text) return
 
-    const containerWidth = container.offsetWidth
-    textWidthRef.current = inner.scrollWidth / 2 // Делим на 2 (текст дублирован)
-    const textWidth = textWidthRef.current
+    // Измеряем ширину одного экземпляра текста (используем исходный текст, не displayText!)
+    const measureEl = document.createElement('span')
+    measureEl.style.cssText = `
+      position: absolute;
+      visibility: hidden;
+      white-space: nowrap;
+      font-size: 0.75rem;
+      font-family: monospace;
+      letter-spacing: 0.5px;
+    `
+    measureEl.textContent = text
+    document.body.appendChild(measureEl)
+    const singleTextWidth = measureEl.scrollWidth
+    document.body.removeChild(measureEl)
 
-    // Если текст помещается - не анимируем
-    if (textWidth <= containerWidth || containerWidth === 0) {
-      inner.style.transform = 'translateX(0)'
-      return
-    }
+    // Ширина цикла: текст + разделитель
+    const separatorWidth = 40 // примерная ширина разделителя "●" с отступами
+    const cycleWidth = singleTextWidth + separatorWidth
 
     // Начальная позиция
     positionRef.current = 0
@@ -121,9 +129,8 @@ export default function MarqueeText({ text, speed = 50, className = '', matrixDu
       // Двигаем влево
       positionRef.current -= speed * deltaTime
 
-      // Когда первый текст скрылся - сбрасываем позицию
-      // [TEXT][TEXT] - когда позиция = -textWidth, первый скрылся
-      if (positionRef.current <= -textWidth) {
+      // Когда первый текст скрылся - сбрасываем позицию для бесшовного цикла
+      if (positionRef.current <= -cycleWidth) {
         positionRef.current = 0
       }
 
