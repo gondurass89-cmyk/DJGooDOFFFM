@@ -161,6 +161,8 @@ export default function RadioMiniApp() {
   const [coverUrl, setCoverUrl] = useState<string | null>(null) // URL обложки трека
   const [isFallbackMode, setIsFallbackMode] = useState(false) // Fallback режим (без WebAudio)
   const [needsMarquee, setNeedsMarquee] = useState(false) // Нужна ли бегущая строка
+  const [trackAnimationKey, setTrackAnimationKey] = useState(0) // Ключ для запуска анимации при переключении режима
+  const prevNeedsMarqueeRef = useRef<boolean | null>(null) // Предыдущее состояние needsMarquee
 
   // =====================================================
   // ССЫЛКИ (useRef)
@@ -1067,6 +1069,24 @@ export default function RadioMiniApp() {
   }, [currentTrack])
 
   // =====================================================
+  // ЗАПУСК АНИМАЦИИ ПРИ ПЕРЕКЛЮЧЕНИИ РЕЖИМА БЕГУЩЕЙ СТРОКИ
+  // =====================================================
+  useEffect(() => {
+    // При первом рендере просто запоминаем состояние
+    if (prevNeedsMarqueeRef.current === null) {
+      prevNeedsMarqueeRef.current = needsMarquee
+      return
+    }
+    
+    // Если режим изменился - запускаем новую анимацию
+    if (prevNeedsMarqueeRef.current !== needsMarquee) {
+      console.log('[TRACK] Mode changed from', prevNeedsMarqueeRef.current, 'to', needsMarquee, '- triggering animation')
+      prevNeedsMarqueeRef.current = needsMarquee
+      setTrackAnimationKey(prev => prev + 1)
+    }
+  }, [needsMarquee])
+
+  // =====================================================
   // CLOSE ON UNLOAD
   // =====================================================
   useEffect(() => {
@@ -1607,14 +1627,31 @@ export default function RadioMiniApp() {
             className="skeuo-card rounded-xl p-2 text-center mb-3"
           >
             {/* Бегущая строка если текст не помещается */}
-            {/* key включает needsMarquee для запуска анимации при переключении режима */}
-            {needsMarquee ? (
-              <MarqueeText key={`marquee-${needsMarquee}-${currentTrack}`} text={currentTrack} speed={40} className="text-xs" matrixDuration={1500} />
-            ) : (
-              <p className="text-xs track-static">
-                <MatrixText key={`static-${needsMarquee}-${currentTrack}`} text={currentTrack} duration={2000} animateOnMount={true} />
-              </p>
-            )}
+            {/* trackAnimationKey гарантирует запуск анимации при переключении режима */}
+            <AnimatePresence mode="wait">
+              {needsMarquee ? (
+                <motion.div
+                  key={`marquee-${trackAnimationKey}-${currentTrack}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <MarqueeText text={currentTrack} speed={40} className="text-xs" matrixDuration={1500} />
+                </motion.div>
+              ) : (
+                <motion.p
+                  key={`static-${trackAnimationKey}-${currentTrack}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="text-xs track-static"
+                >
+                  <MatrixText text={currentTrack} duration={2000} animateOnMount={true} />
+                </motion.p>
+              )}
+            </AnimatePresence>
             <p className="text-xs mt-1.5" style={{ color: COLORS.accent }}>
               👥 {listeners} {listeners === 1 ? 'слушатель' : 'слушателя'}
             </p>
