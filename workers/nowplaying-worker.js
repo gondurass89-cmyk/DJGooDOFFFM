@@ -46,13 +46,23 @@ function cleanTrackTitle(text, returnNull = false) {
   // Удаляем дублирующиеся разделители
   title = title.replace(/\s*[-–—]\s*/g, ' - ');
 
+  // =====================================================
+  // УДАЛЯЕМ САЙТЫ И URL
+  // =====================================================
+  // Сайты в квадратных скобках: [4clubbers.com.pl], [www.site.com]
+  title = title.replace(/\s*\[[^\]]*\.(com|ru|net|org|io|me|pro|dj|fm|radio|pl|de|uk|fr|es|it|nl|be|cz|hu|ro|bg|ua|by|kz|info|biz|co|tv)[^\]]*\]/gi, '');
+  
+  // Сайты в круглых скобках: (www.site.com), (site.ru)
+  title = title.replace(/\s*\([^)]*\.(com|ru|net|org|io|me|pro|dj|fm|radio|pl|de|uk|fr|es|it|nl|be|cz|hu|ro|bg|ua|by|kz|info|biz|co|tv)[^)]*\)/gi, '');
+  
+  // Любые оставшиеся квадратные скобки с www или http
+  title = title.replace(/\s*\[[^\]]*(www\.|https?:\/\/)[^\]]*\]/gi, '');
+  
+  // Любые оставшиеся круглые скобки с www или http
+  title = title.replace(/\s*\([^)]*(www\.|https?:\/\/)[^)]*\)/gi, '');
+
   // Удаляем лишние пробелы
   title = title.replace(/\s+/g, ' ').trim();
-
-  // Удаляем сайты в скобках
-  title = title.replace(/\s*\([^)]*www\.[^)]*\)/gi, '');
-  title = title.replace(/\s*\([^)]*\.com[^)]*\)/gi, '');
-  title = title.replace(/\s*\([^)]*\.ru[^)]*\)/gi, '');
 
   // Если после очистки пусто
   if (!title || title.length < 2) {
