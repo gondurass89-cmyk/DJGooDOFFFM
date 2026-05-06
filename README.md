@@ -158,7 +158,7 @@
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │                       AZURACAST                                         │
-│                   https://stream.volfrings.ru                           │
+│                   https://your-radio-server.com                        │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
 │  │ Radio Server (Liquidsoap + Icecast)                               │  │
 │  │ ├─ Вещает MP3 поток 24/7                                          │  │
@@ -627,7 +627,7 @@ AzuraCast — это бесплатная программа для создан
 5. Получите ссылку на поток:
    - Перейдите в "Public Pages"
    - Найдите "Stream URL" — это ваш адрес аудиопотока
-   - Пример: `https://stream.volfrings.ru/listen/djgoodofffm/radio.mp3`
+   - Пример: `https://your-radio-server.com/listen/station-name/radio.mp3`
 
 ---
 
@@ -912,7 +912,7 @@ npm install
 Создайте файл `.env.local`:
 ```env
 # URL вашего AzuraCast сервера
-NEXT_PUBLIC_AZURACAST_URL=https://stream.volfrings.ru
+NEXT_PUBLIC_AZURACAST_URL=https://your-radio-server.com
 
 # URL Cloudflare Workers
 NEXT_PUBLIC_LISTENERS_WORKER=https://listeners.ваш-аккаунт.workers.dev
@@ -1052,7 +1052,7 @@ djgoodoff-fm/
 
 ```typescript
 // Строка 20-21: URL аудиопотока
-const STREAM_URL = 'https://stream.volfrings.ru/listen/djgoodofffm/radio.mp3'
+const STREAM_URL = 'https://your-radio-server.com/listen/station-name/radio.mp3'
 
 // Замените на свой URL:
 const STREAM_URL = 'https://ваш-домен/listen/название_станции/radio.mp3'
@@ -1064,7 +1064,7 @@ const STREAM_URL = 'https://ваш-домен/listen/название_станц
 
 ```javascript
 // Строка 6: URL AzuraCast API
-const AZURACAST_API = 'https://stream.volfrings.ru/api/nowplaying/djgoodofffm';
+const AZURACAST_API = 'https://your-radio-server.com/api/nowplaying/station-name';
 
 // Замените на свой URL:
 const AZURACAST_API = 'https://ваш-домен/api/nowplaying/название_станции';
