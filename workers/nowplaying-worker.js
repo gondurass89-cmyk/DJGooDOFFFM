@@ -18,6 +18,115 @@
 const AZURACAST_API = 'https://stream.volfrings.ru/api/nowplaying/djgoodofffm';
 
 // =====================================================
+// TITLE CASE ФОРМАТИРОВАНИЕ
+// =====================================================
+// Слова, которые остаются строчными (кроме первого слова в строке)
+const LOWERCASE_WORDS = new Set([
+  'a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of',
+  'on', 'or', 'so', 'the', 'to', 'up', 'yet', 'vs', 'vs.',
+  'feat', 'feat.', 'ft', 'ft.', 'x', '&',
+  'remix', 'mix', 'edit', 'version', 'radio', 'extended', 'original',
+  'club', 'dance', 'dub', 'instrumental', 'acoustic', 'live', 'remastered'
+]);
+
+function toTitleCase(text) {
+  if (!text) return text;
+
+  // Проверяем, нужно ли форматирование
+  const isAllUpper = text === text.toUpperCase() && text !== text.toLowerCase();
+  const isAllLower = text === text.toLowerCase();
+
+  // Если текст уже в смешанном регистре (нормальный) - оставляем как есть
+  if (!isAllUpper && !isAllLower) {
+    // Но всё равно приводим к единому стилю
+    return formatTitle(text);
+  }
+
+  return formatTitle(text);
+}
+
+function formatTitle(text) {
+  // Разбиваем по разделителям: " - ", скобки, пробелы
+  // Сначала обрабатываем " - " как особый разделитель
+  const parts = text.split(' - ');
+
+  const formattedParts = parts.map((part, partIndex) => {
+    return formatPart(part, partIndex === 0);
+  });
+
+  return formattedParts.join(' - ');
+}
+
+function formatPart(text, isFirstPart) {
+  let result = '';
+  let i = 0;
+  let wordStart = 0;
+  let inBrackets = false;
+  let bracketChar = '';
+
+  while (i <= text.length) {
+    const char = text[i];
+    const isWordEnd = i === text.length ||
+                      char === ' ' ||
+                      (char === '(' || char === '[' || char === '{') ||
+                      (char === ')' || char === ']' || char === '}');
+
+    // Обработка скобок
+    if (char === '(' || char === '[' || char === '{') {
+      if (i > wordStart) {
+        result += formatWord(text.slice(wordStart, i), isFirstPart && wordStart === 0);
+      }
+      result += char;
+      wordStart = i + 1;
+      isFirstPart = false;
+    } else if (char === ')' || char === ']' || char === '}') {
+      if (i > wordStart) {
+        result += formatWord(text.slice(wordStart, i), false);
+      }
+      result += char;
+      wordStart = i + 1;
+    } else if (char === ' ') {
+      if (i > wordStart) {
+        result += formatWord(text.slice(wordStart, i), isFirstPart && wordStart === 0);
+        isFirstPart = false;
+      }
+      result += char;
+      wordStart = i + 1;
+    } else if (i === text.length && i > wordStart) {
+      result += formatWord(text.slice(wordStart, i), isFirstPart && wordStart === 0);
+    }
+
+    i++;
+  }
+
+  return result;
+}
+
+function formatWord(word, isFirstWord) {
+  if (!word) return word;
+
+  const lowerWord = word.toLowerCase();
+
+  // Римские цифры (I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII и т.д.)
+  if (/^[ivxlcdm]+$/i.test(word) && word.length <= 5) {
+    return word.toUpperCase();
+  }
+
+  // Аббревиатуры (DJ, MC, TV, USA, UK, NYC, LA и т.д.)
+  if (/^[A-Z]{2,}$/.test(word) || ['dj', 'mc', 'tv', 'uk', 'usa', 'nyc', 'la', 'dc'].includes(lowerWord)) {
+    return word.toUpperCase();
+  }
+
+  // Слова-исключения (строчные, кроме первого слова)
+  if (!isFirstWord && LOWERCASE_WORDS.has(lowerWord)) {
+    return lowerWord;
+  }
+
+  // Обычное слово - первая буква заглавная, остальные строчные
+  return lowerWord.charAt(0).toUpperCase() + lowerWord.slice(1);
+}
+
+// =====================================================
 // ОЧИСТКА НАЗВАНИЯ ТРЕКА
 // =====================================================
 function cleanTrackTitle(text, returnNull = false) {
@@ -68,6 +177,9 @@ function cleanTrackTitle(text, returnNull = false) {
   if (!title || title.length < 2) {
     return returnNull ? null : 'DJ GooD OFF FM';
   }
+
+  // Форматируем в Title Case
+  title = toTitleCase(title);
 
   return title;
 }
