@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Play, Pause, Volume2, VolumeX, Loader2, AlertCircle, Wifi, ChevronDown, ChevronUp } from 'lucide-react'
 import MatrixBackground from './MatrixBackground'
 import MatrixText from './MatrixText'
+import MarqueeText from './MarqueeText'
 
 // =====================================================
 // КОНСТАНТЫ
@@ -1419,13 +1420,7 @@ export default function RadioMiniApp() {
           >
             {/* Бегущая строка для длинных названий (> 58 символов) */}
             {currentTrack.length > 58 ? (
-              <div className="track-marquee-container">
-                <div className="track-marquee-inner track-marquee-animate" style={{ '--marquee-duration': `${Math.max(8, currentTrack.length / 8)}s` } as React.CSSProperties}>
-                  <MatrixText text={currentTrack} className="text-xs" duration={2000} />
-                  <span style={{ color: '#0F0', margin: '0 2em', textShadow: '0 0 5px #0F0' }}>•</span>
-                  <MatrixText text={currentTrack} className="text-xs" duration={2000} />
-                </div>
-              </div>
+              <MarqueeText text={currentTrack} speed={40} className="text-xs" />
             ) : (
               <p className="text-xs track-static">
                 <MatrixText text={currentTrack} duration={2000} />
