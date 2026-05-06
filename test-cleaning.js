@@ -1,13 +1,10 @@
 // =====================================================
-// CLOUDFLARE WORKER: NOW PLAYING
-// Получение текущего трека из AzuraCast API
+// ТЕСТ ОЧИСТКИ НАЗВАНИЙ ТРЕКОВ
+// Запуск: node test-cleaning.js
 // =====================================================
 
-const AZURACAST_API = 'https://stream.volfrings.ru/api/nowplaying/djgoodofffm';
+// === ТОЧНАЯ КОПИЯ ФУНКЦИЙ ИЗ WORKER'А ===
 
-// =====================================================
-// TITLE CASE ФОРМАТИРОВАНИЕ
-// =====================================================
 const LOWERCASE_WORDS = new Set([
   'a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of',
   'on', 'or', 'so', 'the', 'to', 'up', 'yet', 'vs', 'vs.', 'x', '&'
@@ -72,14 +69,6 @@ function formatWord(word, isFirstWord) {
   return lowerWord.charAt(0).toUpperCase() + lowerWord.slice(1);
 }
 
-// =====================================================
-// ОЧИСТКА НАЗВАНИЯ ТРЕКА
-// Обработка мусора из метатегов MP3 файлов
-// =====================================================
-
-/**
- * Удаляет мусор из отдельной части (artist или title)
- */
 function cleanPart(part) {
   if (!part) return '';
   let cleaned = part.trim();
@@ -111,40 +100,18 @@ function cleanPart(part) {
   return cleaned;
 }
 
-/**
- * Проверяет, является ли часть техническим мусором
- */
 function isTechnicalGarbage(part) {
   if (!part) return true;
   const p = part.trim();
-  
-  // Camelot key (1A-12A, 1B-12B)
   if (/^\d{1,2}[ABab]$/i.test(p)) return true;
-  
-  // Energy level (Energy 1-11)
   if (/^Energy\s*\d{1,2}$/i.test(p)) return true;
-  
-  // Только Camelot + Energy (11A - Energy 7)
   if (/^\d{1,2}[ABab]\s*-\s*Energy\s*\d{1,2}$/i.test(p)) return true;
-  
-  // BPM (100-200 - типичные значения)
   if (/^\d{3}$/.test(p) && parseInt(p) >= 100 && parseInt(p) <= 200) return true;
-  
-  // Числовой мусор (7+ цифр)
   if (/^\d{7,}$/.test(p)) return true;
-  
-  // URL
   if (/^www\.|^https?:\/\//i.test(p)) return true;
-  
-  // URL в квадратных скобках
   if (/^\[[^\]]*\.[^\]]*\]$/.test(p)) return true;
-  
-  // URL в круглых скобках
   if (/^\([^)]*\.[^)]*\)$/.test(p)) return true;
-  
-  // vk.com/bassplace
   if (/^vk\.com\//i.test(p)) return true;
-  
   return false;
 }
 
@@ -159,10 +126,10 @@ function cleanTrackTitle(text, returnNull = false) {
   title = title.replace(/\s*www\.[^\s]+/gi, '');
   title = title.replace(/\s*https?:\/\/[^\s]+/gi, '');
 
-  // 3. Удаляем ЛЮБЫЕ теги в квадратных скобках (включая [by DragoN_Sky], [vk.com/bassplace])
+  // 3. Удаляем ЛЮБЫЕ теги в квадратных скобках
   title = title.replace(/\s*\[[^\]]*\]/g, '');
 
-  // 4. Удаляем URL внутри круглых скобок (но сохраняем нормальные скобки типа "Extended Mix")
+  // 4. Удаляем URL внутри круглых скобок
   title = title.replace(/\s*\([^)]*\.[^)]*\)/g, '');
   
   // 5. Удаляем vk.com/... внутри круглых скобок
@@ -171,13 +138,13 @@ function cleanTrackTitle(text, returnNull = false) {
   // 6. Удаляем watermark (WCM)
   title = title.replace(/\s*\(WCM\)/gi, '');
 
-  // 7. Удаляем год в скобках в конце: "(2020)" или "(2021)"
+  // 7. Удаляем год в скобках в конце
   title = title.replace(/\s*\(\d{4}\)\s*$/g, '');
   
-  // 8. Удаляем просто год в конце (без скобок) - 4 цифры
+  // 8. Удаляем просто год в конце
   title = title.replace(/\s+\d{4}\s*$/g, '');
 
-  // 9. Нормализуем разделители (разные типы тире -> стандартное)
+  // 9. Нормализуем разделители
   title = title.replace(/\s*[-–—]\s*/g, ' - ');
 
   // 10. Убираем множественные пробелы
@@ -192,101 +159,105 @@ function cleanTrackTitle(text, returnNull = false) {
   // 13. Очищаем каждую часть от встроенного мусора
   parts = parts.map(p => cleanPart(p)).filter(p => p);
 
-  // Если частей 0 - возвращаем дефолт
   if (parts.length === 0) return returnNull ? null : 'DJ GooD OFF FM';
+  if (parts.length === 1) return toTitleCase(parts[0]);
 
-  // Если 1 часть - это и есть название
-  if (parts.length === 1) {
-    return toTitleCase(parts[0]);
-  }
-
-  // Если 2+ частей - определяем порядок
   const mixPattern = /\((Original|Extended|Radio|Club|Remix|Mix|Edit|Version|Dub|Instrumental|Acoustic|Live|Remastered)/i;
-  
   const firstHasMix = mixPattern.test(parts[0]);
   const lastHasMix = mixPattern.test(parts[parts.length - 1]);
 
   let artist, trackTitle;
-
   if (firstHasMix && !lastHasMix) {
-    // Формат: "Title (Mix) - Artist"
     artist = parts[parts.length - 1];
     trackTitle = parts.slice(0, -1).join(' - ');
   } else if (!firstHasMix && lastHasMix) {
-    // Формат: "Artist - Title (Mix)"
     artist = parts[0];
     trackTitle = parts.slice(1).join(' - ');
   } else {
-    // Стандартный формат: "Artist - Title"
     artist = parts[0];
     trackTitle = parts.slice(1).join(' - ');
   }
 
-  // Убираем лишние пробелы
   artist = artist.replace(/\s+/g, ' ').trim();
   trackTitle = trackTitle.replace(/\s+/g, ' ').trim();
 
-  if (!artist || !trackTitle) {
-    return toTitleCase(parts.join(' - '));
-  }
-
-  // Форматируем и собираем
+  if (!artist || !trackTitle) return toTitleCase(parts.join(' - '));
   return `${toTitleCase(artist)} - ${toTitleCase(trackTitle)}`;
 }
 
 // =====================================================
-// ГЛАВНЫЙ ОБРАБОТЧИК ЗАПРОСОВ
+// ТЕСТОВЫЕ ПРИМЕРЫ
 // =====================================================
-export default {
-  async fetch(request, env, ctx) {
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
-    };
+const testCases = [
+  // БАЗОВЫЕ: без мусора
+  ['Bassjackers - Ape Szn (Extended Mix)', 'Bassjackers - Ape Szn (Extended Mix)'],
+  ['Don Diablo - Eyes Closed (Extended Mix)', 'Don Diablo - Eyes Closed (Extended Mix)'],
+  
+  // Camelot Key + Energy в Artist
+  ['11A - Energy 7 - 50 Cent - Ayo Technology feat. Justin Ti', '50 Cent - Ayo Technology Feat. Justin Ti'],
+  
+  // Camelot + Energy без Artist
+  ['4A - Energy 6 - 219 Boys - Haters (Original Mix)', '219 Boys - Haters (Original Mix)'],
+  
+  // URL в названии
+  ["Aryue & Asox - Don't Talk (Extended Mix) www.livingelectro.com", "Aryue & Asox - Don't Talk (Extended Mix)"],
+  
+  // Теги в квадратных скобках
+  ['Basto - Kung Fu (Extended Mix) [by DragoN_Sky]', 'Basto - Kung Fu (Extended Mix)'],
+  ['Britney Spears - Toxic (Rakurs Remix) [vk.com/bassplace]', 'Britney Spears - Toxic (Rakurs Remix)'],
+  
+  // Watermark (WCM)
+  ['Dropeflow - I Like To Move (WCM)', 'Dropeflow - I Like to Move'],
+  
+  // Год в названии
+  ['Alejandro - Farra (Extended Mix) 2020', 'Alejandro - Farra (Extended Mix)'],
+  
+  // Числовой ID в начале filename
+  ['12768025_Resonant_Breakdown_Original_Mix', 'Resonant Breakdown Original Mix'],
+  
+  // Camelot + Energy в конце
+  ['Brohug - Night Rider (Original Mix) - 7A - Energy 7', 'Brohug - Night Rider (Original Mix)'],
+  
+  // Camelot + Energy + BPM
+  ['Digital Koala - Grizzly - 7A - 128', 'Digital Koala - Grizzly'],
+  
+  // Artist содержит Camelot + Energy
+  ['9A - Energy 6 - Komka, Nina Mess - Resonant Breakdown (Original Mix)', 'Komka, Nina Mess - Resonant Breakdown (Original Mix)'],
+  
+  // Пустой/мусорный Artist
+  ['4A - Energy 7 - Abrox - Night', 'Abrox - Night'],
+];
 
-    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
-    if (request.method !== 'GET') return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: corsHeaders });
+console.log('='.repeat(80));
+console.log('ТЕСТ ОЧИСТКИ НАЗВАНИЙ ТРЕКОВ');
+console.log('='.repeat(80));
+console.log();
 
-    try {
-      const response = await fetch(AZURACAST_API, {
-        headers: { 'User-Agent': 'DJGooDOFF-FM-NowPlaying/1.0' }
-      });
-      if (!response.ok) throw new Error(`AzuraCast API error: ${response.status}`);
+let passed = 0;
+let failed = 0;
 
-      const data = await response.json();
-      const nowPlaying = data.now_playing || {};
-      const song = nowPlaying.song || {};
-      const station = data.station || {};
-
-      const rawText = song.text || '';
-      const cleanText = cleanTrackTitle(rawText);
-
-      let cleanArtist = '', cleanTitle = cleanText;
-      const parts = cleanText.split(' - ');
-      if (parts.length >= 2) {
-        cleanArtist = parts[0].trim();
-        cleanTitle = parts.slice(1).join(' - ').trim();
-      }
-
-      return new Response(JSON.stringify({
-        title: cleanText,
-        artist: cleanArtist,
-        track: cleanTitle,
-        listeners: data.listeners?.total || 0,
-        online: data.is_online || false,
-        station: station.name || 'DJ GooD OFF FM',
-        art: song.art || null,
-        duration: nowPlaying.duration || 0,
-        elapsed: nowPlaying.elapsed || 0
-      }), { headers: corsHeaders });
-
-    } catch (error) {
-      return new Response(JSON.stringify({
-        title: 'DJ GooD OFF FM', artist: '', listeners: 0, online: false, error: error.message
-      }), { status: 200, headers: corsHeaders });
-    }
+testCases.forEach(([input, expected], index) => {
+  const result = cleanTrackTitle(input);
+  const ok = result === expected;
+  
+  if (ok) {
+    console.log(`✅ Тест ${index + 1}: PASSED`);
+    passed++;
+  } else {
+    console.log(`❌ Тест ${index + 1}: FAILED`);
+    console.log(`   Вход:      "${input}"`);
+    console.log(`   Ожидалось: "${expected}"`);
+    console.log(`   Получено:  "${result}"`);
+    failed++;
   }
-};
+});
+
+console.log();
+console.log('='.repeat(80));
+console.log(`РЕЗУЛЬТАТ: ${passed}/${testCases.length} тестов пройдено`);
+if (failed > 0) {
+  console.log(`❌ ${failed} тестов не пройдено`);
+} else {
+  console.log('✅ Все тесты пройдены успешно!');
+}
+console.log('='.repeat(80));
