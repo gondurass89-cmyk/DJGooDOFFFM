@@ -70,15 +70,38 @@ function cleanTrackTitle(title: string): string {
   // Remove "File" suffix (from RadioBoss recovery)
   cleaned = cleaned.replace(/\s+File$/gi, '')
 
-  // Remove websites in parentheses
-  cleaned = cleaned.replace(/\s*\([^)]*\.(com|ru|net|org|io)[^)]*\)\s*/gi, ' ')
+  // =====================================================
+  // REMOVE WEBSITES AND URLS (IMPROVED)
+  // =====================================================
+  // Remove websites in parentheses: (agrmusic.org), (www.site.com)
+  cleaned = cleaned.replace(/\s*\([^)]*\.(com|ru|net|org|io|me|pro|dj|fm|radio)[^)]*\)\s*/gi, ' ')
+  
+  // Remove websites in brackets: [www.site.com]
+  cleaned = cleaned.replace(/\s*\[[^\]]*\.(com|ru|net|org|io|me|pro|dj|fm|radio)[^\]]*\]\s*/gi, ' ')
 
   // Remove URLs
   cleaned = cleaned.replace(/www\.\S+\.\S+/gi, '')
   cleaned = cleaned.replace(/https?:\/\/\S+/gi, '')
+  
+  // Remove standalone domain names at end
+  cleaned = cleaned.replace(/\s+[a-zA-Z0-9-]+\.(org|com|ru|net|io|me|pro|dj|fm|radio)\s*$/gi, '')
 
+  // =====================================================
+  // REMOVE COMPILATION AND ALBUM INFO
+  // =====================================================
+  // Pattern: " - Xclubsive Compilation, Vol. 3 - Compiled by Vazteria X"
+  cleaned = cleaned.replace(/\s*-\s*[A-Za-z0-9,.\s]*[Cc]ompilation.*$/gi, '')
+  cleaned = cleaned.replace(/\s*-\s*[Cc]ompiled\s+by.*$/gi, '')
+  cleaned = cleaned.replace(/\s*-\s*[Vv]ol\.?\s*\d+.*$/gi, '')
+  
+  // =====================================================
+  // REMOVE OTHER GARBAGE
+  // =====================================================
   // Remove [by ...] tags (e.g., "[by DragoN_Sky]")
   cleaned = cleaned.replace(/\s*\[by[^\]]*\]/gi, '')
+  
+  // Remove any remaining brackets with URLs or promo text
+  cleaned = cleaned.replace(/\s*\[[^\]]*(promo|dj|download|free|www|http)[^\]]*\]\s*/gi, ' ')
 
   // Remove curly braces but keep text inside
   cleaned = cleaned.replace(/\{\s*/g, '')

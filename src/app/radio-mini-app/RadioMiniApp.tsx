@@ -100,16 +100,42 @@ export default function RadioMiniApp() {
   // =====================================================
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [volume, setVolume] = useState(100)
+  const [volume, setVolume] = useState(() => {
+    // Восстановление громкости из localStorage
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('radio_volume')
+      return saved ? parseInt(saved, 10) : 100
+    }
+    return 100
+  })
   const [isMuted, setIsMuted] = useState(false)
   const [currentTrack, setCurrentTrack] = useState('Загрузка...')
   const [listeners, setListeners] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [buffering, setBuffering] = useState(false)
-  const [eqBass, setEqBass] = useState(0)
-  const [eqMid, setEqMid] = useState(0)
-  const [eqTreble, setEqTreble] = useState(0)
+  const [eqBass, setEqBass] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('radio_eq_bass')
+      return saved ? parseInt(saved, 10) : 0
+    }
+    return 0
+  })
+  const [eqMid, setEqMid] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('radio_eq_mid')
+      return saved ? parseInt(saved, 10) : 0
+    }
+    return 0
+  })
+  const [eqTreble, setEqTreble] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('radio_eq_treble')
+      return saved ? parseInt(saved, 10) : 0
+    }
+    return 0
+  })
   const [showEq, setShowEq] = useState(false) // Скрыт/раскрыт эквалайзер
+  const [reconnecting, setReconnecting] = useState(false) // Статус переподключения
 
   // =====================================================
   // ССЫЛКИ (useRef)
@@ -128,10 +154,13 @@ export default function RadioMiniApp() {
   const bassFilterRef = useRef<BiquadFilterNode | null>(null)
   const midFilterRef = useRef<BiquadFilterNode | null>(null)
   const trebleFilterRef = useRef<BiquadFilterNode | null>(null)
+  const gainNodeRef = useRef<GainNode | null>(null)  // GainNode для управления громкостью в WebAudio
   const realModeCheckRef = useRef<boolean>(false)
   const fallbackModeRef = useRef<boolean>(false)
   const realModeCheckCountRef = useRef<number>(0)
   const isPlayingRef = useRef<boolean>(false)
+  const reconnectAttemptsRef = useRef<number>(0)  // Счётчик попыток переподключения
+  const maxReconnectAttempts = 3  // Максимум попыток
   
   const SMOOTHING_FACTOR = 0.25
 
@@ -380,6 +409,12 @@ export default function RadioMiniApp() {
     if (!ctx) return false
     
     try {
+      // GainNode для управления громкостью в WebAudio цепи
+      // КРИТИЧНО: audio.volume не работает когда WebAudio активен!
+      const gainNode = ctx.createGain()
+      gainNode.gain.value = isMuted ? 0 : volume / 100
+      gainNodeRef.current = gainNode
+      
       const bassFilter = ctx.createBiquadFilter()
       bassFilter.type = 'lowshelf'
       bassFilter.frequency.value = 250
@@ -407,20 +442,22 @@ export default function RadioMiniApp() {
       const source = ctx.createMediaElementSource(audio)
       sourceNodeRef.current = source
       
+      // Цепь: source -> bass -> mid -> treble -> analyser -> gainNode -> destination
       source.connect(bassFilter)
       bassFilter.connect(midFilter)
       midFilter.connect(trebleFilter)
       trebleFilter.connect(analyser)
-      analyser.connect(ctx.destination)
+      analyser.connect(gainNode)  // GainNode после analyser, перед destination
+      gainNode.connect(ctx.destination)
       
       isSourceConnectedRef.current = true
-      console.log('[AUDIO] Аудио-цепь подключена')
+      console.log('[AUDIO] Аудио-цепь подключена с GainNode для громкости')
       return true
     } catch (e) {
       console.error('[AUDIO] Ошибка подключения аудио-цепи:', e)
       return false
     }
-  }, [getAudioContext, eqBass, eqMid, eqTreble])
+  }, [getAudioContext, eqBass, eqMid, eqTreble, volume, isMuted])
 
   // =====================================================
   // ИНИЦИАЛИЗАЦИЯ АУДИО
@@ -468,6 +505,43 @@ export default function RadioMiniApp() {
     
     const onStalled = () => setBuffering(true)
     
+    // =====================================================
+    // АВТОПЕРЕПОДКЛЮЧЕНИЕ
+    // =====================================================
+    const attemptReconnect = async () => {
+      if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+        console.log('[AUDIO] Max reconnect attempts reached')
+        setReconnecting(false)
+        setError('Не удалось переподключиться')
+        return
+      }
+      
+      reconnectAttemptsRef.current++
+      setReconnecting(true)
+      console.log(`[AUDIO] Reconnect attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts}`)
+      
+      await new Promise(resolve => setTimeout(resolve, 3000)) // Ждём 3 секунды
+      
+      if (!isPlayingRef.current) {
+        setReconnecting(false)
+        return
+      }
+      
+      audio.src = ''
+      audio.src = STREAM_URL
+      audio.load()
+      
+      try {
+        await audio.play()
+        console.log('[AUDIO] Reconnected successfully')
+        reconnectAttemptsRef.current = 0
+        setReconnecting(false)
+      } catch (e) {
+        console.error('[AUDIO] Reconnect failed:', e)
+        attemptReconnect()
+      }
+    }
+    
     const onError = () => {
       const mediaError = audio.error
       console.error('[AUDIO] Error:', mediaError ? getAudioErrorMessage(mediaError) : 'Unknown')
@@ -477,6 +551,13 @@ export default function RadioMiniApp() {
           console.log('[AUDIO] Переключение в FALLBACK MODE')
           fallbackModeRef.current = true
         }
+      }
+      
+      // Попытка автопереподключения при сетевой ошибке
+      if (mediaError?.code === MediaError.MEDIA_ERR_NETWORK && isPlayingRef.current) {
+        console.log('[AUDIO] Network error, attempting reconnect...')
+        attemptReconnect()
+        return
       }
       
       let errorMsg = 'Ошибка воспроизведения'
@@ -531,24 +612,38 @@ export default function RadioMiniApp() {
   // ГРОМКОСТЬ
   // =====================================================
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = isMuted ? 0 : volume / 100
+    const effectiveVolume = isMuted ? 0 : volume / 100
+    
+    // Приоритет: GainNode (WebAudio) > audio.volume (прямой)
+    if (gainNodeRef.current) {
+      // WebAudio режим - используем GainNode
+      gainNodeRef.current.gain.value = effectiveVolume
+      console.log('[VOLUME] GainNode volume:', effectiveVolume)
+    } else if (audioRef.current) {
+      // Прямой режим - используем audio.volume
+      audioRef.current.volume = effectiveVolume
     }
+    
+    // Сохранение в localStorage
+    localStorage.setItem('radio_volume', String(volume))
   }, [volume, isMuted])
 
   // =====================================================
-  // ЭКВАЛАЙЗЕР - обновление фильтров
+  // ЭКВАЛАЙЗЕР - обновление фильтров и сохранение
   // =====================================================
   useEffect(() => {
     if (bassFilterRef.current) bassFilterRef.current.gain.value = eqBass
+    localStorage.setItem('radio_eq_bass', String(eqBass))
   }, [eqBass])
   
   useEffect(() => {
     if (midFilterRef.current) midFilterRef.current.gain.value = eqMid
+    localStorage.setItem('radio_eq_mid', String(eqMid))
   }, [eqMid])
   
   useEffect(() => {
     if (trebleFilterRef.current) trebleFilterRef.current.gain.value = eqTreble
+    localStorage.setItem('radio_eq_treble', String(eqTreble))
   }, [eqTreble])
 
   // =====================================================

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BOT_TOKEN = '8600657705:AAEn6pFmFKcLCPFm8FcF9UiAag404S1av00'
-const ADMIN_CHAT_ID = '55068554'
+// КРИТИЧНО: Bot Token должен быть в environment variables!
+// TODO: Добавить TELEGRAM_BOT_TOKEN в .env.local и Vercel Environment Variables
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || ''
+const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID || '55068554'
+
+if (!BOT_TOKEN) {
+  console.warn('[SECURITY] TELEGRAM_BOT_TOKEN не установлен! Уведомления работать не будут.')
+}
 
 declare global {
   var listenersStorage: Map<number, ListenerData> | undefined
@@ -29,6 +35,12 @@ function notifyAdmin(data: ListenerData, count: number, isAdmin: boolean) {
   // Don't notify for admin user
   if (isAdmin) {
     console.log('Skip notification for admin user:', data.user_id)
+    return
+  }
+  
+  // Skip if bot token not configured
+  if (!BOT_TOKEN) {
+    console.log('[LISTENER] Bot token not configured, skipping notification')
     return
   }
   
