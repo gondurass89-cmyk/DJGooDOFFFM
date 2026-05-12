@@ -193,6 +193,7 @@ export default function RadioMiniApp() {
   const isPlayingRef = useRef<boolean>(false)
   const reconnectAttemptsRef = useRef<number>(0)  // Счётчик попыток переподключения
   const prevTrackRef = useRef<string>('')  // Для отслеживания смены трека
+  const coverUrlRef = useRef<string | null>(null)  // Ref для обложки (избегаем stale closure)
   const trackContainerRef = useRef<HTMLDivElement>(null)  // Контейнер названия трека
   const maxReconnectAttempts = 3  // Максимум попыток
   
@@ -686,6 +687,18 @@ export default function RadioMiniApp() {
       audio.removeEventListener('stalled', onStalled)
       audio.removeEventListener('error', onError)
       document.removeEventListener('visibilitychange', onVisibilityChange)
+      // Отключаем WebAudio ноды для предотвращения утечки памяти
+      try {
+        sourceNodeRef.current?.disconnect()
+        bassFilterRef.current?.disconnect()
+        midFilterRef.current?.disconnect()
+        trebleFilterRef.current?.disconnect()
+        analyserRef.current?.disconnect()
+        gainNodeRef.current?.disconnect()
+        audioContextRef.current?.close()
+      } catch (e) { /* ноды могли быть уже отключены */ }
+      sourceNodeRef.current = null
+      isSourceConnectedRef.current = false
       audio.pause()
       audio.src = ''
       stopVisualization()
@@ -779,7 +792,7 @@ export default function RadioMiniApp() {
   // ЗАГРУЗКА ОБЛОЖКИ ТРЕКА
   // =====================================================
   const fetchCover = useCallback(async (trackTitle: string, azuracastArt?: string) => {
-    if (trackTitle === prevTrackRef.current && coverUrl) return // Уже загружено
+    if (trackTitle === prevTrackRef.current && coverUrlRef.current) return // Уже загружено
     
     prevTrackRef.current = trackTitle
     
@@ -803,17 +816,20 @@ export default function RadioMiniApp() {
         const data = await res.json()
         if (data.cover) {
           setCoverUrl(data.cover)
+          coverUrlRef.current = data.cover
           console.log('[COVER] Loaded from:', data.source)
         } else {
-          setCoverUrl(null) // Показываем логотип
+          setCoverUrl(null)
+          coverUrlRef.current = null
           console.log('[COVER] No cover found, using logo')
         }
       }
     } catch (e) {
       console.error('[COVER] Error:', e)
       setCoverUrl(null)
+      coverUrlRef.current = null
     }
-  }, [coverUrl])
+  }, [])
 
   // =====================================================
   // TELEGRAM WEBAPP INIT
@@ -933,7 +949,6 @@ export default function RadioMiniApp() {
   const serverElapsedRef = useRef<number>(0)  // Elapsed с сервера
   const serverTimeRef = useRef<number>(0)     // Время получения данных с сервера
   const pollIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const localTimerRef = useRef<number>(0)     // Локальный счётчик времени
 
   // Получить локальный elapsed (с учётом времени, прошедшего с последнего запроса)
   const getLocalElapsed = useCallback(() => {
@@ -966,7 +981,9 @@ export default function RadioMiniApp() {
         serverElapsedRef.current = data.elapsed || 0
         serverTimeRef.current = Date.now()
         
-        if (data.title && data.title !== currentTrack) {
+        // Используем prevTrackRef вместо currentTrack для избежания stale closure
+        if (data.title && data.title !== prevTrackRef.current) {
+          prevTrackRef.current = data.title
           setCurrentTrack(data.title)
           // Загружаем обложку для нового трека
           fetchCover(data.title, data.art)
@@ -976,7 +993,7 @@ export default function RadioMiniApp() {
     } catch (e) {
       console.error('[TRACK] Fetch error:', e)
     }
-  }, [currentTrack, fetchCover])
+  }, [fetchCover])
 
   // Расчёт интервала опроса на основе ЛОКАЛЬНОГО оставшегося времени
   const calculatePollInterval = useCallback(() => {
