@@ -11,7 +11,7 @@
 # =====================================================
 
 # Имя воркера (определяет URL: https://radio-stream.<subdomain>.workers.dev)
-name = "radio-stream"
+name = "fmradio"
 
 # Точка входа (главный файл с кодом воркера)
 main = "workers/radio-stream-worker.js"
