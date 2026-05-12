@@ -1,54 +1,29 @@
 import { NextResponse } from 'next/server'
+import { cleanTrackTitle, cleanArtistName, toTitleCase } from '@/lib/track-cleaner'
 
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
 
-// Cloudflare Worker (fetches from AzuraCast API)
-const WORKER_URL = 'https://nowplaying.gondurass89.workers.dev'
+// =====================================================
+// ПРЯМОЕ ПОДКЛЮЧЕНИЕ К AZURACAST API
+// Раньше шло через Cloudflare Worker (nowplaying-worker)
+// Теперь — напрямую, т.к. AzuraCast сам отдаёт HTTPS + CORS
+// =====================================================
+const AZURACAST_API = 'https://djgoodoff.duckdns.org/api/nowplaying/djgoodofffm'
 
-// Clean track title from technical info (backup cleaning if Worker missed something)
-function cleanTrackTitle(title: string): string {
-  if (!title) return ''
-
-  let cleaned = title
-
-  // Decode HTML entities (e.g., &amp; -> &)
-  cleaned = cleaned
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&apos;/gi, "'")
-    .replace(/&#39;/g, "'")
-
-  // Normalize various apostrophe-like characters to standard apostrophe
-  cleaned = cleaned
-    .replace(/[\u2018\u2019\u201A\u201B\u0060\u00B4]/g, "'")  // ' ' ‚ ‛ ` ´ -> '
-
-  // Remove BOM and zero-width characters
-  cleaned = cleaned.replace(/^[\uFEFF\u200B\u200C\u200D]/g, '')
-
-  // Normalize all dash-like characters to regular dash
-  cleaned = cleaned.replace(/[–—―‒–]/g, '-')
-
-  // Remove Camelot keys and Energy levels (backup)
-  cleaned = cleaned.replace(/^\d{1,2}[ABАВ]\s*-\s*/gi, '')
-  cleaned = cleaned.replace(/^Energy\s*\d{1,2}\s*-\s*/gi, '')
-
-  // Final cleanup
-  cleaned = cleaned
-    .replace(/\s{2,}/g, ' ')
-    .replace(/\s*-\s*$/g, '')
-    .replace(/^[\s\-:]+/, '')
-    .trim()
-
-  return cleaned || title
+// Валидация AzuraCast art URL (не placeholder)
+function isValidAzuraCastArt(artUrl: string | null): boolean {
+  if (!artUrl || artUrl.trim() === '') return false
+  if (artUrl.includes('/api/internal-radio-art')) return false
+  if (artUrl.includes('default_album_art')) return false
+  if (artUrl.includes('placeholder')) return false
+  return true
 }
 
-// Fetch from Cloudflare Worker (AzuraCast source)
-async function fetchFromWorker() {
+// Прямой запрос к AzuraCast API с полной очисткой треков
+async function fetchFromAzuraCast() {
   try {
-    const url = `${WORKER_URL}?_t=${Date.now()}`
+    const url = `${AZURACAST_API}?_t=${Date.now()}`
 
     const response = await fetch(url, {
       signal: AbortSignal.timeout(10000),
@@ -60,71 +35,94 @@ async function fetchFromWorker() {
       },
     })
 
-    console.log('Worker response status:', response.status)
-
     if (!response.ok) {
-      console.log('Worker not available:', response.status)
+      console.log('AzuraCast API error:', response.status)
       return null
     }
 
-    // Worker now returns JSON
     const data = await response.json()
-    console.log('Worker response:', data)
+    const nowPlaying = data.now_playing || {}
+    const song = nowPlaying.song || {}
+    const station = data.station || {}
 
-    // Extract track info from JSON
-    const title = data.title || ''
-    const artist = data.artist || ''
-    const listeners = data.listeners || 0
-    const online = data.online || false
-    const art = data.art || null
-    const duration = data.duration || 0
-    const elapsed = data.elapsed || 0
+    // Используем отдельные поля artist и title (более точные!)
+    let cleanArtist = ''
+    let cleanTitleStr = ''
 
-    if (title && !title.includes('Загрузка')) {
-      return {
-        title: cleanTrackTitle(title),
-        artist: cleanTrackTitle(artist),
-        listeners,
-        online,
-        art,
-        duration,
-        elapsed
+    if (song.artist && song.title) {
+      // Очищаем artist от Camelot key и Energy в начале
+      cleanArtist = cleanArtistName(song.artist)
+      cleanTitleStr = song.title.trim()
+
+      // Если после очистки artist пустой
+      if (!cleanArtist) {
+        cleanArtist = toTitleCase(cleanTitleStr)
+        cleanTitleStr = ''
       }
     }
 
-    return null
+    // Fallback: парсим song.text
+    if (!cleanArtist && !cleanTitleStr) {
+      const rawText = song.text || ''
+      const cleanedText = cleanTrackTitle(rawText)
+      if (cleanedText) {
+        const parts = cleanedText.split(' - ')
+        if (parts.length >= 2) {
+          cleanArtist = parts[0].trim()
+          cleanTitleStr = parts.slice(1).join(' - ').trim()
+        } else {
+          cleanArtist = cleanedText
+          cleanTitleStr = ''
+        }
+      }
+    }
+
+    // Форматируем в Title Case
+    cleanArtist = toTitleCase(cleanArtist)
+    cleanTitleStr = toTitleCase(cleanTitleStr)
+
+    // Итоговая строка
+    const finalTitle = cleanTitleStr ? `${cleanArtist} - ${cleanTitleStr}` : cleanArtist
+
+    // Art URL
+    const art = isValidAzuraCastArt(song.art) ? song.art : null
+
+    return {
+      title: finalTitle || 'DJ GooD OFF FM',
+      artist: cleanArtist,
+      track: cleanTitleStr,
+      listeners: data.listeners?.total || 0,
+      online: data.is_online || false,
+      station: station.name || 'DJ GooD OFF FM',
+      art,
+      duration: nowPlaying.duration || 0,
+      elapsed: nowPlaying.elapsed || 0,
+    }
   } catch (error) {
-    console.log('Worker fetch error:', error)
+    console.log('AzuraCast fetch error:', error)
     return null
   }
 }
 
 export async function GET() {
-  const trackData = await fetchFromWorker()
+  const trackData = await fetchFromAzuraCast()
 
   if (trackData) {
-    return NextResponse.json({
-      title: trackData.title,
-      artist: trackData.artist,
-      listeners: trackData.listeners,
-      online: trackData.online,
-      art: trackData.art,
-      duration: trackData.duration,
-      elapsed: trackData.elapsed,
-      timestamp: Date.now()
-    }, {
+    return NextResponse.json(trackData, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
       }
     })
   }
 
-  // Fallback if Worker fails
+  // Fallback если AzuraCast недоступен
   return NextResponse.json({
     title: 'DJ GooD OFF FM',
     artist: '',
+    track: '',
     listeners: 0,
     online: false,
+    station: 'DJ GooD OFF FM',
     art: null,
     duration: 0,
     elapsed: 0,

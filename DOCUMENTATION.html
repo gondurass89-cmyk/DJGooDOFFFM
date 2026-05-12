@@ -608,8 +608,9 @@
             <p><strong>Важные понятия:</strong></p>
             <ul class="feature-list">
                 <li><strong>Telegram Mini App</strong> — веб-страница, которая открывается внутри Telegram как приложение</li>
-                <li><strong>AzuraCast</strong> — программа на сервере, которая вещает радио в интернет</li>
-                <li><strong>Cloudflare Worker</strong> — маленькая программа в облаке, которая передаёт данные между сервером и приложением</li>
+                <li><strong>AzuraCast</strong> — программа на сервере, которая вещает радио в интернет и отдаёт HTTPS-поток + API</li>
+                <li><strong>Vercel API Routes</strong> — серверные функции, которые обрабатывают данные (очистка треков, обложки) и проксируют запросы</li>
+                <li><strong>Cloudflare Worker (listeners)</strong> — облачная функция для подсчёта уникальных слушателей по Telegram ID</li>
             </ul>
 
             <h3 class="section-subtitle">Стек технологий</h3>
@@ -629,10 +630,10 @@
                         <tr><td>Анимации</td><td>Framer Motion</td><td>Плавные анимации интерфейса</td></tr>
                         <tr><td>Иконки</td><td>Lucide React</td><td>Красивые иконки</td></tr>
                         <tr><td>Аудио</td><td>Web Audio API</td><td>Обработка звука в браузере</td></tr>
-                        <tr><td>Backend</td><td>Next.js API Routes</td><td>Серверные функции</td></tr>
-                        <tr><td>Workers</td><td>Cloudflare Workers</td><td>Обработка запросов в облаке</td></tr>
-                        <tr><td>База данных</td><td>Cloudflare D1</td><td>Хранение данных о слушателях</td></tr>
-                        <tr><td>Радио-сервер</td><td>AzuraCast</td><td>Вещание аудиопотока</td></tr>
+                        <tr><td>Backend</td><td>Vercel API Routes</td><td>Серверные функции (очистка треков, обложки)</td></tr>
+                        <tr><td>Слушатели</td><td>Cloudflare Worker</td><td>Подсчёт уникальных слушателей по Telegram ID</td></tr>
+                        <tr><td>Радио-сервер</td><td>AzuraCast</td><td>Вещание аудиопотока + HTTPS + API</td></tr>
+                        <tr><td>Домен</td><td>DuckDNS + Let's Encrypt</td><td>Бесплатный HTTPS-домен для радио</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -762,7 +763,7 @@
             <h2 class="section-title">3. Архитектура</h2>
             
             <h3 class="section-subtitle">Как устроен проект</h3>
-            <p>Проект состоит из 4 основных частей:</p>
+            <p>Проект состоит из 3 основных частей:</p>
             
             <div class="diagram">
                 <pre>┌────────────────────────────────────────────────────────────────────────┐
@@ -774,7 +775,7 @@
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │                       FRONTEND (Next.js)                                │
-│                     https://your-app.vercel.app                         │
+│                    https://djgoodofffm.vercel.app                       │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
 │  │ RadioMiniApp.tsx — главный компонент                              │  │
 │  │ ├─ MatrixBackground.tsx — анимированный фон                       │  │
@@ -784,46 +785,31 @@
 │  │ └─ Telegram WebApp API — интеграция с Telegram                    │  │
 │  └──────────────────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │ API Routes (backend)                                              │  │
-│  │ ├─ /api/now-playing — получение текущего трека                    │  │
-│  │ ├─ /api/cover — поиск обложки трека                               │  │
-│  │ └─ /api/listener — трекинг слушателей                             │  │
+│  │ Vercel API Routes (backend)                                       │  │
+│  │ ├─ /api/now-playing → AzuraCast API (напрямую, с очисткой)       │  │
+│  │ ├─ /api/cover → Last.fm / Apple Music / AzuraCast art             │  │
+│  │ └─ /api/listener → Cloudflare Worker (listeners)                  │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ lib/track-cleaner.ts — полная очистка названий треков             │  │
+│  │ ├─ Удаление Camelot keys, Energy, BPM, URLs, watermark           │  │
+│  │ ├─ Форматирование в Title Case                                    │  │
+│  │ └─ Удаление дубликатов артистов                                   │  │
 │  └──────────────────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    │ API запросы
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                    CLOUDFLARE WORKERS                                   │
-│              (серверless функции в облаке)                              │
-│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐        │
-│  │ nowplaying-worker│ │ listeners-worker │ │ radio-stream     │        │
-│  │                  │ │                  │ │ (опционально)    │        │
-│  │ Получает трек    │ │ Считает          │ │ Проксирует       │        │
-│  │ из AzuraCast     │ │ слушателей       │ │ аудиопоток       │        │
-│  │                  │ │ через D1         │ │                  │        │
-│  └────────┬─────────┘ └──────────────────┘ └──────────────────┘        │
-│           │                                                             │
-│           │ D1 Database                                                 │
-│           ▼                                                             │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │ Cloudflare D1 — база данных SQLite                                │  │
-│  │ Таблица listeners: user_id, first_name, last_heartbeat           │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    │ Запрос метаданных
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                       AZURACAST                                         │
-│                   https://your-radio-server.com                        │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │ Radio Server (Liquidsoap + Icecast)                               │  │
-│  │ ├─ Вещает MP3 поток 24/7                                          │  │
-│  │ ├─ API: /api/nowplaying — текущий трек                            │  │
-│  │ └─ Stream: /listen/djgoodofffm/radio.mp3 — аудиопоток             │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────────┘</pre>
+          │                              │                           │
+          │ Аудиопоток                   │ Nowplaying API            │ Слушатели
+          │ (напрямую)                   │ (через Vercel)            │
+          ▼                              ▼                           ▼
+┌──────────────────────┐  ┌──────────────────────────┐  ┌────────────────────┐
+│     AZURACAST        │  │       AZURACAST           │  │  CLOUDFLARE WORKER │
+│  djgoodoff.duckdns   │  │    djgoodoff.duckdns      │  │   listeners        │
+│                      │  │                          │  │                    │
+│  /listen/.../radio   │  │  /api/nowplaying/...     │  │  Считает уникальные│
+│  .mp3 (HTTPS поток)  │  │  (HTTPS API)             │  │  слушателей по     │
+│                      │  │                          │  │  Telegram ID       │
+│  HTTPS + CORS ✓      │  │  HTTPS + CORS ✓          │  │                    │
+└──────────────────────┘  └──────────────────────────┘  └────────────────────┘</pre>
             </div>
 
             <h3 class="section-subtitle">Схема данных</h3>
@@ -832,10 +818,11 @@
 {
   "now_playing": {
     "song": {
-      "text": "Artist - Title (Mix)",
-      "art": "https://..."
+      "artist": "4A - Energy 7 - Curbi",
+      "title": "Too Much (Extended Mix) Www.livingelectro.com",
+      "art": "https://djgoodoff.duckdns.org/api/station/..."
     },
-    "duration": 240,
+    "duration": 210,
     "elapsed": 120
   },
   "listeners": { "total": 5 },
@@ -843,19 +830,21 @@
 }
                     │
                     ▼
-WORKER ОБРАБАТЫВАЕТ:
+VERCEL API ОБРАБАТЫВАЕТ (lib/track-cleaner.ts):
                     │
                     ├─ Удаляет мусор из названия (Camelot keys, URLs, etc.)
                     ├─ Форматирует в Title Case
-                    └─ Сохраняет в D1 / возвращает JSON
+                    └─ Возвращает чистый JSON
                     │
                     ▼
 FRONTEND ПОЛУЧАЕТ:
 {
-  "title": "Artist - Title (Mix)",
-  "artist": "Artist",
+  "title": "Curbi - Too Much (Extended Mix)",
+  "artist": "Curbi",
+  "track": "Too Much (Extended Mix)",
   "listeners": 5,
-  "online": true
+  "online": true,
+  "art": "https://djgoodoff.duckdns.org/api/station/..."
 }</pre>
             </div>
 
@@ -866,12 +855,13 @@ FRONTEND ПОЛУЧАЕТ:
                         <tr><th>Откуда</th><th>Куда</th><th>Что передаётся</th></tr>
                     </thead>
                     <tbody>
+                        <tr><td>Frontend</td><td>AzuraCast Stream</td><td>Аудиопоток MP3 (HTTPS, напрямую)</td></tr>
                         <tr><td>Frontend</td><td>/api/now-playing</td><td>GET запрос текущего трека</td></tr>
-                        <tr><td>/api/now-playing</td><td>Cloudflare Worker</td><td>GET запрос к AzuraCast</td></tr>
+                        <tr><td>/api/now-playing</td><td>AzuraCast API</td><td>GET /api/nowplaying (напрямую + очистка)</td></tr>
                         <tr><td>Frontend</td><td>/api/listener</td><td>POST (регистрация/heartbeat)</td></tr>
-                        <tr><td>Frontend</td><td>AzuraCast Stream</td><td>Аудиопоток MP3</td></tr>
+                        <tr><td>/api/listener</td><td>Cloudflare Worker (listeners)</td><td>Подсчёт уникальных слушателей</td></tr>
                         <tr><td>Frontend</td><td>/api/cover</td><td>GET запрос обложки</td></tr>
-                        <tr><td>/api/cover</td><td>Last.fm / Apple Music</td><td>Поиск обложки</td></tr>
+                        <tr><td>/api/cover</td><td>Last.fm / Apple Music / AzuraCast</td><td>Поиск обложки</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -919,9 +909,9 @@ FRONTEND ПОЛУЧАЕТ:
                     </thead>
                     <tbody>
                         <tr><td>Vercel</td><td>Хостинг фронтенда</td><td>Бесплатно</td></tr>
-                        <tr><td>Cloudflare</td><td>Workers + D1 база данных</td><td>Бесплатно</td></tr>
+                        <tr><td>Cloudflare</td><td>Worker для подсчёта слушателей</td><td>Бесплатно</td></tr>
                         <tr><td>AzuraCast</td><td>Вещание радио</td><td>Бесплатно (self-hosted)</td></tr>
-                        <tr><td>Домен</td><td>Красивый адрес (опционально)</td><td>От $10/год</td></tr>
+                        <tr><td>Домен</td><td>DuckDNS + Let's Encrypt (djgoodoff.duckdns.org)</td><td>Бесплатно</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1052,7 +1042,7 @@ cd djgoodoff-fm
 npm install
 
 # Создайте .env.local
-NEXT_PUBLIC_AZURACAST_URL=https://your-radio-server.com
+NEXT_PUBLIC_AZURACAST_URL=https://djgoodoff.duckdns.org
 NEXT_PUBLIC_LISTENERS_WORKER=https://listeners.ваш-аккаунт.workers.dev
 NEXT_PUBLIC_NOWPLAYING_WORKER=https://nowplaying.ваш-аккаунт.workers.dev
 
