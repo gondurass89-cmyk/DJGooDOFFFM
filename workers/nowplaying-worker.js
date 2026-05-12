@@ -3,7 +3,7 @@
 // Получение текущего трека из AzuraCast API
 // =====================================================
 
-const AZURACAST_API = 'https://stream.volfrings.ru/api/nowplaying/djgoodofffm';
+const AZURACAST_API = 'https://djgoodoff.duckdns.org/api/nowplaying/djgoodofffm';
 
 // =====================================================
 // TITLE CASE ФОРМАТИРОВАНИЕ

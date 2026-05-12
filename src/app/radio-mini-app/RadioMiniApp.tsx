@@ -17,7 +17,7 @@ import MarqueeText from './MarqueeText'
 // КОНСТАНТЫ
 // =====================================================
 // ПРЯМОЙ HTTPS ПОТОК AZURACAST - надежнее чем Worker!
-const STREAM_URL = 'https://stream.volfrings.ru/listen/djgoodofffm/radio.mp3'
+const STREAM_URL = 'https://djgoodoff.duckdns.org/listen/djgoodofffm/radio.mp3'
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
 const LISTENERS_API = 'https://listeners.gondurass89.workers.dev'

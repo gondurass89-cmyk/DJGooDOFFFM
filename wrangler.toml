@@ -51,5 +51,5 @@ logpush = true
 # =====================================================
 # Если нужен кастомный домен:
 # [[routes]]
-# pattern = "stream.volfrings.ru/*"
-# zone_name = "volfrings.ru"
+# pattern = "djgoodoff.duckdns.org/*"
+# zone_name = "duckdns.org"
