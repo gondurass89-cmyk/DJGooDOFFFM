@@ -1,6 +1,3 @@
-Removed: bcryptjs
-Removed: hls.js
-Removed: jsonwebtoken
 {
   "name": "djgoodoff-fm",
   "version": "1.0.0",
