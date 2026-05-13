@@ -20,7 +20,7 @@ import MarqueeText from './MarqueeText'
 const STREAM_URL = 'https://djgoodoff.duckdns.org/listen/djgoodofffm/radio.mp3'
 const STATION_NAME = 'DJ GooD OFF FM'
 const STATION_LOGO = '/logo.png'
-const LISTENERS_API = 'https://listeners.gondurass89.workers.dev'
+const LISTENERS_API = '/api/listener'
 const NOW_PLAYING_API = '/api/now-playing'
 const HEARTBEAT_INTERVAL = 30000
 const LOAD_TIMEOUT = 30000
