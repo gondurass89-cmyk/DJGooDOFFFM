@@ -551,19 +551,13 @@ export default function RadioMiniApp() {
     
     const audio = new Audio()
     audio.preload = 'none'
+    audio.crossOrigin = 'anonymous'
     audio.setAttribute('playsinline', 'true')
     audio.setAttribute('webkit-playsinline', 'true')
     audio.setAttribute('x5-video-player-type', 'h5')
     audio.setAttribute('x5-video-player-fullscreen', 'true')
     audio.volume = isMuted ? 0 : volume / 100
     audioRef.current = audio
-
-    const isTelegram = !!window.Telegram?.WebApp
-    if (isTelegram) {
-      console.log('[AUDIO] Telegram WebView detected - fallback mode')
-      fallbackModeRef.current = true
-      setIsFallbackMode(true)
-    }
     
     const onPlaying = () => {
       console.log('[AUDIO] playing')
@@ -636,11 +630,17 @@ export default function RadioMiniApp() {
       const mediaError = audio.error
       console.error('[AUDIO] Error:', mediaError ? getAudioErrorMessage(mediaError) : 'Unknown')
       
-      if (mediaError?.code === MediaError.MEDIA_ERR_DECODE) {
-        if (isIOSRef.current && !fallbackModeRef.current) {
-          console.log('[AUDIO] Переключение в FALLBACK MODE')
+      if (mediaError?.code === MediaError.MEDIA_ERR_DECODE || mediaError?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+        if (!fallbackModeRef.current) {
+          console.log('[AUDIO] Переключение в FALLBACK MODE (без crossOrigin)')
           fallbackModeRef.current = true
           setIsFallbackMode(true)
+          audio.crossOrigin = null
+          audio.removeAttribute('crossorigin')
+          audio.src = ''
+          audio.src = STREAM_URL
+          audio.load()
+          return
         }
       }
       
