@@ -551,14 +551,19 @@ export default function RadioMiniApp() {
     
     const audio = new Audio()
     audio.preload = 'none'
-    audio.crossOrigin = 'anonymous'
     audio.setAttribute('playsinline', 'true')
     audio.setAttribute('webkit-playsinline', 'true')
     audio.setAttribute('x5-video-player-type', 'h5')
     audio.setAttribute('x5-video-player-fullscreen', 'true')
-    // Начальная громкость (будет обновлена через useEffect)
     audio.volume = isMuted ? 0 : volume / 100
     audioRef.current = audio
+
+    const isTelegram = !!window.Telegram?.WebApp
+    if (isTelegram) {
+      console.log('[AUDIO] Telegram WebView detected - fallback mode')
+      fallbackModeRef.current = true
+      setIsFallbackMode(true)
+    }
     
     const onPlaying = () => {
       console.log('[AUDIO] playing')
